@@ -1,0 +1,62 @@
+import 'package:uuid/uuid.dart';
+import 'dart:typed_data';
+
+class Song {
+  final String title;
+  final String artist;
+  final String filePath;
+  final Uint8List? albumArt;
+
+  Song({
+    required this.title,
+    required this.artist,
+    required this.filePath,
+    this.albumArt,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {'title': title, 'artist': artist, 'filePath': filePath};
+  }
+
+  factory Song.fromJson(Map<String, dynamic> json) {
+    return Song(
+      title: json['title'],
+      artist: json['artist'],
+      filePath: json['filePath'],
+    );
+  }
+}
+
+class Playlist {
+  final String id;
+  String name;
+  final bool isDefault;
+  List<String> songFilePaths;
+
+  Playlist({
+    String? id,
+    required this.name,
+    this.isDefault = false,
+    List<String>? songFilePaths,
+  }) : id = id ?? const Uuid().v4(),
+       songFilePaths = songFilePaths ?? [];
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'name': name, 'isDefault': isDefault};
+  }
+
+  factory Playlist.fromJson(Map<String, dynamic> json) {
+    return Playlist(
+      id: json['id'],
+      name: json['name'],
+      isDefault: json['isDefault'] ?? false,
+    );
+  }
+}
+
+class LyricLine {
+  final Duration timestamp;
+  final List<String> texts;
+
+  LyricLine({required this.timestamp, required this.texts});
+}

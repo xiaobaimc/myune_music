@@ -1,0 +1,137 @@
+import 'package:flutter/material.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart';
+
+class AppWindowTitleBar extends StatelessWidget {
+  const AppWindowTitleBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final Color titleBarBackgroundColor = colorScheme.surface;
+    return WindowTitleBarBox(
+      child: Container(
+        color: titleBarBackgroundColor,
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  if (Navigator.of(context).canPop())
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.arrow_back,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      tooltip: '返回',
+                    ),
+                  Image.asset(
+                    'assets/images/icon/icon.png',
+                    width: 21,
+                    height: 21,
+                    color: Colors.black,
+                  ),
+                  const SizedBox(width: 8),
+                  const DefaultTextStyle(
+                    style: TextStyle(decoration: TextDecoration.none),
+                    child: Text(
+                      "MyuneMusic",
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: MoveWindow()),
+            ConstrainedBox(
+              // 限制右侧按钮的最大宽度
+              constraints: const BoxConstraints(maxWidth: 100),
+              child: Row(
+                children: [
+                  _WindowButton(
+                    icon: Icons.remove,
+                    onPressed: () => appWindow.minimize(),
+                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                  ),
+                  const SizedBox(width: 2),
+                  _WindowButton(
+                    icon: Icons.close,
+                    onPressed: () => appWindow.close(),
+                    hoverColor: const Color.fromRGBO(239, 154, 154, 1),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WindowButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color hoverColor;
+  final Color hoverBackgroundColor;
+
+  const _WindowButton({
+    required this.icon,
+    required this.onPressed,
+    this.hoverColor = const Color(0xFF404040),
+    // ignore: unused_element_parameter
+    this.hoverBackgroundColor = Colors.transparent,
+  });
+
+  @override
+  _WindowButtonState createState() => _WindowButtonState();
+}
+
+class _WindowButtonState extends State<_WindowButton> {
+  bool _isHovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (event) {
+        setState(() {
+          _isHovering = true;
+        });
+      },
+      onExit: (event) {
+        setState(() {
+          _isHovering = false;
+        });
+      },
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Container(
+          width: 46,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _isHovering
+                ? (widget.hoverBackgroundColor)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          child: Icon(
+            widget.icon,
+            color: _isHovering ? widget.hoverColor : Colors.black,
+            size: 20,
+          ),
+        ),
+        onTapDown: (_) {}, // 空的回调，用于确保GestureDetector在某些情况下能正确响应
+      ),
+    );
+  }
+}

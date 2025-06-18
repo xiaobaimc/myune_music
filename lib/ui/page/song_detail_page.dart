@@ -1,0 +1,129 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../widgets/lyrics_widget.dart';
+import '../page/playlist/playlist_content_notifier.dart';
+import '../page/playlist/playlist_models.dart';
+import '../widgets/playbar.dart';
+import '../widgets/app_window_title_bar.dart';
+
+class SongDetailPage extends StatelessWidget {
+  const SongDetailPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          const AppWindowTitleBar(),
+          Expanded(
+            child: Row(
+              children: [
+                const SizedBox(width: 80),
+                // 左侧歌曲信息区域
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 使用 Consumer 获取 currentSong
+                      Consumer<PlaylistContentNotifier>(
+                        builder: (context, playlistNotifier, child) {
+                          final currentSong = playlistNotifier.currentSong;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 70),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 10),
+                                child: Text(
+                                  // 截取前15个字符，如果超出则添加省略号
+                                  (currentSong?.title ?? '未知歌曲').length > 15
+                                      ? '${(currentSong?.title ?? '未知歌曲').substring(0, 15)}...'
+                                      : (currentSong?.title ?? '未知歌曲'),
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 10),
+                                child: Text(
+                                  // 截取前15个字符，如果超出则添加省略号
+                                  (currentSong?.artist ?? '未知艺术家').length > 15
+                                      ? '${(currentSong?.artist ?? '未知艺术家').substring(0, 15)}...'
+                                      : (currentSong?.artist ?? '未知艺术家'),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(20),
+                                child: SizedBox(
+                                  width: 300,
+                                  height: 300,
+                                  // 根据 currentSong.albumArt 判断显示专辑封面还是默认图标
+                                  child:
+                                      (currentSong?.albumArt != null &&
+                                          currentSong!.albumArt!.isNotEmpty)
+                                      ? Image.memory(
+                                          currentSong.albumArt!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                                return const Icon(
+                                                  Icons.music_note,
+                                                  size: 72,
+                                                  color: Colors.black12,
+                                                );
+                                              },
+                                        )
+                                      : Container(
+                                          // 没有封面图片时，显示一个带有音乐图标的占位符
+                                          color: Colors.black12,
+                                          child: const Icon(
+                                            Icons.music_note,
+                                            size: 72,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                // 歌词区域占满剩余空间
+                Expanded(
+                  child: Center(
+                    child: Consumer<PlaylistContentNotifier>(
+                      builder: (context, playlistNotifier, child) {
+                        final List<LyricLine> currentLyrics =
+                            playlistNotifier.currentLyrics;
+                        final int currentLyricLineIndex =
+                            playlistNotifier.currentLyricLineIndex;
+                        return LyricsWidget(
+                          lyrics: currentLyrics,
+                          currentIndex: currentLyricLineIndex,
+                          maxLinesPerLyric: 2, // TODO:允许用户自定义最大歌词行数
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Playbar(disableTap: true),
+        ],
+      ),
+    );
+  }
+}
