@@ -74,40 +74,43 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: widget.lyrics.length,
-      itemBuilder: (context, index) {
-        final line = widget.lyrics[index];
-        final isCurrent = index == widget.currentIndex;
-        final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
+    return ScrollConfiguration(
+      behavior: const ScrollBehavior().copyWith(scrollbars: false),
+      child: ListView.builder(
+        controller: _scrollController,
+        itemCount: widget.lyrics.length,
+        itemBuilder: (context, index) {
+          final line = widget.lyrics[index];
+          final isCurrent = index == widget.currentIndex;
+          final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
 
-        final itemKey = _itemKeys.putIfAbsent(index, () => GlobalKey());
+          final itemKey = _itemKeys.putIfAbsent(index, () => GlobalKey());
 
-        final List<Widget> columnChildren = visibleTexts.map((text) {
-          return Text(
-            text,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 20,
-              height: 1.6,
-              color: isCurrent
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+          final List<Widget> columnChildren = visibleTexts.map((text) {
+            return Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                height: 1.6,
+                color: isCurrent
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+              ),
+            );
+          }).toList();
+
+          return Padding(
+            key: itemKey,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: columnChildren,
             ),
           );
-        }).toList();
-
-        return Padding(
-          key: itemKey,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: columnChildren,
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 }
