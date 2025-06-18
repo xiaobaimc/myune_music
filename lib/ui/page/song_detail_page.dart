@@ -113,6 +113,10 @@ class SongDetailPage extends StatelessWidget {
                           lyrics: currentLyrics,
                           currentIndex: currentLyricLineIndex,
                           maxLinesPerLyric: 2, // TODO:允许用户自定义最大歌词行数
+                          onTapLine: (index) {
+                            final seekTime = currentLyrics[index].timestamp;
+                            playlistNotifier.audioPlayer.seek(seekTime);
+                          },
                         );
                       },
                     ),

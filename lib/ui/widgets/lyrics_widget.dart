@@ -5,12 +5,14 @@ class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
   final int currentIndex;
   final int maxLinesPerLyric; // 最大行数
+  final Function(int index)? onTapLine;
 
   const LyricsWidget({
     super.key,
     required this.lyrics,
     required this.currentIndex,
     this.maxLinesPerLyric = 1,
+    this.onTapLine,
   });
 
   @override
@@ -20,6 +22,7 @@ class LyricsWidget extends StatefulWidget {
 class _LyricsWidgetState extends State<LyricsWidget> {
   final ScrollController _scrollController = ScrollController();
   final Map<int, GlobalKey> _itemKeys = {};
+  int? _hoveredIndex;
 
   @override
   void didUpdateWidget(covariant LyricsWidget oldWidget) {
@@ -101,12 +104,35 @@ class _LyricsWidgetState extends State<LyricsWidget> {
             );
           }).toList();
 
-          return Padding(
-            key: itemKey,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: columnChildren,
+          return MouseRegion(
+            onEnter: (_) => setState(() => _hoveredIndex = index),
+            onExit: (_) => setState(() => _hoveredIndex = null),
+            child: GestureDetector(
+              onTap: () {
+                widget.onTapLine?.call(index);
+              },
+              child: Align(
+                alignment: Alignment.center,
+                child: IntrinsicWidth(
+                  child: Container(
+                    key: itemKey,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _hoveredIndex == index
+                          ? Colors.grey.withValues(alpha: 0.2)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: columnChildren,
+                    ),
+                  ),
+                ),
+              ),
             ),
           );
         },
