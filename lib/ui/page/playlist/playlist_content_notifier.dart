@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:path/path.dart' as p;
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import './playlist_models.dart';
 import './playlist_manager.dart';
@@ -56,9 +57,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Duration get currentPosition => _currentPosition;
   Duration get totalDuration => _totalDuration;
 
+  static const _playModeKey = 'play_mode';
+
   PlaylistContentNotifier() {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadPlaylists();
+    loadPlayMode();
   }
 
   @override
@@ -330,6 +334,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
+  Future<void> _savePlayMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_playModeKey, _playMode.index);
+  }
+
+  Future<void> loadPlayMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final index = prefs.getInt(_playModeKey);
+    if (index != null && index >= 0 && index < PlayMode.values.length) {
+      _playMode = PlayMode.values[index];
+      notifyListeners(); // 确保 UI 更新
+    }
+  }
+
   // 切换播放模式
   void togglePlayMode() {
     switch (_playMode) {
@@ -344,6 +362,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _playMode = PlayMode.sequence;
         break;
     }
+    _savePlayMode(); // 保存当前模式
     notifyListeners();
   }
 
