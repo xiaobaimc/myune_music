@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class VolumeControl extends StatefulWidget {
   final AudioPlayer player;
@@ -32,15 +33,17 @@ class VolumeControlState extends State<VolumeControl> {
 
   // 加载播放器初始音量
   Future<void> _loadInitialVolume() async {
-    final currentVolume = widget.player.volume; // 直接访问 player.volume getter
+    final prefs = await SharedPreferences.getInstance();
+    final storedVolume =
+        prefs.getDouble('player_volume') ?? widget.player.volume;
 
-    // 确保widget仍然挂载
+    // 设置播放器和状态
+    await widget.player.setVolume(storedVolume);
+
     if (mounted) {
       setState(() {
-        _currentVolume = currentVolume;
-        _lastVolume = currentVolume > 0
-            ? currentVolume
-            : 1.0; // 避免0导致_lastVolume为0
+        _currentVolume = storedVolume;
+        _lastVolume = storedVolume > 0 ? storedVolume : 1.0;
       });
     }
   }
@@ -96,6 +99,7 @@ class VolumeControlState extends State<VolumeControl> {
                                   _currentVolume = value;
                                   if (value > 0) _lastVolume = value;
                                 });
+                                _saveVolume(value);
                                 _overlayEntry?.markNeedsBuild();
                               },
                             ),
@@ -144,6 +148,11 @@ class VolumeControlState extends State<VolumeControl> {
     }
   }
 
+  Future<void> _saveVolume(double volume) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('player_volume', volume);
+  }
+
   @override
   Widget build(BuildContext context) {
     // 浮层的定位目标
@@ -164,6 +173,7 @@ class VolumeControlState extends State<VolumeControl> {
               _currentVolume = newVolume;
               if (newVolume > 0) _lastVolume = newVolume;
             });
+            _saveVolume(newVolume);
             _overlayEntry?.markNeedsBuild();
           }
         },
@@ -184,7 +194,7 @@ class VolumeControlState extends State<VolumeControl> {
               size: 24,
             ),
             onPressed: () {
-              if (_currentVolume > 0.01) {
+              if (_currentVolume > 0.001) {
                 // 如果当前音量不是静音
                 _lastVolume = _currentVolume; // 保存当前音量
                 widget.player.setVolume(0.0);
@@ -192,6 +202,7 @@ class VolumeControlState extends State<VolumeControl> {
                   // 更新本地状态为静音
                   _currentVolume = 0.0;
                 });
+                _saveVolume(0.0);
               } else {
                 // 如果当前是静音
                 widget.player.setVolume(_lastVolume);
@@ -199,6 +210,7 @@ class VolumeControlState extends State<VolumeControl> {
                   // 恢复上次音量
                   _currentVolume = _lastVolume;
                 });
+                _saveVolume(_lastVolume);
               }
               _overlayEntry?.markNeedsBuild();
             },
