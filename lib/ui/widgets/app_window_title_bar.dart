@@ -29,23 +29,23 @@ class AppWindowTitleBar extends StatelessWidget {
                       },
                       tooltip: '返回',
                     ),
-                  Image.asset(
-                    'assets/images/icon/icon.png',
-                    width: 21,
-                    height: 21,
-                    color: Colors.black,
+                  ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                      BlendMode.srcIn,
+                    ),
+                    child: Image.asset(
+                      'assets/images/icon/icon.png',
+                      width: 21,
+                      height: 21,
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  const DefaultTextStyle(
-                    style: TextStyle(decoration: TextDecoration.none),
-                    child: Text(
-                      "MyuneMusic",
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                  const Text(
+                    "MyuneMusic",
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -100,6 +100,10 @@ class _WindowButtonState extends State<_WindowButton> {
 
   @override
   Widget build(BuildContext context) {
+    final Brightness brightness = Theme.of(context).brightness;
+    final Color defaultIconColor = brightness == Brightness.dark
+        ? Colors.white
+        : Colors.black;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (event) {
@@ -126,7 +130,7 @@ class _WindowButtonState extends State<_WindowButton> {
           ),
           child: Icon(
             widget.icon,
-            color: _isHovering ? widget.hoverColor : Colors.black,
+            color: _isHovering ? widget.hoverColor : defaultIconColor,
             size: 20,
           ),
         ),

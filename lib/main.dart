@@ -42,6 +42,8 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'MyuneMusic',
           theme: themeProvider.currentThemeData,
+          darkTheme: ThemeData.dark(),
+          themeMode: ThemeMode.dark,
           home: const AppShell(),
         );
       },
