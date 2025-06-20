@@ -21,42 +21,46 @@ class ThemeSelectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final Color currentSeedColor = themeProvider.currentSeedColor;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SizedBox(
+            width: constraints.maxWidth,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 Text('选择主题配色：', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: presetColors.map((color) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12.0),
-                          child: _buildColorOption(
-                            context,
-                            color,
-                            currentSeedColor,
-                            () {
-                              themeProvider.setSeedColor(color);
-                            },
-                          ),
-                        );
-                      }).toList(),
+                const Spacer(),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth * 0.6, // 最多占60%
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: presetColors.map((color) {
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: _buildColorOption(
+                              context,
+                              color,
+                              currentSeedColor,
+                              () => themeProvider.setSeedColor(color),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
