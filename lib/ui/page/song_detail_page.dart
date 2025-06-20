@@ -5,6 +5,7 @@ import '../page/playlist/playlist_content_notifier.dart';
 import '../page/playlist/playlist_models.dart';
 import '../widgets/playbar.dart';
 import '../widgets/app_window_title_bar.dart';
+import '../page/pages/setting.dart';
 
 class SongDetailPage extends StatelessWidget {
   const SongDetailPage({super.key});
@@ -112,7 +113,9 @@ class SongDetailPage extends StatelessWidget {
                         return LyricsWidget(
                           lyrics: currentLyrics,
                           currentIndex: currentLyricLineIndex,
-                          maxLinesPerLyric: 2, // TODO:允许用户自定义最大歌词行数
+                          maxLinesPerLyric: context
+                              .watch<SettingsProvider>()
+                              .maxLinesPerLyric,
                           onTapLine: (index) {
                             final seekTime = currentLyrics[index].timestamp;
                             playlistNotifier.audioPlayer.seek(seekTime);

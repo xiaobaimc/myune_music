@@ -292,7 +292,7 @@ class _SongListWidgetState extends State<SongListWidget> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '当前歌单：$currentPlaylistName',
+                    currentPlaylistName,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   if (playlistNotifier.selectedIndex != -1 &&

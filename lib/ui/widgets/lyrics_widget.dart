@@ -32,10 +32,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     }
   }
 
-  double _getActualTextLineHeight(double fontSize, double heightMultiplier) {
-    return fontSize * heightMultiplier;
-  }
-
   void _scrollToCurrentLine() {
     final targetKey = _itemKeys[widget.currentIndex];
 
@@ -45,32 +41,36 @@ class _LyricsWidgetState extends State<LyricsWidget> {
           targetKey.currentContext!,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-          alignment: 0.5,
+          alignment: 0.5, // 目标歌词行居中
         );
       });
     } else {
-      const double currentTextStyleHeightMultiplier = 1.6;
-      const double fontSize = 20.0;
-      const double verticalPaddingPerItem = 16.0;
+      // 如果 GlobalKey 不可用，使用估算滚动
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        double offset = 0;
+        // 累加从列表开始到目标歌词行之前的每一个歌词项的估算高度
+        for (int i = 0; i < widget.currentIndex; i++) {
+          offset += _estimateLyricItemHeight(i);
+        }
 
-      // 计算当前每个歌词项的实际估算高度
-      final actualSingleLineHeight = _getActualTextLineHeight(
-        fontSize,
-        currentTextStyleHeightMultiplier,
-      );
-      final itemHeight =
-          widget.maxLinesPerLyric * actualSingleLineHeight +
-          verticalPaddingPerItem;
+        // 调整偏移量，使目标歌词行大致居中
+        final double listViewHeight =
+            _scrollController.position.viewportDimension;
+        offset -= (listViewHeight / 2);
+        offset += _estimateLyricItemHeight(widget.currentIndex) / 2;
 
-      // 计算滚动偏移量
-      final offset =
-          (widget.currentIndex - 3).clamp(0, widget.lyrics.length) * itemHeight;
+        // 限制偏移量在滚动范围之内，避免超出内容区域
+        offset = offset.clamp(
+          _scrollController.position.minScrollExtent,
+          _scrollController.position.maxScrollExtent,
+        );
 
-      _scrollController.animateTo(
-        offset,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+        _scrollController.animateTo(
+          offset,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      });
     }
   }
 
@@ -138,5 +138,48 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         },
       ),
     );
+  }
+
+  // 测量单行文本在给定样式和最大宽度下的实际高度
+  double _measureTextHeight(String text, TextStyle style, double maxWidth) {
+    final textPainter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1, // 测量单段文本的高度，无论它有多少行
+    );
+    textPainter.layout(maxWidth: maxWidth);
+    return textPainter.height;
+  }
+
+  final Map<int, double> _cachedItemHeights = {};
+  double _estimateLyricItemHeight(int index) {
+    // 如果已经缓存，直接返回
+    if (_cachedItemHeights.containsKey(index)) {
+      return _cachedItemHeights[index]!;
+    }
+
+    // 边界检查
+    if (index < 0 || index >= widget.lyrics.length) {
+      return 0.0;
+    }
+    final LyricLine line = widget.lyrics[index];
+    final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
+    const TextStyle textStyle = TextStyle(fontSize: 20, height: 1.6);
+    final double estimatedMaxWidth =
+        MediaQuery.of(context).size.width - (6 * 2);
+
+    double totalTextHeight = 0;
+    for (final String text in visibleTexts) {
+      // 测量每段文本的高度
+      totalTextHeight += _measureTextHeight(text, textStyle, estimatedMaxWidth);
+    }
+
+    // 加上歌词项的垂直
+    const double verticalPaddingPerItem = 16.0;
+    final double estimatedHeight = totalTextHeight + verticalPaddingPerItem;
+
+    // 缓存高度
+    _cachedItemHeights[index] = estimatedHeight;
+    return estimatedHeight;
   }
 }

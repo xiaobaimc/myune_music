@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../theme/theme_selection_screen.dart';
+import 'setting/theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
+
+class SettingsProvider with ChangeNotifier {
+  int _maxLinesPerLyric = 2;
+
+  int get maxLinesPerLyric => _maxLinesPerLyric;
+
+  void setMaxLinesPerLyric(int value) {
+    _maxLinesPerLyric = value;
+    notifyListeners();
+  }
+}
 
 class Setting extends StatelessWidget {
   const Setting({super.key});
@@ -9,7 +20,11 @@ class Setting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("设置页面")),
+      appBar: AppBar(
+        title: const Text("设置"),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: Column(
         children: [
           const Divider(),
@@ -20,9 +35,34 @@ class Setting extends StatelessWidget {
             onChanged: (value) =>
                 context.read<ThemeProvider>().toggleDarkMode(),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '详情页歌词最大歌词行数',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                SegmentedButton<int>(
+                  segments: List.generate(5, (index) {
+                    final value = index + 1;
+                    return ButtonSegment(value: value, label: Text('$value'));
+                  }),
+                  selected: {
+                    context.watch<SettingsProvider>().maxLinesPerLyric,
+                  },
+                  onSelectionChanged: (newSelection) {
+                    final value = newSelection.first;
+                    context.read<SettingsProvider>().setMaxLinesPerLyric(value);
+                  },
+                  showSelectedIcon: false,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
-      // TODO:添加允许用户自定义播放详情页显示歌词行数
     );
   }
 }

@@ -4,11 +4,13 @@ import 'ui/theme/theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'ui/layout/app_shell.dart';
 import 'ui/page/playlist/playlist_content_notifier.dart';
+import 'ui/page/pages/setting.dart';
 
 void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => PlaylistContentNotifier()),
       ],

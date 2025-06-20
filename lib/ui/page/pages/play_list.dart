@@ -8,8 +8,9 @@ class Playlist extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("歌单页面"),
+        title: const Text("歌单"),
         backgroundColor: Theme.of(context).colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
       ),
       body: const Column(
         children: [
