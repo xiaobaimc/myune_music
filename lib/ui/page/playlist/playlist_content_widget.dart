@@ -38,6 +38,45 @@ class PlaylistListWidget extends StatefulWidget {
 class _PlaylistListWidgetState extends State<PlaylistListWidget> {
   int _hoveredIndex = -1; // 仅用于当前组件的UI状态
 
+  void _showAddPlaylistDialog(
+    BuildContext context,
+    PlaylistContentNotifier notifier,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('添加新歌单'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: '输入歌单名称'),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (controller.text.isNotEmpty) {
+                  if (!notifier.addPlaylist(controller.text.trim())) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('歌单名称已存在')));
+                  }
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('添加'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showContextMenu(
     Offset position,
     int? index,
@@ -96,45 +135,6 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
     }
   }
 
-  void _showAddPlaylistDialog(
-    BuildContext context,
-    PlaylistContentNotifier notifier,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final controller = TextEditingController();
-        return AlertDialog(
-          title: const Text('添加新歌单'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: '输入歌单名称'),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (controller.text.isNotEmpty) {
-                  if (!notifier.addPlaylist(controller.text.trim())) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('歌单名称已存在')));
-                  }
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('添加'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _showEditPlaylistDialog(
     BuildContext context,
     int index,
@@ -184,40 +184,60 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
     // 使用 Consumer 来监听 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
-        return GestureDetector(
-          onSecondaryTapDown: (details) {
-            _showContextMenu(details.globalPosition, null, context);
-          },
-          child: ListView.builder(
-            itemCount: playlistNotifier.playlists.length,
-            itemBuilder: (context, index) {
-              final isSelected = playlistNotifier.selectedIndex == index;
-              return MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: (_) => setState(() => _hoveredIndex = index),
-                onExit: (_) => setState(() => _hoveredIndex = -1),
-                child: Material(
-                  color: isSelected
-                      ? colorScheme.primary.withValues(alpha: 0.1)
-                      : (_hoveredIndex == index
-                            ? Colors.grey.withValues(alpha: 0.1)
-                            : Colors.transparent),
-                  child: InkWell(
-                    onTap: () => playlistNotifier.setSelectedIndex(index),
-                    onSecondaryTapDown: (details) => _showContextMenu(
-                      details.globalPosition,
-                      index,
-                      context,
-                    ),
-                    child: ListTile(
-                      title: Text(playlistNotifier.playlists[index].name),
-                      selected: isSelected,
-                    ),
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        _showAddPlaylistDialog(context, playlistNotifier),
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: const Text('添加歌单'),
                   ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onSecondaryTapDown: (details) {
+                  _showContextMenu(details.globalPosition, null, context);
+                },
+                child: ListView.builder(
+                  itemCount: playlistNotifier.playlists.length,
+                  itemBuilder: (context, index) {
+                    final isSelected = playlistNotifier.selectedIndex == index;
+                    return MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      onEnter: (_) => setState(() => _hoveredIndex = index),
+                      onExit: (_) => setState(() => _hoveredIndex = -1),
+                      child: Material(
+                        color: isSelected
+                            ? colorScheme.primary.withValues(alpha: 0.1)
+                            : (_hoveredIndex == index
+                                  ? Colors.grey.withValues(alpha: 0.1)
+                                  : Colors.transparent),
+                        child: InkWell(
+                          onTap: () => playlistNotifier.setSelectedIndex(index),
+                          onSecondaryTapDown: (details) => _showContextMenu(
+                            details.globalPosition,
+                            index,
+                            context,
+                          ),
+                          child: ListTile(
+                            title: Text(playlistNotifier.playlists[index].name),
+                            selected: isSelected,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -251,7 +271,7 @@ class _SongListWidgetState extends State<SongListWidget> {
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      items: <PopupMenuEntry<String>>[
+      items: <PopupMenuItem<String>>[
         const PopupMenuItem<String>(value: 'deleteSong', child: Text('删除歌曲')),
       ],
     );
@@ -397,9 +417,7 @@ class _SongListWidgetState extends State<SongListWidget> {
                                           alpha: 0.1,
                                         )
                                       : Colors.transparent,
-                                  borderRadius: _hoveredIndex == index
-                                      ? BorderRadius.circular(12)
-                                      : BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: ListTile(
                                   leading: SizedBox(

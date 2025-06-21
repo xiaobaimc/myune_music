@@ -27,10 +27,10 @@ class Setting extends StatelessWidget {
       ),
       body: Column(
         children: [
-          const Divider(),
+          const Divider(height: 1),
           const ThemeSelectionScreen(),
           SwitchListTile(
-            title: const Text('深色模式'),
+            title: Text('深色模式', style: Theme.of(context).textTheme.titleMedium),
             value: context.watch<ThemeProvider>().isDarkMode,
             onChanged: (value) =>
                 context.read<ThemeProvider>().toggleDarkMode(),
