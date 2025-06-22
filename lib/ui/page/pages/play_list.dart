@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../playlist/playlist_content_widget.dart';
+import '../../widgets/single_line_lyrics.dart';
 
 class Playlist extends StatelessWidget {
   const Playlist({super.key});
@@ -8,7 +9,11 @@ class Playlist extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("歌单"),
+        title: const SingleLineLyricView(
+          maxLinesPerLyric: 2,
+          textAlign: TextAlign.left,
+          alignment: Alignment.topLeft,
+        ),
         backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
       ),

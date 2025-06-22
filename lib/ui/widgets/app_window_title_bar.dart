@@ -51,24 +51,25 @@ class AppWindowTitleBar extends StatelessWidget {
               ),
             ),
             Expanded(child: MoveWindow()),
-            ConstrainedBox(
-              // 限制右侧按钮的最大宽度
-              constraints: const BoxConstraints(maxWidth: 100),
-              child: Row(
-                children: [
-                  _WindowButton(
-                    icon: Icons.remove,
-                    onPressed: () => appWindow.minimize(),
-                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                  ),
-                  const SizedBox(width: 2),
-                  _WindowButton(
-                    icon: Icons.close,
-                    onPressed: () => appWindow.close(),
-                    hoverColor: const Color.fromRGBO(239, 154, 154, 1),
-                  ),
-                ],
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  fit: FlexFit.loose, // 不强制拉满父组件宽度
+                  child: Container(),
+                ),
+                _WindowButton(
+                  icon: Icons.remove,
+                  onPressed: () => appWindow.minimize(),
+                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                ),
+                const SizedBox(width: 2),
+                _WindowButton(
+                  icon: Icons.close,
+                  onPressed: () => appWindow.close(),
+                  hoverColor: const Color.fromRGBO(239, 154, 154, 1),
+                ),
+              ],
             ),
           ],
         ),

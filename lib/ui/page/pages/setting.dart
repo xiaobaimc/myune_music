@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'setting/theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
+import '../../widgets/single_line_lyrics.dart';
 
 class SettingsProvider with ChangeNotifier {
   int _maxLinesPerLyric = 2;
@@ -21,7 +22,11 @@ class Setting extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("设置"),
+        title: const SingleLineLyricView(
+          maxLinesPerLyric: 2,
+          textAlign: TextAlign.left,
+          alignment: Alignment.topLeft,
+        ),
         backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
       ),
