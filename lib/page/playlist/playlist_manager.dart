@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import './playlist_models.dart';
+import 'playlist_models.dart';
 
 class PlaylistManager {
   static const String _playlistMetadataFileName = 'playlists_metadata.json';

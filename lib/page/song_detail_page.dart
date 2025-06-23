@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/lyrics_widget.dart';
-import '../page/playlist/playlist_content_notifier.dart';
-import '../page/playlist/playlist_models.dart';
+import 'playlist/playlist_content_notifier.dart';
+import 'playlist/playlist_models.dart';
 import '../widgets/playbar.dart';
 import '../widgets/app_window_title_bar.dart';
-import '../page/pages/setting.dart';
+import 'pages/setting.dart';
 
 class SongDetailPage extends StatelessWidget {
   const SongDetailPage({super.key});

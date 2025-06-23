@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:math';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,8 +10,8 @@ import 'package:path/path.dart' as p;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import './playlist_models.dart';
-import './playlist_manager.dart';
+import 'playlist_models.dart';
+import 'playlist_manager.dart';
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -59,6 +60,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   static const _playModeKey = 'play_mode';
 
+  final StreamController<String> _errorStreamController =
+      StreamController<String>.broadcast();
+  Stream<String> get errorStream => _errorStreamController.stream;
+
   PlaylistContentNotifier() {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadPlaylists();
@@ -67,6 +72,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _errorStreamController.close();
     _audioPlayer.dispose(); // 释放播放器资源
     super.dispose();
   }
@@ -330,7 +336,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentSong = songToPlay;
       notifyListeners();
     } catch (e) {
-      // print('无法播放歌曲: ${songToPlay.title}, 错误: $e');
+      _errorStreamController.add('无法播放歌曲: ${songToPlay.title}, 错误: $e');
     }
   }
 
@@ -433,11 +439,78 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await playSongAtIndex(prevIndex);
   }
 
+  // 将歌曲移动到顶部
+  Future<void> moveSongToTop(int index) async {
+    if (_selectedIndex == -1 ||
+        index < 0 ||
+        index >= _currentPlaylistSongs.length ||
+        _playlists[_selectedIndex].songFilePaths.isEmpty) {
+      return;
+    }
+
+    final songPath = _playlists[_selectedIndex].songFilePaths.removeAt(index);
+    _playlists[_selectedIndex].songFilePaths.insert(0, songPath);
+
+    final song = _currentPlaylistSongs.removeAt(index);
+    _currentPlaylistSongs.insert(0, song);
+
+    // 如果当前播放的歌曲被移动，更新 currentSongIndex
+    if (_currentSongIndex == index) {
+      _currentSongIndex = 0;
+    } else if (_currentSongIndex > index) {
+      _currentSongIndex--;
+    }
+
+    await _playlistManager.savePlaylists(_playlists);
+    notifyListeners();
+  }
+
+  // 排序歌曲
+  void reorderSong(int oldIndex, int newIndex) {
+    if (_selectedIndex == -1 || _currentPlaylistSongs.isEmpty) {
+      _errorStreamController.add('无法重新排序：没有选中歌单或歌单为空');
+      return;
+    }
+
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+
+    try {
+      final song = _currentPlaylistSongs.removeAt(oldIndex);
+      _currentPlaylistSongs.insert(newIndex, song);
+
+      final currentPlaylist = _playlists[_selectedIndex];
+      final filePath = currentPlaylist.songFilePaths.removeAt(oldIndex);
+      currentPlaylist.songFilePaths.insert(newIndex, filePath);
+
+      // 调整当前播放歌曲的索引
+      if (_currentSongIndex == oldIndex) {
+        _currentSongIndex = newIndex;
+      } else if (_currentSongIndex > oldIndex &&
+          _currentSongIndex <= newIndex) {
+        _currentSongIndex--;
+      } else if (_currentSongIndex < oldIndex &&
+          _currentSongIndex >= newIndex) {
+        _currentSongIndex++;
+      }
+
+      // 重新生成随机索引
+      if (_playMode == PlayMode.shuffle) {
+        _generateShuffledIndices();
+      }
+
+      _savePlaylists();
+      notifyListeners();
+    } catch (e) {
+      _errorStreamController.add('重新排序失败：$e');
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadLyricsForSong(String songFilePath) async {
     _currentLyrics = []; // 清空之前的歌词
     _currentLyricLineIndex = -1; // 重置歌词行索引
-
-    // print('尝试加载歌曲歌词: ${p.basename(songFilePath)}');
 
     try {
       final normalizedPath = Uri.file(
@@ -446,7 +519,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       final file = File(normalizedPath);
 
       if (!await file.exists()) {
-        // print('歌曲文件不存在: $songFilePath');
+        _errorStreamController.add('歌曲文件不存在：${p.basename(songFilePath)}');
         notifyListeners();
         return;
       }
@@ -458,11 +531,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
         notifyListeners();
         return;
-      } else {
-        // print('元数据中没有找到歌词。');
       }
     } catch (e) {
-      // print('读取元数据歌词时出错: $e');
+      _errorStreamController.add('加载歌词失败：${p.basename(songFilePath)}');
     }
 
     final songDirectory = p.dirname(songFilePath);
@@ -563,7 +634,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
           groupedLyrics.putIfAbsent(timestamp, () => []).add(text);
         } catch (e) {
-          // print('解析错误: $line - $e');
+          _errorStreamController.add('歌词解析错误: $line - $e');
         }
       }
     }

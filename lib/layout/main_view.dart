@@ -26,7 +26,7 @@ class _MainViewState extends State<MainView> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bool isWideScreen = constraints.maxWidth >= 600;
+        final bool isWideScreen = constraints.maxWidth >= 1000;
 
         final bool actualExtended;
         if (_hasUserToggled) {
@@ -70,7 +70,7 @@ class _MainViewState extends State<MainView> {
                         child: CircleAvatar(
                           backgroundColor: Theme.of(
                             context,
-                          ).colorScheme.secondaryContainer,
+                          ).colorScheme.primary.withValues(alpha: 0.1),
                           child: IconButton(
                             icon: Icon(
                               actualExtended

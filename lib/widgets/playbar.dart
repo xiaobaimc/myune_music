@@ -34,7 +34,6 @@ class _PlaybarState extends State<Playbar> {
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
-    final Color barBackgroundColor = colorScheme.surface;
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
 
@@ -45,7 +44,7 @@ class _PlaybarState extends State<Playbar> {
 
         return Container(
           height: 70,
-          color: barBackgroundColor,
+          color: colorScheme.surface,
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

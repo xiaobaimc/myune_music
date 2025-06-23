@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:audioplayers/audioplayers.dart';
-import './playlist_content_notifier.dart';
+import 'playlist_content_notifier.dart';
 
 class PlaylistContentWidget extends StatelessWidget {
   const PlaylistContentWidget({super.key});
@@ -254,6 +254,22 @@ class SongListWidget extends StatefulWidget {
 class _SongListWidgetState extends State<SongListWidget> {
   int _hoveredIndex = -1;
 
+  @override
+  void initState() {
+    super.initState();
+    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+      context,
+      listen: false,
+    );
+    playlistNotifier.errorStream.listen((errorMessage) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+      }
+    });
+  }
+
   void _showSongContextMenu(
     Offset position,
     int songIndex,
@@ -272,11 +288,19 @@ class _SongListWidgetState extends State<SongListWidget> {
         overlay.size.height - position.dy,
       ),
       items: <PopupMenuItem<String>>[
+        const PopupMenuItem<String>(value: 'moveToTop', child: Text('置于顶部')),
         const PopupMenuItem<String>(value: 'deleteSong', child: Text('删除歌曲')),
       ],
     );
-
-    if (result == 'deleteSong') {
+    if (result == 'moveToTop') {
+      final songTitle = playlistNotifier.currentPlaylistSongs[songIndex].title;
+      await playlistNotifier.moveSongToTop(songIndex);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
+      }
+    } else if (result == 'deleteSong') {
       final songTitle = playlistNotifier.currentPlaylistSongs
           .elementAt(songIndex)
           .title;
@@ -378,7 +402,16 @@ class _SongListWidgetState extends State<SongListWidget> {
                               ),
                         ),
                       )
-                    : ListView.builder(
+                    : ReorderableListView.builder(
+                        proxyDecorator: (child, index, animation) {
+                          return Material(
+                            elevation: 4,
+                            borderRadius: BorderRadius.circular(12),
+                            clipBehavior: Clip.antiAlias,
+                            child: child,
+                          );
+                        },
+                        buildDefaultDragHandles: false,
                         itemCount: playlistNotifier.currentPlaylistSongs.length,
                         itemBuilder: (context, index) {
                           final song = playlistNotifier.currentPlaylistSongs
@@ -391,79 +424,89 @@ class _SongListWidgetState extends State<SongListWidget> {
                                   playlistNotifier.playerState ==
                                       PlayerState.paused);
                           return MouseRegion(
+                            key: ValueKey(song.filePath), // 确保每个项有唯一键
                             onEnter: (_) =>
                                 setState(() => _hoveredIndex = index),
                             onExit: (_) => setState(() => _hoveredIndex = -1),
-                            child: InkWell(
-                              onTap: () {
-                                playlistNotifier.playSongAtIndex(index);
-                              },
-                              onSecondaryTapDown: (details) {
-                                _showSongContextMenu(
-                                  details.globalPosition,
-                                  index,
-                                  context,
-                                  playlistNotifier,
-                                );
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 100),
-                                curve: Curves.easeInOut,
-                                decoration: BoxDecoration(
-                                  color: _hoveredIndex == index
-                                      ? Colors.grey.withValues(alpha: 0.2)
-                                      : isPlaying
-                                      ? colorScheme.primary.withValues(
-                                          alpha: 0.1,
-                                        )
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ListTile(
-                                  leading: SizedBox(
-                                    width: 50,
-                                    height: 50,
-                                    child: song.albumArt != null
-                                        ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                            child: Image.memory(
-                                              song.albumArt!,
-                                              fit: BoxFit.cover,
-                                              width: 50,
-                                              height: 50,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                    return const Icon(
-                                                      Icons.music_note,
-                                                      size: 40,
-                                                      color: Colors.grey,
-                                                    );
-                                                  },
-                                            ),
+                            child: ReorderableDragStartListener(
+                              index: index,
+                              child: InkWell(
+                                onTap: () {
+                                  playlistNotifier.playSongAtIndex(index);
+                                },
+                                onSecondaryTapDown: (details) {
+                                  _showSongContextMenu(
+                                    details.globalPosition,
+                                    index,
+                                    context,
+                                    playlistNotifier,
+                                  );
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 100),
+                                  curve: Curves.easeInOut,
+                                  decoration: BoxDecoration(
+                                    color: _hoveredIndex == index
+                                        ? Colors.grey.withValues(alpha: 0.2)
+                                        : isPlaying
+                                        ? colorScheme.primary.withValues(
+                                            alpha: 0.1,
                                           )
-                                        : const Icon(
-                                            Icons.music_note,
-                                            size: 40,
-                                            color: Colors.grey,
-                                          ),
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  title: Text(
-                                    song.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                  child: ListTile(
+                                    leading: SizedBox(
+                                      width: 50,
+                                      height: 50,
+                                      child: song.albumArt != null
+                                          ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              child: Image.memory(
+                                                song.albumArt!,
+                                                fit: BoxFit.cover,
+                                                width: 50,
+                                                height: 50,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return const Icon(
+                                                        Icons.music_note,
+                                                        size: 40,
+                                                        color: Colors.grey,
+                                                      );
+                                                    },
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.music_note,
+                                              size: 40,
+                                              color: Colors.grey,
+                                            ),
+                                    ),
+                                    title: Text(
+                                      song.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      song.artist,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Text('${index + 1}.'),
                                   ),
-                                  subtitle: Text(
-                                    song.artist,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  trailing: Text('${index + 1}.'),
                                 ),
                               ),
                             ),
                           );
+                        },
+                        onReorder: (oldIndex, newIndex) {
+                          playlistNotifier.reorderSong(oldIndex, newIndex);
                         },
                       ),
               ),

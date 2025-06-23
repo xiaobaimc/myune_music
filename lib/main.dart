@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
-import 'ui/theme/theme_provider.dart';
+import 'theme/theme_provider.dart';
 import 'package:provider/provider.dart';
-import 'ui/layout/app_shell.dart';
-import 'ui/page/playlist/playlist_content_notifier.dart';
-import 'ui/page/pages/setting.dart';
+import 'layout/app_shell.dart';
+import 'page/playlist/playlist_content_notifier.dart';
+import 'page/pages/setting.dart';
 
 void main() {
   runApp(

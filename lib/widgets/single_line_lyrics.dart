@@ -16,7 +16,7 @@ class SingleLineLyricWidget extends StatelessWidget {
     required this.lyrics,
     required this.currentIndex,
     this.maxLinesPerLyric = 1,
-    this.fontSize = 20,
+    this.fontSize = 17,
     this.textAlign = TextAlign.center,
     this.alignment = Alignment.center,
   });
@@ -86,7 +86,7 @@ class SingleLineLyricView extends StatelessWidget {
   const SingleLineLyricView({
     super.key,
     this.maxLinesPerLyric = 1,
-    this.fontSize = 20,
+    this.fontSize = 17,
     this.textAlign = TextAlign.center,
     this.alignment = Alignment.center,
   });
