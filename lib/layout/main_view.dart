@@ -18,8 +18,8 @@ class _MainViewState extends State<MainView> {
 
   final List<Widget> _pages = [
     const Playlist(),
+    const SongDetails(),
     const Setting(),
-    const SongDetailsTestPage(),
   ];
 
   final TextStyle _mainViewTextStyle = const TextStyle(
@@ -60,14 +60,14 @@ class _MainViewState extends State<MainView> {
                     label: Text('歌单', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.settings),
-                    selectedIcon: const Icon(Icons.settings_outlined),
-                    label: Text('设置', style: _mainViewTextStyle),
+                    icon: const Icon(Icons.library_music),
+                    selectedIcon: const Icon(Icons.library_music_outlined),
+                    label: Text('歌曲详情信息', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.settings),
                     selectedIcon: const Icon(Icons.settings_outlined),
-                    label: Text('歌曲详情', style: _mainViewTextStyle),
+                    label: Text('设置', style: _mainViewTextStyle),
                   ),
                 ],
                 trailing: Expanded(

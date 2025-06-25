@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'setting/theme_selection_screen.dart';
+import '../setting/theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/single_line_lyrics.dart';
 
