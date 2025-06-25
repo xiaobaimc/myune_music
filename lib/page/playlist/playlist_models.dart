@@ -60,3 +60,25 @@ class LyricLine {
 
   LyricLine({required this.timestamp, required this.texts});
 }
+
+class SongDetails {
+  final String? title;
+  final String? artist;
+  final String? album;
+  final Duration? duration;
+  final Uint8List? albumArt;
+  final int? bitrate;
+  final int? sampleRate;
+  final String filePath;
+
+  SongDetails({
+    this.title,
+    this.artist,
+    this.album,
+    this.duration,
+    this.albumArt,
+    this.bitrate,
+    this.sampleRate,
+    required this.filePath,
+  });
+}

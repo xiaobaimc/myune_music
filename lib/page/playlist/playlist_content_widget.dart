@@ -319,13 +319,16 @@ class _SongListWidgetState extends State<SongListWidget> {
 
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
-        final currentPlaylistName = playlistNotifier.selectedIndex != -1
-            ? playlistNotifier.playlists.length > playlistNotifier.selectedIndex
-                  ? playlistNotifier.playlists
-                        .elementAt(playlistNotifier.selectedIndex)
-                        .name
-                  : '歌单数据错误'
-            : '无选中歌单';
+        String currentPlaylistName;
+        if (playlistNotifier.selectedIndex == -1) {
+          currentPlaylistName = '无选中歌单';
+        } else if (playlistNotifier.selectedIndex >=
+            playlistNotifier.playlists.length) {
+          currentPlaylistName = '歌单数据错误';
+        } else {
+          currentPlaylistName =
+              playlistNotifier.playlists[playlistNotifier.selectedIndex].name;
+        }
 
         return Container(
           padding: const EdgeInsets.all(16.0),

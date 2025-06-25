@@ -59,8 +59,8 @@ class _PlaybarState extends State<Playbar> {
                     return Row(
                       children: <Widget>[
                         // 专辑封面点击跳转歌曲详情页
-                        GestureDetector(
-                          onTap: (currentSong != null && !widget.disableTap)
+                        FilledButton(
+                          onPressed: (currentSong != null && !widget.disableTap)
                               ? () {
                                   // 如果有歌曲在播放且点击未被禁用，则执行跳转
                                   Navigator.of(context).push(
@@ -71,34 +71,44 @@ class _PlaybarState extends State<Playbar> {
                                   );
                                 }
                               : null,
-                          child: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(8),
+                          style: ButtonStyle(
+                            fixedSize: WidgetStateProperty.all(
+                              const Size(50, 50),
                             ),
+                            backgroundColor: WidgetStateProperty.all(
+                              colorScheme.surfaceContainerHighest,
+                            ),
+                            minimumSize: WidgetStateProperty.all(
+                              const Size(50, 50),
+                            ),
+                            padding: WidgetStateProperty.all(
+                              EdgeInsets.zero,
+                            ), // 去除内边距
+                            shape: WidgetStateProperty.all(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
                             child:
                                 (currentSong?.albumArt != null &&
                                     currentSong!.albumArt!.isNotEmpty)
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.memory(
-                                      currentSong.albumArt!,
-                                      fit: BoxFit.cover,
-                                      width: 50,
-                                      height: 50,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Icon(
-                                              Icons.music_note,
-                                              color: onBarColor.withValues(
-                                                alpha: 0.7,
-                                              ),
-                                              size: 30,
-                                            );
-                                          },
-                                    ),
+                                ? Image.memory(
+                                    currentSong.albumArt!,
+                                    fit: BoxFit.cover,
+                                    width: 50,
+                                    height: 50,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        Icons.music_note,
+                                        color: onBarColor.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                        size: 30,
+                                      );
+                                    },
                                   )
                                 : Icon(
                                     Icons.music_note,
@@ -107,7 +117,7 @@ class _PlaybarState extends State<Playbar> {
                                   ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         // 歌曲标题和艺术家
                         Expanded(
                           child: Column(
@@ -119,7 +129,7 @@ class _PlaybarState extends State<Playbar> {
                                 style: TextStyle(
                                   color: onBarColor,
                                   fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w600,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
@@ -128,7 +138,7 @@ class _PlaybarState extends State<Playbar> {
                                 currentSong?.artist ?? '未知歌手',
                                 style: TextStyle(
                                   color: onBarColor.withValues(alpha: 0.7),
-                                  fontSize: 12,
+                                  fontSize: 13,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,

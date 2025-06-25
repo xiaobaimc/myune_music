@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../page/playlist/playlist_models.dart';
 import '../page/playlist/playlist_content_notifier.dart';
-import 'package:provider/provider.dart';
 
 class SingleLineLyricWidget extends StatelessWidget {
   final List<LyricLine> lyrics;

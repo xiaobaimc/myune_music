@@ -92,12 +92,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _audioPlayer.onPositionChanged.listen((position) {
       _currentPosition = position; // 更新当前位置
       updateLyricLine(position);
-      notifyListeners();
+      // notifyListeners();
     });
 
     _audioPlayer.onDurationChanged.listen((duration) {
       _totalDuration = duration; // 更新总时长
-      notifyListeners();
+      // notifyListeners();
     });
   }
 
@@ -147,6 +147,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final List<Song> songsWithMetadata = [];
 
     for (final filePath in currentPlaylist.songFilePaths) {
+      await Future.delayed(Duration.zero);
       String title = p.basenameWithoutExtension(filePath);
       String artist = '未知歌手';
       Uint8List? albumArt;
@@ -674,6 +675,61 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (newIndex != _currentLyricLineIndex) {
       _currentLyricLineIndex = newIndex;
       notifyListeners();
+    }
+  }
+
+  Future<SongDetails?> getCurrentSongDetails() async {
+    if (_currentSong == null) {
+      _errorStreamController.add('没有当前播放的歌曲');
+      return null;
+    }
+
+    final filePath = _currentSong!.filePath;
+    final normalizedPath = Uri.file(
+      filePath,
+    ).toFilePath(windows: Platform.isWindows);
+    final file = File(normalizedPath);
+
+    if (!await file.exists()) {
+      _errorStreamController.add('歌曲文件不存在：${p.basename(filePath)}');
+      return SongDetails(
+        title: '文件不存在',
+        artist: '未知',
+        album: '未知',
+        duration: Duration.zero,
+        albumArt: null,
+        filePath: filePath,
+      );
+    }
+
+    try {
+      final metadata = readMetadata(file, getImage: true);
+
+      Uint8List? albumArtBytes;
+      if (metadata.pictures.isNotEmpty) {
+        albumArtBytes = metadata.pictures.first.bytes;
+      }
+
+      return SongDetails(
+        title: metadata.title ?? p.basenameWithoutExtension(filePath),
+        artist: metadata.artist ?? '未知歌手',
+        album: metadata.album ?? '未知专辑',
+        duration: metadata.duration ?? Duration.zero,
+        albumArt: albumArtBytes,
+        bitrate: metadata.bitrate,
+        sampleRate: metadata.sampleRate,
+        filePath: filePath,
+      );
+    } catch (e) {
+      _errorStreamController.add('读取歌曲详情失败：${p.basename(filePath)} - $e');
+      return SongDetails(
+        title: (filePath), // 至少提供文件名作为标题
+        artist: '未知歌手 (解析失败)',
+        album: '未知专辑',
+        duration: Duration.zero,
+        albumArt: null,
+        filePath: filePath,
+      );
     }
   }
 }

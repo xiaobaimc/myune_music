@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../page/pages/play_list.dart';
 import '../page/pages/setting.dart';
+import '../page/pages/song_details.dart';
 
 class MainView extends StatefulWidget {
   const MainView({super.key});
@@ -15,7 +16,11 @@ class _MainViewState extends State<MainView> {
   bool _isManuallyExpanded = false;
   bool _hasUserToggled = false;
 
-  final List<Widget> _pages = [const Playlist(), const Setting()];
+  final List<Widget> _pages = [
+    const Playlist(),
+    const Setting(),
+    const SongDetailsTestPage(),
+  ];
 
   final TextStyle _mainViewTextStyle = const TextStyle(
     fontSize: 13,
@@ -58,6 +63,11 @@ class _MainViewState extends State<MainView> {
                     icon: const Icon(Icons.settings),
                     selectedIcon: const Icon(Icons.settings_outlined),
                     label: Text('设置', style: _mainViewTextStyle),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.settings),
+                    selectedIcon: const Icon(Icons.settings_outlined),
+                    label: Text('歌曲详情', style: _mainViewTextStyle),
                   ),
                 ],
                 trailing: Expanded(
