@@ -19,7 +19,7 @@ class Playlist extends StatelessWidget {
       ),
       body: const Column(
         children: [
-          Divider(height: 1),
+          Divider(height: 1, thickness: 1),
           Expanded(child: PlaylistContentWidget()),
         ],
       ),

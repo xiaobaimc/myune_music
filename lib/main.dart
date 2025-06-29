@@ -4,7 +4,7 @@ import 'theme/theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'layout/app_shell.dart';
 import 'page/playlist/playlist_content_notifier.dart';
-import 'page/pages/setting.dart';
+import 'page/setting/settings_provider.dart';
 
 void main() {
   runApp(

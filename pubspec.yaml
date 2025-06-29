@@ -36,12 +36,11 @@ dependencies:
   path_provider: ^2.1.5
   file_picker: ^10.2.0
   flutter_media_metadata: ^1.0.0
-  permission_handler: ^12.0.0+1
   uuid: ^4.5.1
   path: ^1.9.1
   audio_metadata_reader: ^1.4.1
   audioplayers: ^6.4.0
-  sidebarx: ^0.17.1
+  flutter_colorpicker: ^1.1.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+
 import '../../theme/theme_provider.dart';
 
 class ThemeSelectionScreen extends StatelessWidget {
@@ -13,8 +15,6 @@ class ThemeSelectionScreen extends StatelessWidget {
     Colors.red,
     Colors.teal,
     Colors.pink,
-    Colors.indigo,
-    Colors.brown,
   ];
 
   @override
@@ -42,17 +42,26 @@ class ThemeSelectionScreen extends StatelessWidget {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: presetColors.map((color) {
-                          return Padding(
+                        children: [
+                          ...presetColors.map((color) {
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: _buildColorOption(
+                                context,
+                                color,
+                                currentSeedColor,
+                                () => themeProvider.setSeedColor(color),
+                              ),
+                            );
+                          }),
+                          Padding(
                             padding: const EdgeInsets.only(left: 8.0),
-                            child: _buildColorOption(
+                            child: _buildCustomColorButton(
                               context,
-                              color,
-                              currentSeedColor,
-                              () => themeProvider.setSeedColor(color),
+                              themeProvider,
                             ),
-                          );
-                        }).toList(),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -97,6 +106,70 @@ class ThemeSelectionScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCustomColorButton(
+    BuildContext context,
+    ThemeProvider themeProvider,
+  ) {
+    return GestureDetector(
+      onTap: () => _showColorPickerDialog(context, themeProvider),
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: Theme.of(context).colorScheme.onSurface),
+        ),
+        child: Icon(
+          Icons.add,
+          size: 20,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+    );
+  }
+
+  void _showColorPickerDialog(
+    BuildContext context,
+    ThemeProvider themeProvider,
+  ) {
+    Color pickerColor = themeProvider.currentSeedColor;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('选择自定义颜色'),
+          content: SingleChildScrollView(
+            child: ColorPicker(
+              pickerColor: pickerColor,
+              onColorChanged: (color) {
+                pickerColor = color;
+              },
+              enableAlpha: false, // 禁用 Alpha 通道
+              labelTypes: const [],
+              paletteType: PaletteType.hsv,
+              hexInputBar: true,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                themeProvider.setSeedColor(pickerColor);
+                Navigator.of(context).pop();
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

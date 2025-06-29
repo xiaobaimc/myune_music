@@ -5,7 +5,7 @@ import 'playlist/playlist_content_notifier.dart';
 import 'playlist/playlist_models.dart';
 import '../widgets/playbar.dart';
 import '../widgets/app_window_title_bar.dart';
-import 'pages/setting.dart';
+import './setting/settings_provider.dart';
 
 class SongDetailPage extends StatelessWidget {
   const SongDetailPage({super.key});
