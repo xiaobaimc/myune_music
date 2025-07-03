@@ -5,8 +5,11 @@ import 'package:provider/provider.dart';
 import 'layout/app_shell.dart';
 import 'page/playlist/playlist_content_notifier.dart';
 import 'page/setting/settings_provider.dart';
+import 'src/rust/frb_generated.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await RustLib.init();
   runApp(
     MultiProvider(
       providers: [

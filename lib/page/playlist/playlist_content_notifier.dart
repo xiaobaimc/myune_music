@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
+import '../../smtc_manager.dart';
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -60,6 +61,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   static const _playModeKey = 'play_mode';
 
+  SmtcManager? _smtcManager;
+
   final StreamController<String> _errorStreamController =
       StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorStreamController.stream;
@@ -68,12 +71,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadPlaylists();
     loadPlayMode();
+    _smtcManager = SmtcManager(
+      onPlay: play,
+      onPause: pause,
+      onNext: playNext,
+      onPrevious: playPrevious,
+    );
   }
 
   @override
   void dispose() {
     _errorStreamController.close();
     _audioPlayer.dispose(); // 释放播放器资源
+    _cleanupSmtc();
     super.dispose();
   }
 
@@ -99,6 +109,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _totalDuration = duration; // 更新总时长
       // notifyListeners();
     });
+  }
+
+  Future<void> _cleanupSmtc() async {
+    await _smtcManager?.close();
   }
 
   Future<void> _loadPlaylists() async {
@@ -135,6 +149,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentLyricLineIndex = -1;
       _currentPosition = Duration.zero;
       _totalDuration = Duration.zero;
+      await _smtcManager?.updateState(false);
       notifyListeners();
       return;
     }
@@ -296,11 +311,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
     } else if (_playerState == PlayerState.paused) {
       await _audioPlayer.resume(); // 从暂停处恢复
     } else {}
+    await _smtcManager?.updateState(true);
     notifyListeners();
   }
 
   Future<void> pause() async {
     await _audioPlayer.pause();
+    await _smtcManager?.updateState(false);
     notifyListeners();
   }
 
@@ -312,6 +329,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentLyricLineIndex = -1;
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
+    await _smtcManager?.updateState(false);
   }
 
   // 播放指定索引的歌曲
@@ -335,6 +353,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _audioPlayer.resume(); // 播放新音源
       _currentSongIndex = index;
       _currentSong = songToPlay;
+      await _smtcManager?.updateMetadata(
+        title: songToPlay.title,
+        artist: songToPlay.artist,
+        albumArt: songToPlay.albumArt,
+      );
+      // await dumpCover(songToPlay.albumArt!);
+      await _smtcManager?.updateState(true); // 播放状态
       notifyListeners();
     } catch (e) {
       _errorStreamController.add('无法播放歌曲: ${songToPlay.title}, 错误: $e');
@@ -463,6 +488,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     await _playlistManager.savePlaylists(_playlists);
+    await _smtcManager?.updateState(false);
     notifyListeners();
   }
 
