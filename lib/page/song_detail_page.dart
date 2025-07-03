@@ -101,27 +101,33 @@ class SongDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
-                // 歌词区域占满剩余空间
+                // 歌词区域
                 Expanded(
-                  child: Center(
-                    child: Consumer<PlaylistContentNotifier>(
-                      builder: (context, playlistNotifier, child) {
-                        final List<LyricLine> currentLyrics =
-                            playlistNotifier.currentLyrics;
-                        final int currentLyricLineIndex =
-                            playlistNotifier.currentLyricLineIndex;
-                        return LyricsWidget(
-                          lyrics: currentLyrics,
-                          currentIndex: currentLyricLineIndex,
-                          maxLinesPerLyric: context
-                              .watch<SettingsProvider>()
-                              .maxLinesPerLyric,
-                          onTapLine: (index) {
-                            final seekTime = currentLyrics[index].timestamp;
-                            playlistNotifier.audioPlayer.seek(seekTime);
-                          },
-                        );
-                      },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 80,
+                      vertical: 10,
+                    ),
+                    child: Center(
+                      child: Consumer<PlaylistContentNotifier>(
+                        builder: (context, playlistNotifier, child) {
+                          final List<LyricLine> currentLyrics =
+                              playlistNotifier.currentLyrics;
+                          final int currentLyricLineIndex =
+                              playlistNotifier.currentLyricLineIndex;
+                          return LyricsWidget(
+                            lyrics: currentLyrics,
+                            currentIndex: currentLyricLineIndex,
+                            maxLinesPerLyric: context
+                                .watch<SettingsProvider>()
+                                .maxLinesPerLyric,
+                            onTapLine: (index) {
+                              final seekTime = currentLyrics[index].timestamp;
+                              playlistNotifier.audioPlayer.seek(seekTime);
+                            },
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),

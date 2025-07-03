@@ -93,7 +93,7 @@ class SongDetailsPage extends StatelessWidget {
                             icon: Icons.graphic_eq,
                             label: '比特率',
                             value: details.bitrate != null
-                                ? '${details.bitrate} bps'
+                                ? '${details.bitrate! / 1000} kbps'
                                 : '未知',
                           ),
                           _infoCard(
@@ -101,7 +101,7 @@ class SongDetailsPage extends StatelessWidget {
                             icon: Icons.audiotrack,
                             label: '采样率',
                             value: details.sampleRate != null
-                                ? '${details.sampleRate} Hz'
+                                ? '${details.sampleRate! / 1000} kHz'
                                 : '未知',
                           ),
                           _infoCard(
