@@ -62,7 +62,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.10.0';
 
   @override
-  int get rustContentHash => 2081864406;
+  int get rustContentHash => -189846654;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -92,6 +92,12 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSmtcSmtcFlutterUpdateState({
     required SmtcFlutter that,
     required SMTCState state,
+  });
+
+  Future<void> crateApiSmtcSmtcFlutterUpdateTimeline({
+    required SmtcFlutter that,
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
   });
 
   RustArcIncrementStrongCountFnType
@@ -288,6 +294,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["that", "state"],
       );
 
+  @override
+  Future<void> crateApiSmtcSmtcFlutterUpdateTimeline({
+    required SmtcFlutter that,
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+            that,
+            serializer,
+          );
+          sse_encode_i_64(position, serializer);
+          sse_encode_i_64(duration, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSmtcSmtcFlutterUpdateTimelineConstMeta,
+        argValues: [that, position, duration],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterUpdateTimelineConstMeta =>
+      const TaskConstMeta(
+        debugName: "SmtcFlutter_update_timeline",
+        argNames: ["that", "position", "duration"],
+      );
+
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_SmtcFlutter => wire
       .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter;
@@ -347,6 +393,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int dco_decode_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
   }
 
   @protected
@@ -459,6 +511,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
   }
 
   @protected
@@ -605,6 +663,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -718,4 +782,14 @@ class SmtcFlutterImpl extends RustOpaque implements SmtcFlutter {
 
   Future<void> updateState({required SMTCState state}) => RustLib.instance.api
       .crateApiSmtcSmtcFlutterUpdateState(that: this, state: state);
+
+  /// 更新时间轴信息
+  Future<void> updateTimeline({
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
+  }) => RustLib.instance.api.crateApiSmtcSmtcFlutterUpdateTimeline(
+    that: this,
+    position: position,
+    duration: duration,
+  );
 }

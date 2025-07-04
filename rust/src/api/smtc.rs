@@ -2,11 +2,11 @@ use flutter_rust_bridge::frb;
 #[cfg(target_os = "windows")]
 use windows::{
     core::HSTRING,
-    Foundation::TypedEventHandler,
+    Foundation::{TypedEventHandler, TimeSpan},
     Media::{
         MediaPlaybackStatus, MediaPlaybackType, Playback::MediaPlayer,
         SystemMediaTransportControls, SystemMediaTransportControlsButton,
-        SystemMediaTransportControlsButtonPressedEventArgs,
+        SystemMediaTransportControlsButtonPressedEventArgs, SystemMediaTransportControlsTimelineProperties,
     },
     Storage::{
         FileProperties::ThumbnailMode,
@@ -95,6 +95,12 @@ impl SmtcFlutter {
         .unwrap();
     }
 
+    /// 更新时间轴信息
+    pub fn update_timeline(&self, position: i64, duration: i64) {
+        #[cfg(target_os = "windows")]
+        self._update_timeline(position, duration).unwrap();
+    }
+
     pub fn close(self) {
         #[cfg(target_os = "windows")]
         self._player.Close().unwrap();
@@ -149,6 +155,7 @@ impl SmtcFlutter {
             writer.WriteBytes(&data)?;
             writer.StoreAsync()?.get()?;
             writer.FlushAsync()?.get()?; // 确保刷新
+            writer.DetachStream()?;
             stream.Seek(0)?; // 指针回到开头
 
             let reference = RandomAccessStreamReference::CreateFromStream(&stream)?;
@@ -168,6 +175,29 @@ impl SmtcFlutter {
         if !(self._smtc.IsEnabled()?) {
             self._smtc.SetIsEnabled(true)?;
         }
+
+        Ok(())
+    }
+
+    /// 内部更新时间轴信息
+    fn _update_timeline(&self, position: i64, duration: i64) -> Result<(), windows::core::Error> {
+        let timeline = SystemMediaTransportControlsTimelineProperties::new()?;
+        timeline.SetStartTime(TimeSpan { Duration: 0 })?;
+        // 设置当前进度
+        timeline.SetPosition(TimeSpan {
+            Duration: position * 10_000,
+        })?;
+        // 设置总时长
+        timeline.SetEndTime(TimeSpan {
+            Duration: duration * 10_000,
+        })?;
+        // 设置最小和最大可寻址时间
+        timeline.SetMinSeekTime(TimeSpan { Duration: 0 })?;
+        timeline.SetMaxSeekTime(TimeSpan {
+            Duration: duration * 10_000,
+        })?;
+        // 更新时间轴
+        self._smtc.UpdateTimelineProperties(&timeline)?;
 
         Ok(())
     }

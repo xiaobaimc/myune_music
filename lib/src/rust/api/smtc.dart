@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `_init_controls`, `_new`, `_update_display`, `_update_state`
+// These functions are ignored because they are not marked as `pub`: `_init_controls`, `_new`, `_update_display`, `_update_state`, `_update_timeline`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SmtcFlutter>>
 abstract class SmtcFlutter implements RustOpaqueInterface {
@@ -26,6 +26,12 @@ abstract class SmtcFlutter implements RustOpaqueInterface {
   });
 
   Future<void> updateState({required SMTCState state});
+
+  /// 更新时间轴信息
+  Future<void> updateTimeline({
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
+  });
 }
 
 /// SMTC 控制事件类型

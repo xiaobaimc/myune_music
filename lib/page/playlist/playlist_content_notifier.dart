@@ -102,11 +102,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _audioPlayer.onPositionChanged.listen((position) {
       _currentPosition = position; // 更新当前位置
       updateLyricLine(position);
+      _smtcManager?.updateTimeline(
+        position: position.inMilliseconds,
+        duration: _totalDuration.inMilliseconds,
+      );
       // notifyListeners();
     });
 
     _audioPlayer.onDurationChanged.listen((duration) {
       _totalDuration = duration; // 更新总时长
+      _smtcManager?.updateTimeline(
+        position: _currentPosition.inMilliseconds,
+        duration: duration.inMilliseconds,
+      );
       // notifyListeners();
     });
   }
@@ -330,6 +338,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
     await _smtcManager?.updateState(false);
+    await _smtcManager?.updateTimeline(position: 0, duration: 0);
   }
 
   // 播放指定索引的歌曲
@@ -360,6 +369,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       );
       // await dumpCover(songToPlay.albumArt!);
       await _smtcManager?.updateState(true); // 播放状态
+      await _smtcManager?.updateTimeline(
+        position: 0, // 新歌曲从0开始
+        duration: _totalDuration.inMilliseconds,
+      );
       notifyListeners();
     } catch (e) {
       _errorStreamController.add('无法播放歌曲: ${songToPlay.title}, 错误: $e');

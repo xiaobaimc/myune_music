@@ -49,9 +49,9 @@ class SmtcManager {
     if (_smtc == null) return;
 
     try {
-      debugPrint(
-        'SMTC 更新元数据: title=$title, artist=$artist, albumArt=${albumArt != null ? "${albumArt.length} bytes" : "null"}',
-      );
+      // debugPrint(
+      //   'SMTC 更新元数据: title=$title, artist=$artist, albumArt=${albumArt != null ? "${albumArt.length} bytes" : "null"}',
+      // );
       await _smtc.updateDisplay(
         title: title,
         artist: artist,
@@ -73,6 +73,20 @@ class SmtcManager {
       );
     } catch (e) {
       // debugPrint('更新SMTC状态失败: $e');
+    }
+  }
+
+  /// 更新时间轴信息
+  Future<void> updateTimeline({
+    required int position,
+    required int duration,
+  }) async {
+    if (_smtc == null) return;
+
+    try {
+      await _smtc.updateTimeline(position: position, duration: duration);
+    } catch (e) {
+      debugPrint('更新SMTC时间轴失败: $e');
     }
   }
 
