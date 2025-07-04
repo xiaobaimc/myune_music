@@ -1,6 +1,6 @@
 # myune_music
 
-一个使用纯 Flutter(Dart) 的简单音乐播放器实现
+一个使用 Flutter(Dart) 的简单音乐播放器实现
 
 ## 特性
  - 使用 **[Material 3](https://m3.material.io/)** 配色
@@ -11,15 +11,17 @@
  - 简单的主题调整 (自定义主题配色)
  - 音量调节与静音功能
  - 内置播放列表与播放模式切换：顺序播放、单曲循环、随机播放
+ - SMTC 支持
 
 ## 项目截图
-![](screenshot/31fa90246efd78f960fdcba41f58a671.png)
-![](screenshot/7067b486e60d96bc7ef4465b2301f950.png)
-![](screenshot/431c48737ae3137d6360d2d4dfbbb282.png)
-
+![](screenshot/87518c111bb8c814c64b3930da7f412a.png)
+![](screenshot/a9c90c69172339d0956f7dfcd7c622cb.png)
+![](screenshot/5559d2cd0efa1e531175c0bd66b5a0f6.png)
+> 图2的悬浮歌词为 [lyricify-lite](https://github.com/WXRIW/Lyricify-App#lyricify-lite)
 ## 快速开始
 
 ### 环境要求
+- Rust 环境
 - FlutterSDK >= 3.8.0
 
 ### 安装依赖
@@ -34,6 +36,8 @@
 - [audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader) 读取音频元信息
 
 - [audioplayers](https://pub.dev/packages/audioplayers) 播放音频
+
+- 感谢 [爱情终是残念](https://aqzscn.cn/archives/flutter-smtc) 和 [Ferry-200](https://github.com/Ferry-200/coriander_player) 的 Rust + Flutter 的 SMTC 实现
 
 - 还有更多 (详见 [pubspec.yaml](pubspec.yaml) ) ！感谢所有无私开源的开发者们！
 
