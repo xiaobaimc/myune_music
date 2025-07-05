@@ -31,9 +31,13 @@ class ThemeProvider with ChangeNotifier {
 
   static const String _seedColorKey = 'user_seed_color';
 
+  static const String _fontFamilyKey = 'user_font_family';
+  String _currentFontFamily = 'Misans'; // 默认字体
+
   ThemeProvider() {
     _loadSeedColor();
     _loadDarkMode();
+    _loadFontFamily();
   }
 
   Color get currentSeedColor => _currentSeedColor;
@@ -48,7 +52,7 @@ class ThemeProvider with ChangeNotifier {
       seedColor: _currentSeedColor,
       brightness: Brightness.light,
     ),
-    fontFamily: 'Misans',
+    fontFamily: _currentFontFamily,
     textTheme: misansTextTheme,
   );
 
@@ -58,7 +62,7 @@ class ThemeProvider with ChangeNotifier {
       seedColor: _currentSeedColor,
       brightness: Brightness.dark,
     ),
-    fontFamily: 'Misans',
+    fontFamily: _currentFontFamily,
     textTheme: misansTextTheme,
   );
 
@@ -97,5 +101,29 @@ class ThemeProvider with ChangeNotifier {
     final bool isDark = prefs.getBool('user_dark_mode') ?? false;
     _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
     notifyListeners();
+  }
+
+  Future<void> _loadFontFamily() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedFont = prefs.getString(_fontFamilyKey);
+    if (savedFont != null && savedFont.isNotEmpty) {
+      _currentFontFamily = savedFont;
+      notifyListeners();
+    }
+  }
+
+  void setFontFamily(String fontFamily) async {
+    if (_currentFontFamily == fontFamily) return; // 没变就直接退出
+    _currentFontFamily = fontFamily;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_fontFamilyKey, fontFamily);
+  }
+
+  void resetFontFamily() async {
+    _currentFontFamily = 'Misans'; // 默认字体
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_fontFamilyKey);
   }
 }

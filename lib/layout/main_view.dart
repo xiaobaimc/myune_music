@@ -16,11 +16,18 @@ class _MainViewState extends State<MainView> {
   bool _isManuallyExpanded = false;
   bool _hasUserToggled = false;
 
-  final List<Widget> _pages = [
-    const Playlist(),
-    const SongDetails(),
-    const Setting(),
-  ];
+  Widget _buildPage(int index) {
+    switch (index) {
+      case 0:
+        return const Playlist();
+      case 1:
+        return const SongDetails();
+      case 2:
+        return const Setting();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   final TextStyle _mainViewTextStyle = const TextStyle(
     fontSize: 13,
@@ -102,7 +109,7 @@ class _MainViewState extends State<MainView> {
               ),
             ),
             Expanded(
-              child: _pages[_currentIndex], // 动态展示页面
+              child: _buildPage(_currentIndex), // 动态展示页面
             ),
           ],
         );
