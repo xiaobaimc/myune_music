@@ -63,6 +63,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   SmtcManager? _smtcManager;
 
+  double _currentBalance = 0.0;
+  double _currentPlaybackRate = 1.0;
+
+  double get currentBalance => _currentBalance;
+  double get currentPlaybackRate => _currentPlaybackRate;
+
   final StreamController<String> _errorStreamController =
       StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorStreamController.stream;
@@ -71,6 +77,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadPlaylists();
     loadPlayMode();
+    _audioPlayer.setBalance(_currentBalance);
+    _audioPlayer.setPlaybackRate(_currentPlaybackRate);
     _smtcManager = SmtcManager(
       onPlay: play,
       onPause: pause,
@@ -341,6 +349,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _smtcManager?.updateTimeline(position: 0, duration: 0);
   }
 
+  Future<void> setBalance(double balance) async {
+    if (balance < -1.0 || balance > 1.0) return;
+    _currentBalance = balance;
+    await _audioPlayer.setBalance(balance);
+    notifyListeners(); // 通知 UI 更新
+  }
+
+  Future<void> setPlaybackRate(double rate) async {
+    if (rate < 0.5 || rate > 2.0) return;
+    _currentPlaybackRate = rate;
+    await _audioPlayer.setPlaybackRate(rate);
+    notifyListeners(); // 通知 UI 更新
+  }
+
   // 播放指定索引的歌曲
   Future<void> playSongAtIndex(int index) async {
     if (index < 0 || index >= _currentPlaylistSongs.length) {
@@ -362,6 +384,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _audioPlayer.resume(); // 播放新音源
       _currentSongIndex = index;
       _currentSong = songToPlay;
+      await _audioPlayer.setBalance(_currentBalance);
+      await _audioPlayer.setPlaybackRate(_currentPlaybackRate);
       await _smtcManager?.updateMetadata(
         title: songToPlay.title,
         artist: songToPlay.artist,
@@ -573,7 +597,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
         return;
       }
     } catch (e) {
-      _errorStreamController.add('加载歌词失败：${p.basename(songFilePath)}');
+      // _errorStreamController.add('加载歌词失败：${p.basename(songFilePath)}');
+      // 未能读取到歌词时不提示错误
     }
 
     final songDirectory = p.dirname(songFilePath);
@@ -591,8 +616,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
       try {
         final lines = await lrcFile.readAsLines();
         _currentLyrics = _parseLrcContent(lines);
-
-        if (_currentLyrics.isNotEmpty) {}
       } catch (e) {
         _currentLyrics = [];
       }
@@ -670,9 +693,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
           // 获取歌词内容：时间戳之后的内容
           final String text = match.group(4)!.trim();
-          if (text.isEmpty) continue;
 
-          groupedLyrics.putIfAbsent(timestamp, () => []).add(text);
+          // 兼容逐字歌词
+          final String cleanedText = text.replaceAll(
+            RegExp(r'<\d{2}:\d{2}\.\d{2,3}>'),
+            '',
+          );
+
+          if (cleanedText.isEmpty) continue;
+          groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
+          if (text.isEmpty) continue;
         } catch (e) {
           _errorStreamController.add('歌词解析错误: $line - $e');
         }

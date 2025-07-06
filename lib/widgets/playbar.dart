@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'volume_control_state.dart';
 import '../page/song_detail_page.dart';
+import 'balance_rate_control.dart';
 
 // 格式化时间函数
 String _formatDuration(Duration duration) {
@@ -365,17 +366,21 @@ class _PlaybarState extends State<Playbar> {
                     ),
                     // 音量控制
                     VolumeControl(player: player, iconColor: onBarColor),
-                    // 桌面歌词按钮
-                    IconButton(
-                      icon: Icon(
-                        Icons.queue_music,
-                        color: onBarColor.withValues(alpha: 0.7),
-                        size: 24,
-                      ),
-                      onPressed: () {
-                        // TODO: 桌面歌词功能
-                      },
-                    ),
+
+                    BalanceRateControl(player: player, iconColor: onBarColor),
+
+                    // // 桌面歌词按钮
+                    // IconButton(
+                    //   icon: Icon(
+                    //     Icons.queue_music,
+                    //     color: onBarColor.withValues(alpha: 0.7),
+                    //     size: 24,
+                    //   ),
+                    //   onPressed: () {
+                    //     // todo: 桌面歌词功能
+                    //     // 使用desktop_multi_window或等待官方更新
+                    //   },
+                    // ),
                   ],
                 ),
               ),
