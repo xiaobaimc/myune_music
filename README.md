@@ -4,25 +4,23 @@
 
 ## 特性
  - 使用 **[Material 3](https://m3.material.io/)** 配色
- - 支持多种本地音频格式导入，自动读取音频元数据
- - 基础播放控制：播放 / 暂停、上一首 / 下一首、进度调节
- - 歌单功能完善：可创建、重命名、删除歌单并添加歌曲
- - 支持歌词显示，兼容本地 `.lrc` 文件与从音频文件中读取内联歌词
- - 简单的主题调整 (自定义主题配色)
- - 音量调节与静音功能
- - 内置播放列表与播放模式切换：顺序播放、单曲循环、随机播放
- - SMTC 支持
+ - 支持多种**本地音频**格式导入，自动读取**音频元数据**
+ - 支持**歌词显示**，兼容**本地 `.lrc` 文件**与从**音频文件**中读取**内联歌词**
+ - **左右声道平衡**和**倍速**功能
+ - 支持多种**歌曲信息**读取
+ - 主题调整 (自定义**主题配色**和**字体**)
+ - **SMTC** 支持
 
 ## 项目截图
 ![](screenshot/87518c111bb8c814c64b3930da7f412a.png)
 ![](screenshot/a9c90c69172339d0956f7dfcd7c622cb.png)
 ![](screenshot/5559d2cd0efa1e531175c0bd66b5a0f6.png)
-> 图2的悬浮歌词为 [lyricify-lite](https://github.com/WXRIW/Lyricify-App#lyricify-lite)
+> 图2的**悬浮歌词**为 **[lyricify-lite](https://github.com/WXRIW/Lyricify-App#lyricify-lite)**
 ## 快速开始
 
 ### 环境要求
-- Rust 环境
-- FlutterSDK >= 3.8.0
+- **Rust** 环境
+- **FlutterSDK** >= 3.8.0
 
 ### 安装依赖
     flutter pub get
@@ -33,13 +31,13 @@
 
 ## 使用的插件
 
-- [audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader) 读取音频元信息
+- **[audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader)** 读取音频元信息
 
-- [audioplayers](https://pub.dev/packages/audioplayers) 播放音频
+- **[audioplayers](https://pub.dev/packages/audioplayers)** 播放音频
 
-- 感谢 [爱情终是残念](https://aqzscn.cn/archives/flutter-smtc) 和 [Ferry-200](https://github.com/Ferry-200/coriander_player) 的 Rust + Flutter 的 SMTC 实现
+- 感谢 **[爱情终是残念](https://aqzscn.cn/archives/flutter-smtc)** 和 **[Ferry-200](https://github.com/Ferry-200/coriander_player)** 的 Rust + Flutter 的 **SMTC** 实现
 
-- 还有更多 (详见 [pubspec.yaml](pubspec.yaml) ) ！感谢所有无私开源的开发者们！
+- 还有更多 (详见 [pubspec.yaml](pubspec.yaml) ) ！感谢所有**无私开源的开发者**们！
 
 ## 许可证
 

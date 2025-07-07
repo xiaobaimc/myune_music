@@ -463,26 +463,40 @@ class _SongListWidgetState extends State<SongListWidget> {
                                       width: 50,
                                       height: 50,
                                       child: song.albumArt != null
-                                          ? ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              child: Image.memory(
-                                                song.albumArt!,
-                                                fit: BoxFit.cover,
-                                                width: 50,
-                                                height: 50,
-                                                errorBuilder:
-                                                    (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) {
-                                                      return const Icon(
-                                                        Icons.music_note,
-                                                        size: 40,
-                                                        color: Colors.grey,
-                                                      );
-                                                    },
+                                          ? Container(
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withValues(alpha: 0.3),
+                                                    blurRadius: 2,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                child: Image.memory(
+                                                  song.albumArt!,
+                                                  fit: BoxFit.cover,
+                                                  width: 50,
+                                                  height: 50,
+                                                  errorBuilder:
+                                                      (
+                                                        context,
+                                                        error,
+                                                        stackTrace,
+                                                      ) {
+                                                        return const Icon(
+                                                          Icons.music_note,
+                                                          size: 40,
+                                                          color: Colors.grey,
+                                                        );
+                                                      },
+                                                ),
                                               ),
                                             )
                                           : const Icon(

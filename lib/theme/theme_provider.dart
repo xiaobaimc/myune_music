@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:system_fonts/system_fonts.dart';
 
 class ThemeProvider with ChangeNotifier {
   static const TextStyle defaultStyle = TextStyle(fontWeight: FontWeight.w400);
@@ -35,9 +36,7 @@ class ThemeProvider with ChangeNotifier {
   String _currentFontFamily = 'Misans'; // 默认字体
 
   ThemeProvider() {
-    _loadSeedColor();
-    _loadDarkMode();
-    _loadFontFamily();
+    initialize();
   }
 
   Color get currentSeedColor => _currentSeedColor;
@@ -125,5 +124,17 @@ class ThemeProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_fontFamilyKey);
+  }
+
+  Future<void> initialize() async {
+    await Future.wait([_loadSeedColor(), _loadDarkMode(), _loadFontFamily()]);
+    notifyListeners();
+  }
+
+  Future<void> loadCurrentFont(SystemFonts systemFonts) async {
+    if (_currentFontFamily != 'Misans') {
+      await systemFonts.loadFont(_currentFontFamily);
+      notifyListeners();
+    }
   }
 }

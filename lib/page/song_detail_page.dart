@@ -63,35 +63,49 @@ class SongDetailPage extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 5),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
-                                child: SizedBox(
-                                  width: 300,
-                                  height: 300,
-                                  // 根据 currentSong.albumArt 判断显示专辑封面还是默认图标
-                                  child:
-                                      (currentSong?.albumArt != null &&
-                                          currentSong!.albumArt!.isNotEmpty)
-                                      ? Image.memory(
-                                          currentSong.albumArt!,
-                                          fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                                return const Icon(
-                                                  Icons.music_note,
-                                                  size: 72,
-                                                  color: Colors.black12,
-                                                );
-                                              },
-                                        )
-                                      : Container(
-                                          // 没有封面图片时，显示一个带有音乐图标的占位符
-                                          color: Colors.black12,
-                                          child: const Icon(
-                                            Icons.music_note,
-                                            size: 72,
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: SizedBox(
+                                    width: 300,
+                                    height: 300,
+                                    // 根据 currentSong.albumArt 判断显示专辑封面还是默认图标
+                                    child:
+                                        (currentSong?.albumArt != null &&
+                                            currentSong!.albumArt!.isNotEmpty)
+                                        ? Image.memory(
+                                            currentSong.albumArt!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                                  return const Icon(
+                                                    Icons.music_note,
+                                                    size: 72,
+                                                    color: Colors.black12,
+                                                  );
+                                                },
+                                          )
+                                        : Container(
+                                            // 没有封面图片时，显示一个带有音乐图标的占位符
+                                            color: Colors.black12,
+                                            child: const Icon(
+                                              Icons.music_note,
+                                              size: 72,
+                                            ),
                                           ),
-                                        ),
+                                  ),
                                 ),
                               ),
                             ],

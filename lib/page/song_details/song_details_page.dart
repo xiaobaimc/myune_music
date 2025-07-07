@@ -160,7 +160,7 @@ class SongDetailsPage extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 4),
-                  selectable ? SelectableText(value) : SelectableText(value),
+                  SelectableText(value),
                 ],
               ),
             ),

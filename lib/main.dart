@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
-import 'theme/theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:system_fonts/system_fonts.dart';
+import 'theme/theme_provider.dart';
 import 'layout/app_shell.dart';
 import 'page/playlist/playlist_content_notifier.dart';
 import 'page/setting/settings_provider.dart';
@@ -9,12 +10,16 @@ import 'src/rust/frb_generated.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await RustLib.init();
+
+  final themeProvider = ThemeProvider();
+  await themeProvider.initialize();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => PlaylistContentNotifier()),
       ],
       child: const MyApp(),
@@ -34,6 +39,9 @@ void main() async {
     appWindow.title = "MyuneMusic";
     appWindow.show();
   });
+
+  final systemFonts = SystemFonts();
+  await themeProvider.loadCurrentFont(systemFonts);
 }
 
 class MyApp extends StatelessWidget {
