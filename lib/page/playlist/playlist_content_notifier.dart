@@ -370,6 +370,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     final songToPlay = _currentPlaylistSongs[index];
+    final normalizedPath = Uri.file(
+      songToPlay.filePath,
+    ).toFilePath(windows: Platform.isWindows);
+    final file = File(normalizedPath);
+
+    // 检查文件是否存在
+    if (!await file.exists()) {
+      _errorStreamController.add('文件不存在：${p.basename(songToPlay.filePath)}');
+      return;
+    }
 
     try {
       await _audioPlayer.stop(); // 停止当前播放（如果有）
@@ -749,7 +759,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   Future<SongDetails?> getCurrentSongDetails() async {
     if (_currentSong == null) {
-      _errorStreamController.add('没有当前播放的歌曲');
+      // _errorStreamController.add('没有当前播放的歌曲');
       return null;
     }
 
@@ -760,7 +770,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final file = File(normalizedPath);
 
     if (!await file.exists()) {
-      _errorStreamController.add('歌曲文件不存在：${p.basename(filePath)}');
+      // _errorStreamController.add('歌曲文件不存在：${p.basename(filePath)}');
       return SongDetails(
         title: '文件不存在',
         artist: '未知',

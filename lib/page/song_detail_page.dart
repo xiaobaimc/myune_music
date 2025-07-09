@@ -129,6 +129,17 @@ class SongDetailPage extends StatelessWidget {
                               playlistNotifier.currentLyrics;
                           final int currentLyricLineIndex =
                               playlistNotifier.currentLyricLineIndex;
+                          if (currentLyrics.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                '无歌词数据',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            );
+                          }
                           return LyricsWidget(
                             lyrics: currentLyrics,
                             currentIndex: currentLyricLineIndex,

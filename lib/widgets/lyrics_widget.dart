@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../page/playlist/playlist_models.dart';
+import '../page/setting/settings_provider.dart';
 
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
@@ -27,7 +29,18 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   @override
   void didUpdateWidget(covariant LyricsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.currentIndex != oldWidget.currentIndex) {
+    final settingsProvider = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    );
+    final oldSettingsProvider = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    );
+    if (widget.currentIndex != oldWidget.currentIndex ||
+        settingsProvider.lyricAlignment != oldSettingsProvider.lyricAlignment ||
+        settingsProvider.fontSize != oldSettingsProvider.fontSize) {
+      _cachedItemHeights.clear(); // 清除高度缓存
       _scrollToCurrentLine();
     }
   }
@@ -92,9 +105,11 @@ class _LyricsWidgetState extends State<LyricsWidget> {
           final List<Widget> columnChildren = visibleTexts.map((text) {
             return Text(
               text,
-              textAlign: TextAlign.center,
+              textAlign: Provider.of<SettingsProvider>(context).lyricAlignment,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: Provider.of<SettingsProvider>(
+                  context,
+                ).fontSize, // 动态字体大小
                 height: 1.6,
                 color: isCurrent
                     ? colorScheme.primary
@@ -112,24 +127,27 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                 widget.onTapLine?.call(index);
               },
               child: Align(
-                alignment: Alignment.center,
-                child: IntrinsicWidth(
-                  child: Container(
-                    key: itemKey,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _hoveredIndex == index
-                          ? Colors.grey.withValues(alpha: 0.2)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: columnChildren,
-                    ),
+                alignment: _getAlignmentFromTextAlign(
+                  Provider.of<SettingsProvider>(context).lyricAlignment,
+                ),
+                child: Container(
+                  key: itemKey,
+                  width:
+                      MediaQuery.of(context).size.width -
+                      12, // 使用固定宽度，减去padding
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _hoveredIndex == index
+                        ? Colors.grey.withValues(alpha: 0.2)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch, // 拉伸以填充容器宽度
+                    children: columnChildren,
                   ),
                 ),
               ),
@@ -141,9 +159,12 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   }
 
   // 测量单行文本在给定样式和最大宽度下的实际高度
-  double _measureTextHeight(String text, TextStyle style, double maxWidth) {
+  double _measureTextHeight(String text, double fontSize, double maxWidth) {
     final textPainter = TextPainter(
-      text: TextSpan(text: text, style: style),
+      text: TextSpan(
+        text: text,
+        style: TextStyle(fontSize: fontSize, height: 1.6), // 使用动态字体大小
+      ),
       textDirection: TextDirection.ltr,
       maxLines: 1, // 测量单段文本的高度，无论它有多少行
     );
@@ -164,22 +185,38 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     }
     final LyricLine line = widget.lyrics[index];
     final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
-    const TextStyle textStyle = TextStyle(fontSize: 20, height: 1.6);
+    // 从 SettingsProvider 获取动态字体大小
+    final double fontSize = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    ).fontSize;
     final double estimatedMaxWidth =
         MediaQuery.of(context).size.width - (6 * 2);
 
     double totalTextHeight = 0;
     for (final String text in visibleTexts) {
       // 测量每段文本的高度
-      totalTextHeight += _measureTextHeight(text, textStyle, estimatedMaxWidth);
+      totalTextHeight += _measureTextHeight(text, fontSize, estimatedMaxWidth);
     }
 
-    // 加上歌词项的垂直
+    // 加上歌词项的垂直内边距
     const double verticalPaddingPerItem = 16.0;
     final double estimatedHeight = totalTextHeight + verticalPaddingPerItem;
 
     // 缓存高度
     _cachedItemHeights[index] = estimatedHeight;
     return estimatedHeight;
+  }
+
+  Alignment _getAlignmentFromTextAlign(TextAlign textAlign) {
+    switch (textAlign) {
+      case TextAlign.left:
+        return Alignment.centerLeft;
+      case TextAlign.right:
+        return Alignment.centerRight;
+      case TextAlign.center:
+      default:
+        return Alignment.center;
+    }
   }
 }
