@@ -59,7 +59,7 @@ class SmtcManager {
         imageData: albumArt,
       );
     } catch (e) {
-      debugPrint('更新SMTC元数据失败: $e');
+      // debugPrint('更新SMTC元数据失败: $e');
     }
   }
 
@@ -86,7 +86,7 @@ class SmtcManager {
     try {
       await _smtc.updateTimeline(position: position, duration: duration);
     } catch (e) {
-      debugPrint('更新SMTC时间轴失败: $e');
+      // debugPrint('更新SMTC时间轴失败: $e');
     }
   }
 

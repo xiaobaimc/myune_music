@@ -64,7 +64,7 @@ class _SettingPageState extends State<SettingPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '详情页同时间戳最大显示最大行数',
+                '详情页同时间戳最大显示歌词行数',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               SegmentedButton<int>(
