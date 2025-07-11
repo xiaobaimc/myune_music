@@ -56,7 +56,7 @@ class SmtcManager {
         title: title,
         artist: artist,
         imagePath: null,
-        imageData: albumArt,
+        imageData: albumArt ?? Uint8List(0), // 使用空数据清空封面图
       );
     } catch (e) {
       // debugPrint('更新SMTC元数据失败: $e');

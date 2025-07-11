@@ -26,6 +26,7 @@ class _SettingPageState extends State<SettingPage> {
           value: context.watch<ThemeProvider>().isDarkMode,
           onChanged: (value) => context.read<ThemeProvider>().toggleDarkMode(),
         ),
+        // 启用系统字体选择器
         SwitchListTile(
           title: Text(
             '启用系统字体选择器 (可能会卡顿)',
@@ -53,11 +54,14 @@ class _SettingPageState extends State<SettingPage> {
             }
           },
         ),
+        // 系统字体选择器
         if (_fontSelectorEnabled)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: FontSelectorRow(),
           ),
+
+        // 详情页同时间戳最大显示歌词行数
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -82,13 +86,15 @@ class _SettingPageState extends State<SettingPage> {
             ],
           ),
         ),
+        // 详情页歌词字体大小
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('详情页歌词字体大小', style: Theme.of(context).textTheme.titleMedium),
-              Expanded(
+              SizedBox(
+                width: 320, // 固定宽度
                 child: Slider(
                   value: context.watch<SettingsProvider>().fontSize,
                   min: 12.0,
