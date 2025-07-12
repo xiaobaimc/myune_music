@@ -398,7 +398,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _audioPlayer.setSource(
         DeviceFileSource(songToPlay.filePath),
       ); // 设置新音源
-      await _audioPlayer.resume(); // 播放新音源
       _currentSongIndex = index;
       _currentSong = songToPlay;
 
