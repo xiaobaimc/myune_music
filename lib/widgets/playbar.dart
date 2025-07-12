@@ -218,6 +218,7 @@ class _PlaybarState extends State<Playbar> {
                                 onChanged: (double newValue) {
                                   // 只更新内部状态
                                   setState(() {
+                                    _isDraggingSlider = true;
                                     _currentSliderValue = newValue;
                                   });
                                 },
@@ -233,6 +234,18 @@ class _PlaybarState extends State<Playbar> {
                                             .round(),
                                   );
                                   player.seek(seekPosition); // 拖动结束后才实际 seek
+                                  playlistNotifier.smtcManager?.updateTimeline(
+                                    position: seekPosition.inMilliseconds,
+                                    duration: totalDuration.inMilliseconds,
+                                    isDragging: true,
+                                  );
+                                  setState(() {
+                                    _currentSliderValue =
+                                        totalDuration.inMilliseconds == 0
+                                        ? 0.0
+                                        : seekPosition.inMilliseconds /
+                                              totalDuration.inMilliseconds;
+                                  });
                                 },
                               ),
                             );

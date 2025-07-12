@@ -69,6 +69,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
   double get currentBalance => _currentBalance;
   double get currentPlaybackRate => _currentPlaybackRate;
 
+  SmtcManager? get smtcManager => _smtcManager;
+
   final StreamController<String> _errorStreamController =
       StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorStreamController.stream;
