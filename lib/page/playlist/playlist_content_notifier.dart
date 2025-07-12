@@ -71,6 +71,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   SmtcManager? get smtcManager => _smtcManager;
 
+  final StreamController<int> _lyricLineIndexController =
+      StreamController<int>.broadcast();
+  Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
+
   final StreamController<String> _errorStreamController =
       StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorStreamController.stream;
@@ -91,6 +95,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _lyricLineIndexController.close();
     _errorStreamController.close();
     _audioPlayer.dispose(); // 释放播放器资源
     _cleanupSmtc();
@@ -396,8 +401,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _audioPlayer.resume(); // 播放新音源
       _currentSongIndex = index;
       _currentSong = songToPlay;
+
       await _audioPlayer.setBalance(_currentBalance);
       await _audioPlayer.setPlaybackRate(_currentPlaybackRate);
+
+      // 在 resume 之前更新SMTC元数据
       await _smtcManager?.updateMetadata(
         title: songToPlay.title,
         artist: songToPlay.artist,
@@ -405,10 +413,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       );
       // await dumpCover(songToPlay.albumArt!);
       await _smtcManager?.updateState(true); // 播放状态
-      await _smtcManager?.updateTimeline(
-        position: 0, // 新歌曲从0开始
-        duration: _totalDuration.inMilliseconds,
-      );
+
+      await _audioPlayer.resume(); // 最后执行播放
+
       notifyListeners();
     } catch (e) {
       _errorStreamController.add('无法播放歌曲: ${songToPlay.title}, 错误: $e');
@@ -523,11 +530,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return;
     }
 
+    final newSongList = List<Song>.from(_currentPlaylistSongs);
+    final songToMove = newSongList.removeAt(index);
+    newSongList.insert(0, songToMove);
+    _currentPlaylistSongs = newSongList; // 指向新列表
+
     final songPath = _playlists[_selectedIndex].songFilePaths.removeAt(index);
     _playlists[_selectedIndex].songFilePaths.insert(0, songPath);
-
-    final song = _currentPlaylistSongs.removeAt(index);
-    _currentPlaylistSongs.insert(0, song);
 
     // 如果当前播放的歌曲被移动，更新 currentSongIndex
     if (_currentSongIndex == index) {
@@ -553,8 +562,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     try {
-      final song = _currentPlaylistSongs.removeAt(oldIndex);
-      _currentPlaylistSongs.insert(newIndex, song);
+      final newSongList = List<Song>.from(_currentPlaylistSongs);
+      final song = newSongList.removeAt(oldIndex);
+      newSongList.insert(newIndex, song);
+      _currentPlaylistSongs = newSongList; // 指向新列表
 
       final currentPlaylist = _playlists[_selectedIndex];
       final filePath = currentPlaylist.songFilePaths.removeAt(oldIndex);
@@ -587,6 +598,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> _loadLyricsForSong(String songFilePath) async {
     _currentLyrics = []; // 清空之前的歌词
     _currentLyricLineIndex = -1; // 重置歌词行索引
+    _lyricLineIndexController.add(-1);
 
     try {
       final normalizedPath = Uri.file(
@@ -650,8 +662,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final currentPlaylist = _playlists[_selectedIndex];
     final songToRemove = _currentPlaylistSongs[index];
 
+    final newSongList = List<Song>.from(_currentPlaylistSongs);
+    newSongList.removeAt(index);
+    _currentPlaylistSongs = newSongList; // 指向新列表
+
     currentPlaylist.songFilePaths.remove(songToRemove.filePath);
-    _currentPlaylistSongs.removeAt(index);
 
     if (_currentSongIndex != -1) {
       if (_currentSongIndex == index) {
@@ -734,28 +749,33 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (_currentLyrics.isEmpty) {
       if (_currentLyricLineIndex != -1) {
         _currentLyricLineIndex = -1;
-        notifyListeners();
+        _lyricLineIndexController.add(-1); // 广播空歌词状态
       }
       return;
     }
 
+    // 使用二分查找查找当前歌词行
     int newIndex = -1;
-    for (int i = 0; i < _currentLyrics.length; i++) {
-      if (currentPosition >= _currentLyrics[i].timestamp) {
-        if (i + 1 < _currentLyrics.length &&
-            currentPosition < _currentLyrics[i + 1].timestamp) {
-          newIndex = i;
-          break;
-        } else if (i + 1 == _currentLyrics.length) {
-          newIndex = i;
+    int left = 0;
+    int right = _currentLyrics.length - 1;
+
+    while (left <= right) {
+      final int mid = (left + right) ~/ 2;
+      if (currentPosition >= _currentLyrics[mid].timestamp) {
+        if (mid + 1 >= _currentLyrics.length ||
+            currentPosition < _currentLyrics[mid + 1].timestamp) {
+          newIndex = mid;
           break;
         }
+        left = mid + 1;
+      } else {
+        right = mid - 1;
       }
     }
 
     if (newIndex != _currentLyricLineIndex) {
       _currentLyricLineIndex = newIndex;
-      notifyListeners();
+      _lyricLineIndexController.add(newIndex); // 广播新索引
     }
   }
 

@@ -94,11 +94,17 @@ class SingleLineLyricView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PlaylistContentNotifier>(
-      builder: (context, playlistNotifier, child) {
-        final List<LyricLine> currentLyrics = playlistNotifier.currentLyrics;
-        final int currentLyricLineIndex =
-            playlistNotifier.currentLyricLineIndex;
+    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+      context,
+      listen: true,
+    );
+
+    return StreamBuilder<int>(
+      stream: playlistNotifier.lyricLineIndexStream, // 监听歌词行索引流
+      initialData: playlistNotifier.currentLyricLineIndex, // 初始索引
+      builder: (context, snapshot) {
+        final currentLyricLineIndex = snapshot.data ?? -1;
+        final currentLyrics = playlistNotifier.currentLyrics;
 
         return SingleLineLyricWidget(
           lyrics: currentLyrics,

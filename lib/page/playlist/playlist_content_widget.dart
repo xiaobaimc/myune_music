@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'playlist_content_notifier.dart';
+import 'playlist_models.dart';
 
 class PlaylistContentWidget extends StatelessWidget {
   const PlaylistContentWidget({super.key});
@@ -21,22 +22,15 @@ class PlaylistContentWidget extends StatelessWidget {
             indent: 0,
             endIndent: 0,
           ),
-          const Expanded(child: SongListWidget()),
+          const Expanded(child: HeadSongListWidget()),
         ],
       ),
     );
   }
 }
 
-class PlaylistListWidget extends StatefulWidget {
+class PlaylistListWidget extends StatelessWidget {
   const PlaylistListWidget({super.key});
-
-  @override
-  State<PlaylistListWidget> createState() => _PlaylistListWidgetState();
-}
-
-class _PlaylistListWidgetState extends State<PlaylistListWidget> {
-  int _hoveredIndex = -1; // 仅用于当前组件的UI状态
 
   void _showAddPlaylistDialog(
     BuildContext context,
@@ -179,103 +173,217 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final notifier = context.read<PlaylistContentNotifier>();
 
-    // 使用 Consumer 来监听 PlaylistContentNotifier 的变化
-    return Consumer<PlaylistContentNotifier>(
-      builder: (context, playlistNotifier, child) {
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () =>
-                        _showAddPlaylistDialog(context, playlistNotifier),
-                    icon: const Icon(Icons.add_circle_outline),
-                    label: const Text('添加歌单'),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8.0),
+          child: ElevatedButton.icon(
+            onPressed: () => _showAddPlaylistDialog(context, notifier),
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('添加歌单'),
+          ),
+        ),
+        Expanded(
+          // 使用 Selector 精确订阅歌单列表和选中索引的变化
+          child: Selector<PlaylistContentNotifier, (List<Playlist>, int)>(
+            selector: (_, n) => (n.playlists, n.selectedIndex),
+            builder: (context, data, _) {
+              final (playlists, selectedIndex) = data;
+
+              return GestureDetector(
                 onSecondaryTapDown: (details) {
                   _showContextMenu(details.globalPosition, null, context);
                 },
                 child: ListView.builder(
-                  itemCount: playlistNotifier.playlists.length,
+                  itemCount: playlists.length,
                   itemBuilder: (context, index) {
-                    final isSelected = playlistNotifier.selectedIndex == index;
-                    return MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      onEnter: (_) => setState(() => _hoveredIndex = index),
-                      onExit: (_) => setState(() => _hoveredIndex = -1),
-                      child: Material(
-                        color: isSelected
-                            ? colorScheme.primary.withValues(alpha: 0.1)
-                            : (_hoveredIndex == index
-                                  ? Colors.grey.withValues(alpha: 0.1)
-                                  : Colors.transparent),
-                        child: InkWell(
-                          onTap: () => playlistNotifier.setSelectedIndex(index),
-                          onSecondaryTapDown: (details) => _showContextMenu(
-                            details.globalPosition,
-                            index,
-                            context,
-                          ),
-                          child: ListTile(
-                            title: Text(playlistNotifier.playlists[index].name),
-                            selected: isSelected,
-                          ),
-                        ),
-                      ),
+                    final playlist = playlists[index];
+                    return PlaylistTileWidget(
+                      key: ValueKey(playlist.name), // 使用唯一Key
+                      index: index,
+                      name: playlist.name,
+                      isDefault: playlist.isDefault,
+                      isSelected: selectedIndex == index,
                     );
                   },
                 ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class PlaylistTileWidget extends StatefulWidget {
+  final int index;
+  final String name;
+  final bool isDefault;
+  final bool isSelected;
+
+  const PlaylistTileWidget({
+    super.key,
+    required this.index,
+    required this.name,
+    required this.isDefault,
+    required this.isSelected,
+  });
+
+  @override
+  State<PlaylistTileWidget> createState() => _PlaylistTileWidgetState();
+}
+
+class _PlaylistTileWidgetState extends State<PlaylistTileWidget> {
+  bool _isHovered = false; // 在内部管理自己的悬停状态
+
+  @override
+  Widget build(BuildContext context) {
+    final notifier = context.read<PlaylistContentNotifier>();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        color: widget.isSelected
+            ? colorScheme.primary.withValues(alpha: 0.1)
+            : _isHovered
+            ? Colors.grey.withValues(alpha: 0.1)
+            : Colors.transparent,
+        child: InkWell(
+          onTap: () => notifier.setSelectedIndex(widget.index),
+          child: ListTile(
+            title: Text(widget.name, overflow: TextOverflow.ellipsis),
+            selected: widget.isSelected,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HeadSongListWidget extends StatelessWidget {
+  const HeadSongListWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 监听歌单名称和选中状态
+          Selector<PlaylistContentNotifier, (String, bool)>(
+            selector: (_, notifier) {
+              if (notifier.selectedIndex == -1 ||
+                  notifier.selectedIndex >= notifier.playlists.length) {
+                return ('无选中歌单', false);
+              }
+              return (notifier.playlists[notifier.selectedIndex].name, true);
+            },
+            builder: (context, data, _) {
+              final (playlistName, isPlaylistSelected) = data;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    playlistName,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  if (isPlaylistSelected)
+                    ElevatedButton.icon(
+                      onPressed: () => context
+                          .read<PlaylistContentNotifier>()
+                          .pickAndAddSongs(),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('添加歌曲'),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          // 只在列表本身变化时才重建
+          Expanded(
+            child: Selector<PlaylistContentNotifier, (bool, List<Song>, int)>(
+              selector: (_, notifier) => (
+                notifier.isLoadingSongs,
+                notifier.currentPlaylistSongs,
+                notifier.selectedIndex,
               ),
+              shouldRebuild: (previous, next) => previous != next,
+              builder: (context, data, _) {
+                final (isLoading, songs, selectedIndex) = data;
+
+                if (isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (selectedIndex == -1) {
+                  return const Center(child: Text('请选择一个歌单'));
+                }
+                if (songs.isEmpty) {
+                  return const Center(child: Text('此歌单暂无歌曲, 点击 "添加歌曲"'));
+                }
+
+                // 列表本身
+                return ReorderableListView.builder(
+                  proxyDecorator: (child, index, animation) => Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: child,
+                  ),
+                  buildDefaultDragHandles: false,
+                  itemCount: songs.length,
+                  itemBuilder: (context, index) {
+                    final song = songs[index];
+                    // 使用拆分出的 SongTileWidget
+                    return SongTileWidget(
+                      key: ValueKey(song.filePath), // Key是必须的
+                      song: song,
+                      index: index,
+                    );
+                  },
+                  onReorder: (oldIndex, newIndex) {
+                    context.read<PlaylistContentNotifier>().reorderSong(
+                      oldIndex,
+                      newIndex,
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
     );
   }
 }
 
-class SongListWidget extends StatefulWidget {
-  const SongListWidget({super.key});
+class SongTileWidget extends StatefulWidget {
+  final Song song;
+  final int index;
+
+  const SongTileWidget({super.key, required this.song, required this.index});
 
   @override
-  State<SongListWidget> createState() => _SongListWidgetState();
+  State<SongTileWidget> createState() => _SongTileWidgetState();
 }
 
-class _SongListWidgetState extends State<SongListWidget> {
-  int _hoveredIndex = -1;
-
-  @override
-  void initState() {
-    super.initState();
-    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
-      context,
-      listen: false,
-    );
-    playlistNotifier.errorStream.listen((errorMessage) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
-      }
-    });
-  }
+class _SongTileWidgetState extends State<SongTileWidget> {
+  bool _isHovered = false;
 
   void _showSongContextMenu(
     Offset position,
-    int songIndex,
-    BuildContext context,
     PlaylistContentNotifier playlistNotifier,
   ) async {
+    // 在异步操作前，如果需要使用 context，可以直接使用 State 的 context 属性
+    if (!mounted) return;
+
     final RenderBox overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
 
@@ -292,245 +400,97 @@ class _SongListWidgetState extends State<SongListWidget> {
         const PopupMenuItem<String>(value: 'deleteSong', child: Text('删除歌曲')),
       ],
     );
+
+    if (!mounted) return;
+
     if (result == 'moveToTop') {
-      final songTitle = playlistNotifier.currentPlaylistSongs[songIndex].title;
-      await playlistNotifier.moveSongToTop(songIndex);
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
-      }
+      final songTitle =
+          playlistNotifier.currentPlaylistSongs[widget.index].title;
+      await playlistNotifier.moveSongToTop(widget.index);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
     } else if (result == 'deleteSong') {
       final songTitle = playlistNotifier.currentPlaylistSongs
-          .elementAt(songIndex)
+          .elementAt(widget.index)
           .title;
-      await playlistNotifier.removeSongAtIndex(songIndex);
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
-      }
+      await playlistNotifier.removeSongAtIndex(widget.index);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final notifier = context.read<PlaylistContentNotifier>();
 
-    return Consumer<PlaylistContentNotifier>(
-      builder: (context, playlistNotifier, child) {
-        String currentPlaylistName;
-        if (playlistNotifier.selectedIndex == -1) {
-          currentPlaylistName = '无选中歌单';
-        } else if (playlistNotifier.selectedIndex >=
-            playlistNotifier.playlists.length) {
-          currentPlaylistName = '歌单数据错误';
-        } else {
-          currentPlaylistName =
-              playlistNotifier.playlists[playlistNotifier.selectedIndex].name;
-        }
+    final isPlaying = context.select<PlaylistContentNotifier, bool>(
+      (n) =>
+          n.currentSongIndex == widget.index &&
+          (n.playerState == PlayerState.playing ||
+              n.playerState == PlayerState.paused),
+    );
 
-        return Container(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    currentPlaylistName,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  if (playlistNotifier.selectedIndex != -1 &&
-                      playlistNotifier.playlists.isNotEmpty &&
-                      playlistNotifier.selectedIndex <
-                          playlistNotifier.playlists.length)
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final added = await playlistNotifier
-                              .pickAndAddSongs();
-                          if (!context.mounted) return;
-
-                          if (added) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('添加成功')),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('未添加任何新歌曲')),
-                            );
-                          }
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('添加失败：${e.toString()}')),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('添加歌曲'),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: playlistNotifier.isLoadingSongs
-                    ? const Center(child: CircularProgressIndicator())
-                    : playlistNotifier.selectedIndex == -1 ||
-                          playlistNotifier.playlists.isEmpty ||
-                          playlistNotifier.selectedIndex >=
-                              playlistNotifier.playlists.length
-                    ? Center(
-                        child: Text(
-                          '请选择一个歌单或右键添加新歌单',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                              ),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: ReorderableDragStartListener(
+        index: widget.index,
+        child: InkWell(
+          onTap: () => notifier.playSongAtIndex(widget.index),
+          onSecondaryTapDown: (details) {
+            _showSongContextMenu(details.globalPosition, notifier);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              color: _isHovered
+                  ? colorScheme.onSurface.withValues(alpha: 0.1)
+                  : isPlaying
+                  ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListTile(
+              leading: SizedBox(
+                width: 50,
+                height: 50,
+                child: widget.song.albumArt != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.memory(
+                          widget.song.albumArt!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
                         ),
                       )
-                    : playlistNotifier.currentPlaylistSongs.isEmpty
-                    ? Center(
-                        child: Text(
-                          '此歌单暂无歌曲，点击“添加歌曲”按钮添加',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                              ),
-                        ),
-                      )
-                    : ReorderableListView.builder(
-                        proxyDecorator: (child, index, animation) {
-                          return Material(
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(12),
-                            clipBehavior: Clip.antiAlias,
-                            child: child,
-                          );
-                        },
-                        buildDefaultDragHandles: false,
-                        itemCount: playlistNotifier.currentPlaylistSongs.length,
-                        itemBuilder: (context, index) {
-                          final song = playlistNotifier.currentPlaylistSongs
-                              .elementAt(index);
-                          // 检查当前歌曲是否是正在播放或暂停的歌曲，并且播放器处于播放中或暂停状态
-                          final isPlaying =
-                              playlistNotifier.currentSongIndex == index &&
-                              (playlistNotifier.playerState ==
-                                      PlayerState.playing ||
-                                  playlistNotifier.playerState ==
-                                      PlayerState.paused);
-                          return MouseRegion(
-                            key: ValueKey(song.filePath), // 确保每个项有唯一键
-                            onEnter: (_) =>
-                                setState(() => _hoveredIndex = index),
-                            onExit: (_) => setState(() => _hoveredIndex = -1),
-                            child: ReorderableDragStartListener(
-                              index: index,
-                              child: InkWell(
-                                onTap: () {
-                                  playlistNotifier.playSongAtIndex(index);
-                                },
-                                onSecondaryTapDown: (details) {
-                                  _showSongContextMenu(
-                                    details.globalPosition,
-                                    index,
-                                    context,
-                                    playlistNotifier,
-                                  );
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 100),
-                                  curve: Curves.easeInOut,
-                                  decoration: BoxDecoration(
-                                    color: _hoveredIndex == index
-                                        ? Colors.grey.withValues(alpha: 0.2)
-                                        : isPlaying
-                                        ? colorScheme.primary.withValues(
-                                            alpha: 0.1,
-                                          )
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: ListTile(
-                                    leading: SizedBox(
-                                      width: 50,
-                                      height: 50,
-                                      child: song.albumArt != null
-                                          ? Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withValues(alpha: 0.3),
-                                                    blurRadius: 2,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                                child: Image.memory(
-                                                  song.albumArt!,
-                                                  fit: BoxFit.cover,
-                                                  width: 50,
-                                                  height: 50,
-                                                  errorBuilder:
-                                                      (
-                                                        context,
-                                                        error,
-                                                        stackTrace,
-                                                      ) {
-                                                        return const Icon(
-                                                          Icons.music_note,
-                                                          size: 40,
-                                                          color: Colors.grey,
-                                                        );
-                                                      },
-                                                ),
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.music_note,
-                                              size: 40,
-                                              color: Colors.grey,
-                                            ),
-                                    ),
-                                    title: Text(
-                                      song.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    subtitle: Text(
-                                      song.artist,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    trailing: Text('${index + 1}.'),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        onReorder: (oldIndex, newIndex) {
-                          playlistNotifier.reorderSong(oldIndex, newIndex);
-                        },
+                    : const Icon(
+                        Icons.music_note,
+                        size: 40,
+                        color: Colors.grey,
                       ),
               ),
-            ],
+              title: Text(
+                widget.song.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                widget.song.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Text('${widget.index + 1}.'),
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

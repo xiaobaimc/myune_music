@@ -108,7 +108,7 @@ class SmtcManager {
       _timelineUpdateTimer = Timer(const Duration(milliseconds: 500), () async {
         try {
           await _smtc.updateTimeline(position: position, duration: duration);
-          debugPrint('updateTimeline 执行于 ${DateTime.now()} 位置=$position');
+          // debugPrint('updateTimeline 执行于 ${DateTime.now()} 位置=$position');
         } catch (e) {
           // debugPrint('更新SMTC时间轴失败: $e');
         }

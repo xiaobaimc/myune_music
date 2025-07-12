@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/lyrics_widget.dart';
 import 'playlist/playlist_content_notifier.dart';
-import 'playlist/playlist_models.dart';
 import '../widgets/playbar.dart';
 import '../widgets/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
@@ -123,12 +122,11 @@ class SongDetailPage extends StatelessWidget {
                       vertical: 10,
                     ),
                     child: Center(
-                      child: Consumer<PlaylistContentNotifier>(
-                        builder: (context, playlistNotifier, child) {
-                          final List<LyricLine> currentLyrics =
-                              playlistNotifier.currentLyrics;
-                          final int currentLyricLineIndex =
-                              playlistNotifier.currentLyricLineIndex;
+                      child: Builder(
+                        builder: (context) {
+                          final playlistNotifier = context
+                              .watch<PlaylistContentNotifier>();
+                          final currentLyrics = playlistNotifier.currentLyrics;
                           if (currentLyrics.isEmpty) {
                             return const Center(
                               child: Text(
@@ -140,15 +138,20 @@ class SongDetailPage extends StatelessWidget {
                               ),
                             );
                           }
-                          return LyricsWidget(
-                            lyrics: currentLyrics,
-                            currentIndex: currentLyricLineIndex,
-                            maxLinesPerLyric: context
-                                .watch<SettingsProvider>()
-                                .maxLinesPerLyric,
-                            onTapLine: (index) {
-                              final seekTime = currentLyrics[index].timestamp;
-                              playlistNotifier.audioPlayer.seek(seekTime);
+                          return StreamBuilder<int>(
+                            stream: playlistNotifier.lyricLineIndexStream,
+                            initialData: playlistNotifier.currentLyricLineIndex,
+                            builder: (context, snapshot) {
+                              return LyricsView(
+                                maxLinesPerLyric: context
+                                    .watch<SettingsProvider>()
+                                    .maxLinesPerLyric,
+                                onTapLine: (index) {
+                                  final seekTime =
+                                      currentLyrics[index].timestamp;
+                                  playlistNotifier.audioPlayer.seek(seekTime);
+                                },
+                              );
                             },
                           );
                         },

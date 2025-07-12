@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
+import '../page/playlist/playlist_content_notifier.dart';
 
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
@@ -218,5 +219,36 @@ class _LyricsWidgetState extends State<LyricsWidget> {
       default:
         return Alignment.center;
     }
+  }
+}
+
+class LyricsView extends StatelessWidget {
+  final int maxLinesPerLyric;
+  final Function(int index)? onTapLine;
+
+  const LyricsView({super.key, this.maxLinesPerLyric = 1, this.onTapLine});
+
+  @override
+  Widget build(BuildContext context) {
+    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+      context,
+      listen: true,
+    );
+
+    return StreamBuilder<int>(
+      stream: playlistNotifier.lyricLineIndexStream,
+      initialData: playlistNotifier.currentLyricLineIndex,
+      builder: (context, snapshot) {
+        final currentLyricLineIndex = snapshot.data ?? -1;
+        final currentLyrics = playlistNotifier.currentLyrics;
+
+        return LyricsWidget(
+          lyrics: currentLyrics,
+          currentIndex: currentLyricLineIndex,
+          maxLinesPerLyric: maxLinesPerLyric,
+          onTapLine: onTapLine,
+        );
+      },
+    );
   }
 }
