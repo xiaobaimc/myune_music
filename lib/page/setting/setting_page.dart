@@ -138,6 +138,17 @@ class _SettingPageState extends State<SettingPage> {
             ],
           ),
         ),
+        // 启用模糊背景
+        SwitchListTile(
+          title: Text(
+            '启用详情页模糊背景',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          value: context.watch<SettingsProvider>().useBlurBackground,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setUseBlurBackground(value);
+          },
+        ),
       ],
     );
   }

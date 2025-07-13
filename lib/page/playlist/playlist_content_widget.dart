@@ -453,7 +453,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
               color: _isHovered
                   ? colorScheme.onSurface.withValues(alpha: 0.1)
                   : isPlaying
-                  ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                  ? colorScheme.primary.withValues(alpha: 0.1)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
