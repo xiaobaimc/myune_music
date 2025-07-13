@@ -1,25 +1,53 @@
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:colorgram/colorgram.dart';
 import '../widgets/lyrics_widget.dart';
 import 'playlist/playlist_content_notifier.dart';
 import '../widgets/song_detali_page/palybar.dart';
 import '../widgets/song_detali_page/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
+import '../theme/theme_provider.dart';
 
 // 公共模糊背景组件
 class BackgroundBlurWidget extends StatelessWidget {
   final Widget child;
   const BackgroundBlurWidget({super.key, required this.child});
 
+  Future<void> _extractAndUpdateColor(
+    BuildContext context,
+    Uint8List albumArt,
+  ) async {
+    try {
+      final themeProvider = context.read<ThemeProvider>();
+      final colors = await extractColor(
+        MemoryImage(albumArt),
+        1, // 提取一种主色调
+      );
+      if (colors.isNotEmpty) {
+        final dominantColor = colors[0];
+        final color = Color.fromRGBO(
+          dominantColor.r,
+          dominantColor.g,
+          dominantColor.b,
+          1.0,
+        );
+        themeProvider.setSeedColor(color);
+      }
+    } catch (e) {
+      // print('提取颜色失败 $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
         final currentSong = playlistNotifier.currentSong;
-        final useBlurBackground = context
-            .watch<SettingsProvider>()
-            .useBlurBackground;
+        final settings = context.watch<SettingsProvider>();
+        final useBlurBackground = settings.useBlurBackground;
+        final useDynamicColor = settings.useDynamicColor;
 
         // 当没有封面图或用户未启用模糊背景时，使用纯色背景
         if (currentSong?.albumArt == null || !useBlurBackground) {
@@ -27,6 +55,19 @@ class BackgroundBlurWidget extends StatelessWidget {
             color: Theme.of(context).colorScheme.surface,
             child: child,
           );
+        }
+
+        // 根据 useDynamicColor 决定是否提取颜色
+        if (useDynamicColor) {
+          // 异步提取颜色
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _extractAndUpdateColor(context, currentSong!.albumArt!);
+          });
+        } else {
+          // 禁用动态颜色时，恢复默认种子颜色
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            context.read<ThemeProvider>().setSeedColor(Colors.blue);
+          });
         }
 
         // 使用封面图作为模糊背景
@@ -98,40 +139,32 @@ class SongDetailPage extends StatelessWidget {
                                   children: [
                                     const SizedBox(height: 70),
                                     // 歌曲标题
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 10),
-                                      // 截取前15个字符，如果超出则添加省略号
-                                      child: Text(
-                                        (currentSong?.title ?? '未知歌曲').length >
-                                                15
-                                            ? '${(currentSong?.title ?? '未知歌曲').substring(0, 15)}...'
-                                            : (currentSong?.title ?? '未知歌曲'),
-                                        style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        textAlign: TextAlign.center,
+                                    // 截取前15个字符，如果超出则添加省略号
+                                    Text(
+                                      (currentSong?.title ?? '未知歌曲').length > 15
+                                          ? '${(currentSong?.title ?? '未知歌曲').substring(0, 15)}...'
+                                          : (currentSong?.title ?? '未知歌曲'),
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w600,
                                       ),
+                                      textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 3),
                                     // 艺术家
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 10),
-                                      // 截取前15个字符，如果超出则添加省略号
-                                      child: Text(
-                                        (currentSong?.artist ?? '未知艺术家')
-                                                    .length >
-                                                15
-                                            ? '${(currentSong?.artist ?? '未知艺术家').substring(0, 15)}...'
-                                            : (currentSong?.artist ?? '未知艺术家'),
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey,
-                                        ),
-                                        textAlign: TextAlign.center,
+                                    // 截取前15个字符，如果超出则添加省略号
+                                    Text(
+                                      (currentSong?.artist ?? '未知艺术家').length >
+                                              15
+                                          ? '${(currentSong?.artist ?? '未知艺术家').substring(0, 15)}...'
+                                          : (currentSong?.artist ?? '未知艺术家'),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey,
                                       ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                    const SizedBox(height: 20),
+                                    const SizedBox(height: 10),
                                     // 专辑封面
                                     Container(
                                       width: 300,

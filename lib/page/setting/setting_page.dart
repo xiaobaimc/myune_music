@@ -149,6 +149,21 @@ class _SettingPageState extends State<SettingPage> {
             context.read<SettingsProvider>().setUseBlurBackground(value);
           },
         ),
+        // 启用动态获取颜色
+        SwitchListTile(
+          title: Text(
+            '在详情页时,提取封面图颜色作为主题配色',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          value: context.watch<SettingsProvider>().useDynamicColor,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setUseDynamicColor(value);
+            // 当关闭动态颜色时，恢复默认颜色
+            if (!value) {
+              context.read<ThemeProvider>().setSeedColor(Colors.blue);
+            }
+          },
+        ),
       ],
     );
   }
