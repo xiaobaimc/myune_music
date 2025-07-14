@@ -20,7 +20,10 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider.value(value: themeProvider),
-        ChangeNotifierProvider(create: (_) => PlaylistContentNotifier()),
+        ChangeNotifierProvider(
+          create: (context) =>
+              PlaylistContentNotifier(context.read<SettingsProvider>()),
+        ),
       ],
       child: const MyApp(),
     ),

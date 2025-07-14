@@ -49,14 +49,6 @@ class BackgroundBlurWidget extends StatelessWidget {
         final useBlurBackground = settings.useBlurBackground;
         final useDynamicColor = settings.useDynamicColor;
 
-        // 当没有封面图或用户未启用模糊背景时，使用纯色背景
-        if (currentSong?.albumArt == null || !useBlurBackground) {
-          return Container(
-            color: Theme.of(context).colorScheme.surface,
-            child: child,
-          );
-        }
-
         // 根据 useDynamicColor 决定是否提取颜色
         if (useDynamicColor) {
           // 异步提取颜色
@@ -68,6 +60,14 @@ class BackgroundBlurWidget extends StatelessWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             context.read<ThemeProvider>().setSeedColor(Colors.blue);
           });
+        }
+
+        // 当没有封面图或用户未启用模糊背景时，使用纯色背景
+        if (currentSong?.albumArt == null || !useBlurBackground) {
+          return Container(
+            color: Theme.of(context).colorScheme.surface,
+            child: child,
+          );
         }
 
         // 使用封面图作为模糊背景
@@ -123,10 +123,11 @@ class SongDetailPage extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      padding: const EdgeInsets.only(top: 10, bottom: 55),
                       child: Center(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             // 歌曲信息
                             Consumer<PlaylistContentNotifier>(
@@ -233,9 +234,11 @@ class SongDetailPage extends StatelessWidget {
                   Expanded(
                     flex: 3,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 80,
-                        vertical: 10,
+                      padding: const EdgeInsets.only(
+                        left: 80,
+                        right: 80,
+                        top: 20,
+                        bottom: 40,
                       ),
                       child: Center(
                         child: Builder(

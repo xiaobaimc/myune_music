@@ -11,6 +11,14 @@
  - 主题调整 (自定义**主题配色**和**字体**)
  - **SMTC** 支持
 
+## 关于从网络获取歌词
+软件内默认提供了一个由我本人部署的api,但是不保证可用性
+
+如果有需求的话，建议自己部署一个api
+
+参照 [https://docs.lrc.cx/docs/QuickStart](https://docs.lrc.cx/docs/QuickStart) 进行部署
+
+
 ## 项目截图
 ![](screenshot/87518c111bb8c814c64b3930da7f412a.png)
 ![](screenshot/a9c90c69172339d0956f7dfcd7c622cb.png)

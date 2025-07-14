@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:math';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,10 +10,12 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:path/path.dart' as p;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
 import '../../smtc_manager.dart';
+import '../setting/settings_provider.dart';
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -71,6 +74,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   SmtcManager? get smtcManager => _smtcManager;
 
+  final SettingsProvider _settingsProvider;
+
   final StreamController<int> _lyricLineIndexController =
       StreamController<int>.broadcast();
   Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
@@ -79,7 +84,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorStreamController.stream;
 
-  PlaylistContentNotifier() {
+  PlaylistContentNotifier(this._settingsProvider) {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadPlaylists();
     loadPlayMode();
@@ -401,6 +406,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentSongIndex = index;
       _currentSong = songToPlay;
 
+      _loadLyricsForSong(songToPlay.filePath);
+
       await _audioPlayer.setBalance(_currentBalance);
       await _audioPlayer.setPlaybackRate(_currentPlaybackRate);
 
@@ -598,6 +605,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentLyrics = []; // 清空之前的歌词
     _currentLyricLineIndex = -1; // 重置歌词行索引
     _lyricLineIndexController.add(-1);
+    notifyListeners();
 
     try {
       final normalizedPath = Uri.file(
@@ -624,6 +632,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // 未能读取到歌词时不提示错误
     }
 
+    // 如果没有内嵌歌词，继续查找同目录.lrc
     final songDirectory = p.dirname(songFilePath);
     final songFileNameWithoutExtension = p.basenameWithoutExtension(
       songFilePath,
@@ -639,11 +648,57 @@ class PlaylistContentNotifier extends ChangeNotifier {
       try {
         final lines = await lrcFile.readAsLines();
         _currentLyrics = _parseLrcContent(lines);
+        notifyListeners();
+        return;
+      } catch (e) {
+        // debugPrint('读取.lrc文件失败：$e');
+      }
+    }
+
+    // 只有当用户启用从网络获取歌词，且当前歌曲标题存在时才尝试从网络获取
+    if (_settingsProvider.enableOnlineLyrics && currentSong != null) {
+      try {
+        final cleanTitle = currentSong!.title.trim();
+        // 歌词API只查询 album 参数，并且其值使用歌曲的 title
+        final encodedTitle = Uri.encodeComponent(cleanTitle);
+
+        // 获取用户自定义的 API 基础地址
+        final String apiBaseUrl = _settingsProvider.onlineLyricsApi.trim();
+
+        // 如果用户没有设置API地址，或者API地址为空，则不进行网络请求
+        if (apiBaseUrl.isEmpty) {
+          _currentLyrics = []; // 清空歌词
+          notifyListeners();
+          return;
+        }
+
+        // 拼接完整的 API URL
+        final finalApiUrl =
+            '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle';
+        final apiUri = Uri.parse(finalApiUrl);
+
+        // debugPrint('请求歌词API: $apiUri');
+
+        final response = await http.get(apiUri); // 使用 http.get 发送 GET 请求
+
+        if (response.statusCode == 200) {
+          final apiLyrics = utf8.decode(response.bodyBytes); // 直接获取响应体并解码
+
+          if (!apiLyrics.contains('Lyrics not found.') &&
+              apiLyrics.isNotEmpty) {
+            _currentLyrics = _parseLrcContent(apiLyrics.split('\n'));
+          } else {
+            _currentLyrics = [];
+          }
+        } else {
+          // 处理非200状态码，例如 404, 500 等
+          _currentLyrics = [];
+        }
       } catch (e) {
         _currentLyrics = [];
       }
     } else {
-      _currentLyrics = []; // 没有找到歌词文件则清空歌词
+      _currentLyrics = []; // 确保在不执行网络请求时清空歌词
     }
     notifyListeners();
   }
