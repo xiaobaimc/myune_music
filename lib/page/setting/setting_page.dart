@@ -55,7 +55,7 @@ class _SettingPageState extends State<SettingPage> {
     // 使用 watch 来监听 SettingsProvider 的变化
     final settings = context.watch<SettingsProvider>();
 
-    return Column(
+    return ListView(
       children: [
         const Divider(height: 1, thickness: 1),
         const ThemeSelectionScreen(),
@@ -114,7 +114,7 @@ class _SettingPageState extends State<SettingPage> {
                 builder: (ctx) => AlertDialog(
                   title: const Text('提示'),
                   content: const Text(
-                    '启用后会在未找到内联歌词和本地lc文件时从网络获取歌词\n软件默认提供了api,但建议按照项目介绍关于网络获取歌词的描述部署一个',
+                    '启用后会在未找到内联歌词和本地lrc文件时从网络获取歌词\n软件默认提供了api,但建议按照项目介绍关于网络获取歌词的描述部署一个',
                   ),
                   actions: [
                     TextButton(

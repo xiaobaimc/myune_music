@@ -399,7 +399,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentLyricLineIndex = -1;
       _currentPosition = Duration.zero;
       _totalDuration = Duration.zero;
-      await _loadLyricsForSong(songToPlay.filePath);
       await _audioPlayer.setSource(
         DeviceFileSource(songToPlay.filePath),
       ); // 设置新音源
