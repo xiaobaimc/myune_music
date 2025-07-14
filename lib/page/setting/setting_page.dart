@@ -114,7 +114,7 @@ class _SettingPageState extends State<SettingPage> {
                 builder: (ctx) => AlertDialog(
                   title: const Text('提示'),
                   content: const Text(
-                    '启用后可能会导致播放不流畅,软件默认提供了api,但建议按照项目介绍关于网络获取歌词的描述部署一个',
+                    '启用后会在未找到内联歌词和本地lc文件时从网络获取歌词\n软件默认提供了api,但建议按照项目介绍关于网络获取歌词的描述部署一个',
                   ),
                   actions: [
                     TextButton(

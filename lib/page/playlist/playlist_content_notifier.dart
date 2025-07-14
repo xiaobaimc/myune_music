@@ -623,7 +623,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       if (metadata.lyrics != null && metadata.lyrics!.isNotEmpty) {
         _currentLyrics = _parseLrcContent([metadata.lyrics!]);
-
         notifyListeners();
         return;
       }
@@ -655,50 +654,58 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
     }
 
-    // 只有当用户启用从网络获取歌词，且当前歌曲标题存在时才尝试从网络获取
+    // 如果需要从网络获取歌词，改为后台加载，先返回
     if (_settingsProvider.enableOnlineLyrics && currentSong != null) {
-      try {
-        final cleanTitle = currentSong!.title.trim();
-        // 歌词API只查询 album 参数，并且其值使用歌曲的 title
-        final encodedTitle = Uri.encodeComponent(cleanTitle);
+      _currentLyrics = []; // 清空歌词
+      notifyListeners();
 
-        // 获取用户自定义的 API 基础地址
-        final String apiBaseUrl = _settingsProvider.onlineLyricsApi.trim();
-
-        // 如果用户没有设置API地址，或者API地址为空，则不进行网络请求
-        if (apiBaseUrl.isEmpty) {
-          _currentLyrics = []; // 清空歌词
-          notifyListeners();
-          return;
-        }
-
-        // 拼接完整的 API URL
-        final finalApiUrl =
-            '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle';
-        final apiUri = Uri.parse(finalApiUrl);
-
-        // debugPrint('请求歌词API: $apiUri');
-
-        final response = await http.get(apiUri); // 使用 http.get 发送 GET 请求
-
-        if (response.statusCode == 200) {
-          final apiLyrics = utf8.decode(response.bodyBytes); // 直接获取响应体并解码
-
-          if (!apiLyrics.contains('Lyrics not found.') &&
-              apiLyrics.isNotEmpty) {
-            _currentLyrics = _parseLrcContent(apiLyrics.split('\n'));
-          } else {
-            _currentLyrics = [];
-          }
-        } else {
-          // 处理非200状态码，例如 404, 500 等
-          _currentLyrics = [];
-        }
-      } catch (e) {
-        _currentLyrics = [];
-      }
+      // 后台异步加载网络歌词
+      _loadOnlineLyrics(currentSong!.title);
     } else {
       _currentLyrics = []; // 确保在不执行网络请求时清空歌词
+      notifyListeners();
+    }
+  }
+
+  // 后台异步加载网络歌词
+  Future<void> _loadOnlineLyrics(String songTitle) async {
+    try {
+      final cleanTitle = songTitle.trim();
+      // 歌词API只查询 album 参数，并且其值使用歌曲的 title
+      final encodedTitle = Uri.encodeComponent(cleanTitle);
+
+      // 获取用户自定义的 API 基础地址
+      final String apiBaseUrl = _settingsProvider.onlineLyricsApi.trim();
+
+      // 如果用户没有设置API地址，或者API地址为空，则不进行网络请求
+      if (apiBaseUrl.isEmpty) {
+        return;
+      }
+
+      // 拼接完整的 API URL
+      final finalApiUrl =
+          '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle';
+      final apiUri = Uri.parse(finalApiUrl);
+
+      // debugPrint('请求歌词API: $apiUri');
+
+      final response = await http.get(apiUri); // 使用 http.get 发送 GET 请求
+
+      if (response.statusCode == 200) {
+        final apiLyrics = utf8.decode(response.bodyBytes).trim(); // 直接获取响应体并解码
+
+        if (!apiLyrics.contains('Lyrics not found.') && apiLyrics.isNotEmpty) {
+          _currentLyrics = _parseLrcContent(apiLyrics.split('\n'));
+        } else {
+          _currentLyrics = [];
+        }
+      } else {
+        // 处理非200状态码，例如 404, 500 等
+        _currentLyrics = [];
+      }
+    } catch (e) {
+      _currentLyrics = [];
+      // debugPrint('网络歌词加载失败：$e');
     }
     notifyListeners();
   }
