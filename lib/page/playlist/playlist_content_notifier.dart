@@ -677,13 +677,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
         '',
       );
 
-      final artist = (_currentSong?.artist ?? '未知歌手').replaceAll(
-        RegExp(
-          r'[!"#$%&'
-          '()*+,./:;<=>?@[\\]^_`{|}~-]',
-        ),
-        '',
-      );
+      // 检查 artist 是否为默认值，如果是则设置为空字符串
+      final rawArtist = _currentSong?.artist ?? '';
+      final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
+          ? ''
+          : rawArtist.replaceAll(
+              RegExp(
+                r'[!"#$%&'
+                '()*+,./:;<=>?@[\\]^_`{|}~-]',
+              ),
+              '',
+            );
+
       // 对清理后的标题和歌手名称进行 URL 编码
       final encodedTitle = Uri.encodeComponent(cleanTitle);
       final encodedArtist = Uri.encodeComponent(artist);

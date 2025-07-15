@@ -14,27 +14,36 @@ class SettingPage extends StatefulWidget {
 
 class _SettingPageState extends State<SettingPage> {
   bool _fontSelectorEnabled = false;
+
   // 直接初始化 TextEditingController
   late final TextEditingController _onlineLyricsApiController;
+
+  // 先存下 SettingsProvider
+  late final SettingsProvider _settingsProvider;
 
   @override
   void initState() {
     super.initState();
+    // 先存下来，后面不再使用 context.read
+    _settingsProvider = context.read<SettingsProvider>();
+
     // 直接在 initState 中初始化控制器
     // 确保 SettingsProvider 在此之前已通过 MultiProvider 提供
     _onlineLyricsApiController = TextEditingController(
-      text: context.read<SettingsProvider>().onlineLyricsApi,
+      text: _settingsProvider.onlineLyricsApi,
     );
 
     // 监听 settingsProvider 的变化，同步更新 TextEditingController
     // 确保在 dispose 中移除监听
-    context.read<SettingsProvider>().addListener(_onSettingsChanged);
+    _settingsProvider.addListener(_onSettingsChanged);
   }
 
   @override
   void dispose() {
-    // 移除监听器并释放控制器
-    context.read<SettingsProvider>().removeListener(_onSettingsChanged);
+    // Looking up a deactivated widget's ancestor is unsafe.
+    _settingsProvider.removeListener(_onSettingsChanged);
+
+    // 释放控制器
     _onlineLyricsApiController.dispose();
     super.dispose();
   }
@@ -42,11 +51,8 @@ class _SettingPageState extends State<SettingPage> {
   // 监听器方法，当 SettingsProvider 变化时更新 _onlineLyricsApiController 的文本
   void _onSettingsChanged() {
     // 仅当文本内容实际不同时才更新，避免不必要的重建和光标跳动
-    if (_onlineLyricsApiController.text !=
-        context.read<SettingsProvider>().onlineLyricsApi) {
-      _onlineLyricsApiController.text = context
-          .read<SettingsProvider>()
-          .onlineLyricsApi;
+    if (_onlineLyricsApiController.text != _settingsProvider.onlineLyricsApi) {
+      _onlineLyricsApiController.text = _settingsProvider.onlineLyricsApi;
     }
   }
 
@@ -144,14 +150,14 @@ class _SettingPageState extends State<SettingPage> {
                   icon: const Icon(Icons.restore),
                   onPressed: () {
                     _onlineLyricsApiController.clear();
-                    context.read<SettingsProvider>().setOnlineLyricsApi(
+                    _settingsProvider.setOnlineLyricsApi(
                       'https://lrcapi.showby.top',
                     );
                   },
                 ),
               ),
               onChanged: (value) {
-                context.read<SettingsProvider>().setOnlineLyricsApi(value);
+                _settingsProvider.setOnlineLyricsApi(value);
               },
             ),
           ),
@@ -173,7 +179,7 @@ class _SettingPageState extends State<SettingPage> {
                 selected: {settings.maxLinesPerLyric}, // 使用 settings
                 onSelectionChanged: (newSelection) {
                   final value = newSelection.first;
-                  context.read<SettingsProvider>().setMaxLinesPerLyric(value);
+                  _settingsProvider.setMaxLinesPerLyric(value);
                 },
                 showSelectedIcon: false,
               ),
@@ -196,7 +202,7 @@ class _SettingPageState extends State<SettingPage> {
                   divisions: 20,
                   label: settings.fontSize.toStringAsFixed(1), // 使用 settings
                   onChanged: (value) {
-                    context.read<SettingsProvider>().setFontSize(value);
+                    _settingsProvider.setFontSize(value);
                   },
                 ),
               ),
@@ -219,9 +225,7 @@ class _SettingPageState extends State<SettingPage> {
                 selected: {settings.lyricAlignment}, // 使用 settings
                 onSelectionChanged: (Set<TextAlign> newSelection) {
                   if (newSelection.isNotEmpty) {
-                    context.read<SettingsProvider>().setLyricAlignment(
-                      newSelection.first,
-                    );
+                    _settingsProvider.setLyricAlignment(newSelection.first);
                   }
                 },
                 showSelectedIcon: false,
@@ -237,7 +241,7 @@ class _SettingPageState extends State<SettingPage> {
           ),
           value: settings.useBlurBackground, // 使用 settings
           onChanged: (value) {
-            context.read<SettingsProvider>().setUseBlurBackground(value);
+            _settingsProvider.setUseBlurBackground(value);
           },
         ),
         // 启用动态获取颜色
@@ -248,7 +252,7 @@ class _SettingPageState extends State<SettingPage> {
           ),
           value: settings.useDynamicColor, // 使用 settings
           onChanged: (value) {
-            context.read<SettingsProvider>().setUseDynamicColor(value);
+            _settingsProvider.setUseDynamicColor(value);
             // 当关闭动态颜色时，恢复默认颜色
             if (!value) {
               context.read<ThemeProvider>().setSeedColor(Colors.blue);

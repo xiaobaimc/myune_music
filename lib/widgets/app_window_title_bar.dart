@@ -17,18 +17,6 @@ class AppWindowTitleBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 children: [
-                  if (Navigator.of(context).canPop())
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        Icons.arrow_back,
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      tooltip: '返回',
-                    ),
                   ColorFiltered(
                     colorFilter: ColorFilter.mode(
                       Theme.of(context).brightness == Brightness.dark

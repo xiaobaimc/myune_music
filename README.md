@@ -12,18 +12,18 @@
  - **SMTC** 支持
 
 ## 关于从网络获取歌词
-软件内默认提供了一个由我本人部署的api,但是不保证可用性
+软件内默认提供了一个由我本人部署的API,但是不保证可用性
 
-如果有需求的话，建议自己部署一个api
+如果有条件的话，强烈建议自己部署一个API
 
 参照 [https://docs.lrc.cx/docs/QuickStart](https://docs.lrc.cx/docs/QuickStart) 进行部署
 
 
 ## 项目截图
-![](screenshot/87518c111bb8c814c64b3930da7f412a.png)
-![](screenshot/a9c90c69172339d0956f7dfcd7c622cb.png)
-![](screenshot/5559d2cd0efa1e531175c0bd66b5a0f6.png)
-> 图2的**悬浮歌词**为 **[lyricify-lite](https://github.com/WXRIW/Lyricify-App#lyricify-lite)**
+![](screenshot/92379F29815DB2236510F9AD0C520ECD.png)
+![](screenshot/57116242568D08EF8791737C8D881C06.png)
+![](screenshot/D022283844CC6305B4473129E49BBAE2.png)
+![](screenshot/ADDF04814968BACDC75CAD173DA0C4AD.png)
 ## 快速开始
 
 ### 环境要求
@@ -45,12 +45,12 @@
 
 - 感谢 **[爱情终是残念](https://aqzscn.cn/archives/flutter-smtc)** 和 **[Ferry-200](https://github.com/Ferry-200/coriander_player)** 的 Rust + Flutter 的 **SMTC** 实现
 
+- 感谢 **[LrcApi](https://github.com/HisAtri/LrcApi)** 的**歌词API**
+
 - 还有更多 (详见 [pubspec.yaml](pubspec.yaml) ) ！感谢所有**无私开源的开发者**们！
 
 ## 许可证
-
-本项目采用 **GNU 通用公共许可证 第3版（GPLv3）** 进行许可。
-你可以自由使用、修改和分发本项目，**但任何衍生作品必须在相同许可证下开源**
+本项目采用 **Apache License 2.0** 进行许可。
 
 详情见项目根目录下的 [LICENSE](/LICENSE) 文件。
 
