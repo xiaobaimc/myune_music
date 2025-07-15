@@ -669,9 +669,24 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 后台异步加载网络歌词
   Future<void> _loadOnlineLyrics(String songTitle) async {
     try {
-      final cleanTitle = songTitle.trim();
-      // 歌词API只查询 album 参数，并且其值使用歌曲的 title
+      final cleanTitle = songTitle.trim().replaceAll(
+        RegExp(
+          r'[!"#$%&'
+          '()*+,./:;<=>?@[\\]^_`{|}~-]',
+        ),
+        '',
+      );
+
+      final artist = (_currentSong?.artist ?? '未知歌手').replaceAll(
+        RegExp(
+          r'[!"#$%&'
+          '()*+,./:;<=>?@[\\]^_`{|}~-]',
+        ),
+        '',
+      );
+      // 对清理后的标题和歌手名称进行 URL 编码
       final encodedTitle = Uri.encodeComponent(cleanTitle);
+      final encodedArtist = Uri.encodeComponent(artist);
 
       // 获取用户自定义的 API 基础地址
       final String apiBaseUrl = _settingsProvider.onlineLyricsApi.trim();
@@ -683,10 +698,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 拼接完整的 API URL
       final finalApiUrl =
-          '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle';
+          '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle&artist=$encodedArtist';
       final apiUri = Uri.parse(finalApiUrl);
 
-      // debugPrint('请求歌词API: $apiUri');
+      debugPrint('请求歌词API: $apiUri');
 
       final response = await http.get(apiUri); // 使用 http.get 发送 GET 请求
 
