@@ -33,16 +33,25 @@ class Playlist {
   final bool isDefault;
   List<String> songFilePaths;
 
+  // 保存当前歌单播放歌曲的索引
+  int? currentPlayingIndex;
+
   Playlist({
     String? id,
     required this.name,
     this.isDefault = false,
     List<String>? songFilePaths,
+    this.currentPlayingIndex,
   }) : id = id ?? const Uuid().v4(),
        songFilePaths = songFilePaths ?? [];
 
   Map<String, dynamic> toJson() {
-    return {'id': id, 'name': name, 'isDefault': isDefault};
+    return {
+      'id': id,
+      'name': name,
+      'isDefault': isDefault,
+      'currentPlayingIndex': currentPlayingIndex,
+    };
   }
 
   factory Playlist.fromJson(Map<String, dynamic> json) {
@@ -50,6 +59,7 @@ class Playlist {
       id: json['id'],
       name: json['name'],
       isDefault: json['isDefault'] ?? false,
+      currentPlayingIndex: json['currentPlayingIndex'],
     );
   }
 }

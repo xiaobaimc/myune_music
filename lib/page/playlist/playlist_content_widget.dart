@@ -430,12 +430,19 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     final colorScheme = Theme.of(context).colorScheme;
     final notifier = context.read<PlaylistContentNotifier>();
 
-    final isPlaying = context.select<PlaylistContentNotifier, bool>(
-      (n) =>
-          n.currentSongIndex == widget.index &&
+    final isPlaying = context.select<PlaylistContentNotifier, bool>((n) {
+      // 检查当前正在播放的歌单 是否就是ui上这个歌单
+      final bool isPlayingThisPlaylist =
+          n.playingPlaylist?.name == n.playlists[n.selectedIndex].name;
+
+      // 检查正在播放的歌曲索引 是否就是ui上这首歌的索引
+      final bool isPlayingThisSong = n.playingSongIndex == widget.index;
+
+      return isPlayingThisPlaylist &&
+          isPlayingThisSong &&
           (n.playerState == PlayerState.playing ||
-              n.playerState == PlayerState.paused),
-    );
+              n.playerState == PlayerState.paused);
+    });
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),

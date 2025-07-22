@@ -76,6 +76,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   final SettingsProvider _settingsProvider;
 
+  Playlist? _playingPlaylist; // 真正正在播放的歌单
+  int _playingSongIndex = -1; // 真正正在播放的歌曲在其歌单文件路径列表中的索引
+  Playlist? get playingPlaylist => _playingPlaylist;
+  int get playingSongIndex => _playingSongIndex;
+
   final StreamController<int> _lyricLineIndexController =
       StreamController<int>.broadcast();
   Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
@@ -169,81 +174,69 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> _loadCurrentPlaylistSongs() async {
     if (_selectedIndex == -1 || _playlists.isEmpty) {
       _currentPlaylistSongs = [];
-      _isLoadingSongs = false;
-      await _audioPlayer.stop();
-      _currentSong = null;
-      _currentSongIndex = -1;
-      _currentLyrics = [];
-      _currentLyricLineIndex = -1;
-      _currentPosition = Duration.zero;
-      _totalDuration = Duration.zero;
-      await _smtcManager?.updateState(false);
       notifyListeners();
       return;
     }
 
     _isLoadingSongs = true;
-    _currentPlaylistSongs = []; // 每次加载前清空，防止旧数据残留
+    _currentPlaylistSongs = [];
     notifyListeners();
 
     final currentPlaylist = _playlists[_selectedIndex];
     final List<Song> songsWithMetadata = [];
 
     for (final filePath in currentPlaylist.songFilePaths) {
-      await Future.delayed(Duration.zero);
-      String title = p.basenameWithoutExtension(filePath);
-      String artist = '未知歌手';
-      Uint8List? albumArt;
-
-      final normalizedPath = Uri.file(
-        filePath,
-      ).toFilePath(windows: Platform.isWindows);
-      final file = File(normalizedPath);
-
-      if (!await file.exists()) {
-        songsWithMetadata.add(
-          Song(
-            title: title,
-            artist: '文件不存在 (解析失败)',
-            filePath: filePath,
-            albumArt: null,
-          ),
-        );
-        continue;
-      }
-
-      try {
-        final metadata = readMetadata(file, getImage: true);
-
-        if (metadata.title != null && metadata.title!.isNotEmpty) {
-          title = metadata.title!;
-        }
-
-        if (metadata.artist != null && metadata.artist!.isNotEmpty) {
-          artist = metadata.artist!;
-        }
-
-        albumArt = metadata.pictures.isNotEmpty
-            ? metadata.pictures.first.bytes
-            : null;
-      } catch (e) {
-        title = p.basenameWithoutExtension(filePath);
-        artist = '未知歌手 (解析失败)';
-        albumArt = null;
-      }
-
-      final song = Song(
-        title: title,
-        artist: artist,
-        filePath: filePath,
-        albumArt: albumArt,
-      );
+      final song = await _parseSongMetadata(filePath);
       songsWithMetadata.add(song);
     }
 
     _currentPlaylistSongs = songsWithMetadata;
     _isLoadingSongs = false;
     notifyListeners();
+  }
+
+  // 解析单个歌曲文件的元数据
+  Future<Song> _parseSongMetadata(String filePath) async {
+    String title = p.basenameWithoutExtension(filePath);
+    String artist = '未知歌手';
+    Uint8List? albumArt;
+
+    final normalizedPath = Uri.file(
+      filePath,
+    ).toFilePath(windows: Platform.isWindows);
+    final file = File(normalizedPath);
+
+    if (!await file.exists()) {
+      return Song(
+        title: title,
+        artist: '文件不存在 (解析失败)',
+        filePath: filePath,
+        albumArt: null,
+      );
+    }
+
+    try {
+      final metadata = readMetadata(file, getImage: true);
+      if (metadata.title != null && metadata.title!.isNotEmpty) {
+        title = metadata.title!;
+      }
+      if (metadata.artist != null && metadata.artist!.isNotEmpty) {
+        artist = metadata.artist!;
+      }
+      albumArt = metadata.pictures.isNotEmpty
+          ? metadata.pictures.first.bytes
+          : null;
+    } catch (e) {
+      artist = '未知歌手 (解析失败)';
+      albumArt = null;
+    }
+
+    return Song(
+      title: title,
+      artist: artist,
+      filePath: filePath,
+      albumArt: albumArt,
+    );
   }
 
   Future<bool> pickAndAddSongs() async {
@@ -377,38 +370,45 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 播放指定索引的歌曲
   Future<void> playSongAtIndex(int index) async {
-    if (index < 0 || index >= _currentPlaylistSongs.length) {
+    if (_selectedIndex < 0 ||
+        index < 0 ||
+        index >= _currentPlaylistSongs.length) {
       return;
     }
 
-    final songToPlay = _currentPlaylistSongs[index];
-    final normalizedPath = Uri.file(
-      songToPlay.filePath,
-    ).toFilePath(windows: Platform.isWindows);
-    final file = File(normalizedPath);
+    // 更新播放上下文
+    _playingPlaylist = _playlists[_selectedIndex];
+    _playingSongIndex = index;
+
+    await _startPlaybackNow();
+  }
+
+  Future<void> _startPlaybackNow() async {
+    if (_playingPlaylist == null ||
+        _playingSongIndex < 0 ||
+        _playingSongIndex >= _playingPlaylist!.songFilePaths.length) {
+      return;
+    }
+
+    final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
+    final songToPlay = await _parseSongMetadata(songFilePath);
 
     // 检查文件是否存在
-    if (!await file.exists()) {
-      _errorStreamController.add('文件不存在：${p.basename(songToPlay.filePath)}');
+    if (songToPlay.artist.contains('文件不存在')) {
+      _errorStreamController.add('文件不存在${p.basename(songFilePath)}');
+      await playNext();
       return;
     }
 
+    _currentSong = songToPlay;
+
     try {
-      await _audioPlayer.stop(); // 停止当前播放（如果有）
+      // 尝试执行播放操作
+      await _audioPlayer.stop();
       _currentLyrics = [];
       _currentLyricLineIndex = -1;
-      _currentPosition = Duration.zero;
-      _totalDuration = Duration.zero;
-      await _audioPlayer.setSource(
-        DeviceFileSource(songToPlay.filePath),
-      ); // 设置新音源
-      _currentSongIndex = index;
-      _currentSong = songToPlay;
-
-      _loadLyricsForSong(songToPlay.filePath);
-
-      await _audioPlayer.setBalance(_currentBalance);
-      await _audioPlayer.setPlaybackRate(_currentPlaybackRate);
+      await _audioPlayer.setSource(DeviceFileSource(songFilePath));
+      _loadLyricsForSong(songFilePath);
 
       // 在 resume 之前更新SMTC元数据
       await _smtcManager?.updateMetadata(
@@ -423,7 +423,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
+      // 捕获所有播放相关的异常
       _errorStreamController.add('无法播放歌曲: ${songToPlay.title}, 错误: $e');
+
+      await playNext();
     }
   }
 
@@ -460,40 +463,46 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 生成随机播放索引列表
-  void _generateShuffledIndices() {
-    _shuffledIndices = List.generate(_currentPlaylistSongs.length, (i) => i);
+  void _generateShuffledIndices({int? count}) {
+    // 如果调用时没有传入 count (值为 null)，则使用旧的逻辑，以 _currentPlaylistSongs 的长度为准。
+    // 如果传入了 count，则使用传入的 count。
+    final int listSize = count ?? _currentPlaylistSongs.length;
+
+    _shuffledIndices = List.generate(listSize, (i) => i);
     _shuffledIndices.shuffle(_random);
   }
 
   // 根据播放模式播放下一首
   Future<void> _playNextLogic() async {
-    if (_currentPlaylistSongs.isEmpty) {
-      await _audioPlayer.stop();
-      _currentLyrics = [];
-      _currentLyricLineIndex = -1;
-      _currentPosition = Duration.zero;
-      _totalDuration = Duration.zero;
-      notifyListeners();
+    // 只依赖 _playingPlaylist
+    if (_playingPlaylist == null || _playingPlaylist!.songFilePaths.isEmpty) {
+      await stop();
       return;
     }
 
     int nextIndex;
+    final songCount = _playingPlaylist!.songFilePaths.length;
+    final currentIndex = _playingSongIndex;
+
     if (_playMode == PlayMode.shuffle) {
-      int currentShuffledPos = _shuffledIndices.indexOf(_currentSongIndex);
+      _generateShuffledIndices(count: songCount);
+      int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
       if (currentShuffledPos == -1 ||
           currentShuffledPos == _shuffledIndices.length - 1) {
-        _generateShuffledIndices(); // 重新生成随机列表或从头开始
+        _generateShuffledIndices(count: songCount); // 重新生成随机列表或从头开始
         currentShuffledPos = -1; // 从新的随机列表的第一个开始
       }
       nextIndex =
           _shuffledIndices[(currentShuffledPos + 1) % _shuffledIndices.length];
     } else if (_playMode == PlayMode.repeatOne) {
-      nextIndex = _currentSongIndex;
+      nextIndex = currentIndex;
     } else {
-      nextIndex = (_currentSongIndex + 1) % _currentPlaylistSongs.length;
+      // 顺序播放
+      nextIndex = (currentIndex + 1) % songCount;
     }
 
-    await playSongAtIndex(nextIndex);
+    _playingSongIndex = nextIndex; // 更新播放索引
+    await _startPlaybackNow();
   }
 
   Future<void> playNext() async {
@@ -502,28 +511,40 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 播放上一首
   Future<void> playPrevious() async {
-    if (_currentPlaylistSongs.isEmpty) {
+    if (_playingPlaylist == null || _playingPlaylist!.songFilePaths.isEmpty) {
       return;
     }
 
     int prevIndex;
+    final songCount = _playingPlaylist!.songFilePaths.length;
+    final currentIndex = _playingSongIndex;
+
+    // 根据不同的播放模式计算上一首的索引
     if (_playMode == PlayMode.shuffle) {
-      int currentShuffledPos = _shuffledIndices.indexOf(_currentSongIndex);
+      // 随机模式下，在随机索引列表中找到上一个位置
+      if (_shuffledIndices.length != songCount) {
+        _generateShuffledIndices(count: songCount);
+      }
+
+      int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
       if (currentShuffledPos == -1 || currentShuffledPos == 0) {
-        _generateShuffledIndices();
+        // 如果当前歌曲不在随机列表中，或已经是第一首，则跳到随机列表的最后一首
         currentShuffledPos = _shuffledIndices.length;
       }
       prevIndex =
-          _shuffledIndices[(currentShuffledPos - 1 + _shuffledIndices.length) %
-              _shuffledIndices.length];
+          _shuffledIndices[(currentShuffledPos - 1) % _shuffledIndices.length];
     } else if (_playMode == PlayMode.repeatOne) {
-      prevIndex = _currentSongIndex;
+      // 单曲循环模式下，上一首还是当前这首歌
+      prevIndex = currentIndex;
     } else {
-      prevIndex =
-          (_currentSongIndex - 1 + _currentPlaylistSongs.length) %
-          _currentPlaylistSongs.length;
+      // 顺序播放
+      // `+ songCount` 是为了防止 `currentIndex` 为 0 时出现负数
+      prevIndex = (currentIndex - 1 + songCount) % songCount;
     }
-    await playSongAtIndex(prevIndex);
+
+    // 更新播放索引
+    _playingSongIndex = prevIndex;
+    await _startPlaybackNow();
   }
 
   // 将歌曲移动到顶部

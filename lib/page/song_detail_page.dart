@@ -55,11 +55,11 @@ class BackgroundBlurWidget extends StatelessWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _extractAndUpdateColor(context, currentSong!.albumArt!);
           });
-        } else {
-          // 禁用动态颜色时，恢复默认种子颜色
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            context.read<ThemeProvider>().setSeedColor(Colors.blue);
-          });
+          // } else {
+          //   // 禁用动态颜色时，恢复默认种子颜色
+          //   WidgetsBinding.instance.addPostFrameCallback((_) {
+          //     context.read<ThemeProvider>().setSeedColor(Colors.blue);
+          //   });
         }
 
         // 当没有封面图或用户未启用模糊背景时，使用纯色背景
