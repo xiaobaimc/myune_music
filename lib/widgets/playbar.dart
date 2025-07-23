@@ -290,11 +290,7 @@ class _PlaybarState extends State<Playbar> {
                             size: 28,
                           ),
                           // 只有当歌单有歌曲且不是第一首时才启用按钮
-                          onPressed:
-                              playlistNotifier
-                                      .currentPlaylistSongs
-                                      .isNotEmpty &&
-                                  playlistNotifier.currentSongIndex > 0
+                          onPressed: playlistNotifier.playingPlaylist != null
                               ? () => playlistNotifier.playPrevious()
                               : null,
                         ),

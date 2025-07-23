@@ -192,23 +192,21 @@ class PlaylistListWidget extends StatelessWidget {
             builder: (context, data, _) {
               final (playlists, selectedIndex) = data;
 
-              return GestureDetector(
-                onSecondaryTapDown: (details) {
-                  _showContextMenu(details.globalPosition, null, context);
+              return ListView.builder(
+                itemCount: playlists.length,
+                itemBuilder: (context, index) {
+                  final playlist = playlists[index];
+                  return PlaylistTileWidget(
+                    key: ValueKey(playlist.name), // 使用唯一Key
+                    index: index,
+                    name: playlist.name,
+                    isDefault: playlist.isDefault,
+                    isSelected: selectedIndex == index,
+                    onSecondaryTap: (position) {
+                      _showContextMenu(position, index, context);
+                    },
+                  );
                 },
-                child: ListView.builder(
-                  itemCount: playlists.length,
-                  itemBuilder: (context, index) {
-                    final playlist = playlists[index];
-                    return PlaylistTileWidget(
-                      key: ValueKey(playlist.name), // 使用唯一Key
-                      index: index,
-                      name: playlist.name,
-                      isDefault: playlist.isDefault,
-                      isSelected: selectedIndex == index,
-                    );
-                  },
-                ),
               );
             },
           ),
@@ -223,6 +221,7 @@ class PlaylistTileWidget extends StatefulWidget {
   final String name;
   final bool isDefault;
   final bool isSelected;
+  final void Function(Offset position) onSecondaryTap;
 
   const PlaylistTileWidget({
     super.key,
@@ -230,6 +229,7 @@ class PlaylistTileWidget extends StatefulWidget {
     required this.name,
     required this.isDefault,
     required this.isSelected,
+    required this.onSecondaryTap,
   });
 
   @override
@@ -256,6 +256,9 @@ class _PlaylistTileWidgetState extends State<PlaylistTileWidget> {
             : Colors.transparent,
         child: InkWell(
           onTap: () => notifier.setSelectedIndex(widget.index),
+          onSecondaryTapDown: (details) {
+            widget.onSecondaryTap(details.globalPosition);
+          },
           child: ListTile(
             title: Text(widget.name, overflow: TextOverflow.ellipsis),
             selected: widget.isSelected,
@@ -431,6 +434,11 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     final notifier = context.read<PlaylistContentNotifier>();
 
     final isPlaying = context.select<PlaylistContentNotifier, bool>((n) {
+      if (n.selectedIndex < 0 || n.selectedIndex >= n.playlists.length) {
+        // 如果没有合法的歌单被选中，那么这首歌肯定不在播放列表中
+        return false;
+      }
+
       // 检查当前正在播放的歌单 是否就是ui上这个歌单
       final bool isPlayingThisPlaylist =
           n.playingPlaylist?.name == n.playlists[n.selectedIndex].name;

@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'hover_overlay_control.dart';
 
 class VolumeControl extends StatefulWidget {
   final AudioPlayer player;
@@ -18,12 +19,8 @@ class VolumeControl extends StatefulWidget {
 }
 
 class VolumeControlState extends State<VolumeControl> {
-  OverlayEntry? _overlayEntry;
-  bool _isHovering = false;
   double _lastVolume = 1.0;
-  double _currentVolume = 1.0; // 用于存储当前音量状态
-
-  final LayerLink _layerLink = LayerLink();
+  double _currentVolume = 1.0;
 
   @override
   void initState() {
@@ -31,191 +28,111 @@ class VolumeControlState extends State<VolumeControl> {
     _loadInitialVolume();
   }
 
-  // 加载播放器初始音量
+  // 初始化音量，尝试从本地缓存读取
   Future<void> _loadInitialVolume() async {
     final prefs = await SharedPreferences.getInstance();
     final storedVolume =
         prefs.getDouble('player_volume') ?? widget.player.volume;
-
-    // 设置播放器和状态
-    await widget.player.setVolume(storedVolume);
-
-    if (mounted) {
-      setState(() {
-        _currentVolume = storedVolume;
-        _lastVolume = storedVolume > 0 ? storedVolume : 1.0;
-      });
-    }
+    await _updateVolume(storedVolume, save: false);
   }
 
-  void _showOverlay() {
-    if (_overlayEntry != null) return;
-
-    _overlayEntry = OverlayEntry(
-      builder: (context) {
-        return Positioned(
-          left: 50,
-          top: 100,
-          child: CompositedTransformFollower(
-            link: _layerLink,
-            offset: const Offset(0, -170),
-            child: MouseRegion(
-              onEnter: (_) => _setHovering(true),
-              onExit: (_) => _setHovering(false),
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  width: 40,
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 40,
-                        height: 120,
-                        child: RotatedBox(
-                          quarterTurns: -1,
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 6,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 8,
-                              ),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 12,
-                              ),
-                            ),
-                            child: Slider(
-                              // 直接使用 _currentVolume 状态
-                              value: _currentVolume,
-                              min: 0,
-                              max: 1,
-                              onChanged: (value) {
-                                // 直接更新播放器音量并更新本地状态
-                                widget.player.setVolume(value);
-                                setState(() {
-                                  _currentVolume = value;
-                                  if (value > 0) _lastVolume = value;
-                                });
-                                _saveVolume(value);
-                                _overlayEntry?.markNeedsBuild();
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${(_currentVolume * 100).round()}%',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    Overlay.of(context).insert(_overlayEntry!);
-  }
-
-  void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-  }
-
-  void _setHovering(bool hovering) {
-    setState(() {
-      _isHovering = hovering;
-    });
-
-    // 悬停消失时，检查是否隐藏弹出层
-    if (!hovering) {
-      // 延迟一下避免鼠标移入弹出层瞬间消失
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (!_isHovering) {
-          _removeOverlay();
-        }
-      });
-    }
-  }
-
+  // 将当前音量保存到本地
   Future<void> _saveVolume(double volume) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('player_volume', volume);
   }
 
+  // 更新播放器音量，可选是否保存
+  Future<void> _updateVolume(double newVolume, {bool save = true}) async {
+    await widget.player.setVolume(newVolume);
+    if (mounted) {
+      setState(() {
+        _currentVolume = newVolume;
+        if (newVolume > 0) _lastVolume = newVolume; // 非静音时更新上次音量
+      });
+    }
+    if (save) {
+      await _saveVolume(newVolume);
+    }
+  }
+
+  // 点击图标时切换静音与恢复上次音量
+  void _toggleMute() {
+    final isMuted = _currentVolume < 0.001;
+    final newVolume = isMuted ? _lastVolume : 0.0;
+    _updateVolume(newVolume);
+  }
+
+  // 处理滚轮事件，增加/减少音量
+  void _handleScroll(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      const double step = 0.03;
+      final newVolume = (_currentVolume - event.scrollDelta.dy.sign * step)
+          .clamp(0.0, 1.0);
+      _updateVolume(newVolume);
+    }
+  }
+
+  // 获取当前应显示的音量图标
+  IconData get _volumeIcon {
+    if (_currentVolume < 0.001) return Icons.volume_off;
+    if (_currentVolume <= 0.5) return Icons.volume_down;
+    return Icons.volume_up;
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 浮层的定位目标
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: Listener(
-        onPointerSignal: (event) {
-          if (event is PointerScrollEvent) {
-            final dy = event.scrollDelta.dy;
+    return HoverOverlayControl(
+      icon: _volumeIcon,
+      iconColor: widget.iconColor,
+      onIconPressed: _toggleMute,
+      onPointerSignal: _handleScroll,
+      overlayOffset: const Offset(0, -170),
+      overlayConstraints: const BoxConstraints(maxWidth: 40),
+      overlayContentBuilder: (context) {
+        return _buildOverlayContent();
+      },
+    );
+  }
 
-            const double step = 0.03;
-            final double newVolume = (_currentVolume + (dy > 0 ? -step : step))
-                .clamp(0.0, 1.0);
-
-            widget.player.setVolume(newVolume);
-            setState(() {
-              // 更新本地音量状态
-              _currentVolume = newVolume;
-              if (newVolume > 0) _lastVolume = newVolume;
-            });
-            _saveVolume(newVolume);
-            _overlayEntry?.markNeedsBuild();
-          }
-        },
-        child: MouseRegion(
-          onEnter: (_) {
-            _setHovering(true);
-            _showOverlay();
-          },
-          onExit: (_) => _setHovering(false),
-          child: IconButton(
-            icon: Icon(
-              _currentVolume < 0.001
-                  ? Icons.volume_off
-                  : (_currentVolume <= 0.5
-                        ? Icons.volume_down
-                        : Icons.volume_up),
-              color: widget.iconColor.withAlpha(179),
-              size: 24,
+  Widget _buildOverlayContent() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 40,
+            height: 120,
+            child: RotatedBox(
+              quarterTurns: -1, // 横向滑块旋转成垂直显示
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 6,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 8,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
+                ),
+                child: Slider(
+                  value: _currentVolume,
+                  min: 0,
+                  max: 1,
+                  onChanged: (value) {
+                    _updateVolume(value);
+                  },
+                ),
+              ),
             ),
-            onPressed: () {
-              if (_currentVolume > 0.001) {
-                // 如果当前音量不是静音
-                _lastVolume = _currentVolume; // 保存当前音量
-                widget.player.setVolume(0.0);
-                setState(() {
-                  // 更新本地状态为静音
-                  _currentVolume = 0.0;
-                });
-                _saveVolume(0.0);
-              } else {
-                // 如果当前是静音
-                widget.player.setVolume(_lastVolume);
-                setState(() {
-                  // 恢复上次音量
-                  _currentVolume = _lastVolume;
-                });
-                _saveVolume(_lastVolume);
-              }
-              _overlayEntry?.markNeedsBuild();
-            },
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            '${(_currentVolume * 100).round()}%',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ],
       ),
     );
   }

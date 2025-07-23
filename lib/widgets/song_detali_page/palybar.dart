@@ -181,9 +181,7 @@ class _PlaybarState extends State<Playbar> {
                         color: onBarColor,
                         size: 28,
                       ),
-                      onPressed:
-                          playlistNotifier.currentPlaylistSongs.isNotEmpty &&
-                              playlistNotifier.currentSongIndex > 0
+                      onPressed: playlistNotifier.playingPlaylist != null
                           ? () => playlistNotifier.playPrevious()
                           : null,
                     ),
