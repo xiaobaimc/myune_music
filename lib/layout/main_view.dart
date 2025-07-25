@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../page/pages/play_list.dart';
 import '../page/pages/setting.dart';
 import '../page/pages/song_details.dart';
+import '../page/pages/all_songs.dart';
 
 class MainView extends StatefulWidget {
   const MainView({super.key});
@@ -21,8 +22,10 @@ class _MainViewState extends State<MainView> {
       case 0:
         return const Playlist();
       case 1:
-        return const SongDetails();
+        return const AllSongsPage();
       case 2:
+        return const SongDetails();
+      case 3:
         return const Setting();
       default:
         return const SizedBox.shrink();
@@ -65,6 +68,11 @@ class _MainViewState extends State<MainView> {
                     icon: const Icon(Icons.playlist_play),
                     selectedIcon: const Icon(Icons.playlist_play_outlined),
                     label: Text('歌单', style: _mainViewTextStyle),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.queue_music),
+                    selectedIcon: const Icon(Icons.queue_music_outlined),
+                    label: Text('全部歌曲', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.library_music),

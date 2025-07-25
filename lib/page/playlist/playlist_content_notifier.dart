@@ -81,6 +81,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Playlist? get playingPlaylist => _playingPlaylist;
   int get playingSongIndex => _playingSongIndex;
 
+  // 用于存储所有不重复歌曲的列表
+  List<Song> _allSongs = [];
+  List<Song> get allSongs => _allSongs;
+
+  // 使用这个的注释通常会叫做虚拟歌单,但后续已经改为实际存储的,忽略虚拟歌单的注释
+  final Playlist _allSongsVirtualPlaylist = Playlist(
+    id: 'all-songs-virtual-id',
+    name: '全部歌曲',
+  );
+  Playlist get allSongsVirtualPlaylist => _allSongsVirtualPlaylist;
+
   final StreamController<int> _lyricLineIndexController =
       StreamController<int>.broadcast();
   Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
@@ -153,6 +164,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         .loadPlaylists();
     _playlists = loadedPlaylists;
     _selectedIndex = _playlists.isNotEmpty ? 0 : -1;
+    await _updateAllSongsList();
     notifyListeners();
 
     if (_selectedIndex != -1) {
@@ -270,6 +282,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       currentPlaylist.songFilePaths.addAll(newSongPaths);
       await _savePlaylists();
       await _loadCurrentPlaylistSongs();
+      await _updateAllSongsList();
       return true; // 真的有添加
     }
 
@@ -307,6 +320,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
     _playlists.removeAt(index);
     _savePlaylists();
+    _updateAllSongsList();
     notifyListeners();
     _loadCurrentPlaylistSongs(); // 删除歌单后重新加载当前选中歌单的歌曲
     return true;
@@ -727,7 +741,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle&artist=$encodedArtist';
       final apiUri = Uri.parse(finalApiUrl);
 
-      debugPrint('请求歌词API: $apiUri');
+      // debugPrint('请求歌词API: $apiUri');
 
       final response = await http.get(apiUri); // 使用 http.get 发送 GET 请求
 
@@ -791,6 +805,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     await _savePlaylists();
+
+    await _updateAllSongsList();
 
     notifyListeners();
   }
@@ -933,5 +949,91 @@ class PlaylistContentNotifier extends ChangeNotifier {
         filePath: filePath,
       );
     }
+  }
+
+  Future<void> _updateAllSongsList() async {
+    // 从所有歌单中获取当前所有可用的、不重复的歌曲路径集合
+    final allAvailablePaths = <String>{};
+    for (final playlist in _playlists) {
+      allAvailablePaths.addAll(playlist.songFilePaths);
+    }
+
+    // 加载之前保存的“全部歌曲”顺序
+    List<String> savedOrder = await _playlistManager.loadAllSongsOrder();
+
+    // 从已保存的顺序中，删除那些在任何歌单中都已不存在的歌曲
+    savedOrder.removeWhere((path) => !allAvailablePaths.contains(path));
+
+    // 找出所有歌单中新增的、但尚未出现在排序列表中的歌曲
+    final existingPathsInOrder = savedOrder.toSet();
+    final newPaths = allAvailablePaths.where(
+      (path) => !existingPathsInOrder.contains(path),
+    );
+
+    // 将所有新发现的歌曲追加到排序列表的末尾
+    savedOrder.addAll(newPaths);
+
+    // 将这个经过合并后的、最新的顺序列表存回磁盘
+    await _playlistManager.saveAllSongsOrder(savedOrder);
+
+    // 基于这个最终确定的顺序，生成UI上要显示的 `_allSongs` 列表
+    final List<Song> songsWithMetadata = [];
+    for (final path in savedOrder) {
+      final song = await _parseSongMetadata(path);
+      songsWithMetadata.add(song);
+    }
+    _allSongs = songsWithMetadata;
+
+    // 同步更新虚拟播放列表的路径，以便播放逻辑正常工作
+    _allSongsVirtualPlaylist.songFilePaths = _allSongs
+        .map((s) => s.filePath)
+        .toList();
+  }
+
+  Future<void> reorderAllSongs(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+
+    // 在内存中对歌曲列表进行排序
+    final song = _allSongs.removeAt(oldIndex);
+    _allSongs.insert(newIndex, song);
+
+    // 提取出新的文件路径顺序
+    final newPathOrder = _allSongs.map((s) => s.filePath).toList();
+
+    // 将新的顺序保存到磁盘
+    await _playlistManager.saveAllSongsOrder(newPathOrder);
+
+    // 更新虚拟播放列表以匹配新顺序
+    _allSongsVirtualPlaylist.songFilePaths = newPathOrder;
+
+    // 如果正在播放的歌曲被移动，同步更新其索引以防播放错乱
+    if (_playingPlaylist?.id == _allSongsVirtualPlaylist.id) {
+      if (_playingSongIndex == oldIndex) {
+        _playingSongIndex = newIndex;
+      } else if (_playingSongIndex > oldIndex &&
+          _playingSongIndex <= newIndex) {
+        _playingSongIndex--;
+      } else if (_playingSongIndex < oldIndex &&
+          _playingSongIndex >= newIndex) {
+        _playingSongIndex++;
+      }
+    }
+
+    notifyListeners();
+  }
+
+  // 从全部歌曲列表播放歌曲
+  Future<void> playSongFromAllSongs(int index) async {
+    if (index < 0 || index >= _allSongs.length) {
+      return;
+    }
+
+    // 设置播放上下文为虚拟歌单
+    _playingPlaylist = _allSongsVirtualPlaylist;
+    _playingSongIndex = index;
+
+    await _startPlaybackNow();
   }
 }

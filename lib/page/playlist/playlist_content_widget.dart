@@ -344,11 +344,18 @@ class HeadSongListWidget extends StatelessWidget {
                   itemCount: songs.length,
                   itemBuilder: (context, index) {
                     final song = songs[index];
+                    final currentPlaylist = context
+                        .read<PlaylistContentNotifier>()
+                        .playlists[selectedIndex];
                     // 使用拆分出的 SongTileWidget
                     return SongTileWidget(
                       key: ValueKey(song.filePath), // Key是必须的
                       song: song,
                       index: index,
+                      contextPlaylist: currentPlaylist,
+                      onTap: () => context
+                          .read<PlaylistContentNotifier>()
+                          .playSongAtIndex(index),
                     );
                   },
                   onReorder: (oldIndex, newIndex) {
@@ -370,8 +377,16 @@ class HeadSongListWidget extends StatelessWidget {
 class SongTileWidget extends StatefulWidget {
   final Song song;
   final int index;
+  final VoidCallback? onTap;
+  final Playlist contextPlaylist;
 
-  const SongTileWidget({super.key, required this.song, required this.index});
+  const SongTileWidget({
+    super.key,
+    required this.song,
+    required this.index,
+    this.onTap,
+    required this.contextPlaylist,
+  });
 
   @override
   State<SongTileWidget> createState() => _SongTileWidgetState();
@@ -434,20 +449,21 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     final notifier = context.read<PlaylistContentNotifier>();
 
     final isPlaying = context.select<PlaylistContentNotifier, bool>((n) {
-      if (n.selectedIndex < 0 || n.selectedIndex >= n.playlists.length) {
-        // 如果没有合法的歌单被选中，那么这首歌肯定不在播放列表中
+      // 条件1：播放器必须有正在播放的歌曲和上下文
+      if (n.currentSong == null || n.playingPlaylist == null) {
         return false;
       }
 
-      // 检查当前正在播放的歌单 是否就是ui上这个歌单
-      final bool isPlayingThisPlaylist =
-          n.playingPlaylist?.name == n.playlists[n.selectedIndex].name;
+      // 条件2：正在播放的歌曲，必须是当前这个 SongTileWidget 代表的歌曲 (通过路径判断)
+      final bool isThisSong = n.currentSong!.filePath == widget.song.filePath;
 
-      // 检查正在播放的歌曲索引 是否就是ui上这首歌的索引
-      final bool isPlayingThisSong = n.playingSongIndex == widget.index;
+      // 条件3：正在播放的歌曲的上下文，必须和当前 SongTileWidget 所在的上下文一致 (通过ID判断)
+      final bool isThisContext =
+          n.playingPlaylist!.id == widget.contextPlaylist.id;
 
-      return isPlayingThisPlaylist &&
-          isPlayingThisSong &&
+      // 必须同时满足歌曲匹配和上下文匹配，并且播放器处于活动状态
+      return isThisSong &&
+          isThisContext &&
           (n.playerState == PlayerState.playing ||
               n.playerState == PlayerState.paused);
     });
@@ -458,7 +474,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       child: ReorderableDragStartListener(
         index: widget.index,
         child: InkWell(
-          onTap: () => notifier.playSongAtIndex(widget.index),
+          onTap: widget.onTap,
           onSecondaryTapDown: (details) {
             _showSongContextMenu(details.globalPosition, notifier);
           },

@@ -5,6 +5,7 @@ import 'playlist_models.dart';
 class PlaylistManager {
   static const String _playlistMetadataFileName = 'playlists_metadata.json';
   static const String _songsSubdirectory = 'playlist_songs';
+  static const String _allSongsOrderFileName = 'all_songs_order.json';
 
   Future<String> _getLocalPath() async {
     // 当前目录 + list_data 子目录
@@ -117,6 +118,37 @@ class PlaylistManager {
       // print('歌单已保存');
     } catch (e) {
       // print('保存歌单失败: $e');
+    }
+  }
+
+  // 获取全部歌曲顺序文件的路径
+  Future<File> _getAllSongsOrderFile() async {
+    final path = await _getLocalPath();
+    return File('$path/$_allSongsOrderFileName');
+  }
+
+  // 加载全部歌曲的顺序（一个文件路径列表）
+  Future<List<String>> loadAllSongsOrder() async {
+    try {
+      final file = await _getAllSongsOrderFile();
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        // 将 JSON 数组转换为 List<String>
+        return (jsonDecode(contents) as List<dynamic>).cast<String>();
+      }
+    } catch (e) {
+      // TODO someting
+    }
+    return []; // 如果文件不存在或出错，返回空列表
+  }
+
+  // 新增：保存“全部歌曲”的顺序
+  Future<void> saveAllSongsOrder(List<String> songFilePaths) async {
+    try {
+      final file = await _getAllSongsOrderFile();
+      await file.writeAsString(jsonEncode(songFilePaths));
+    } catch (e) {
+      // TODO someting
     }
   }
 }

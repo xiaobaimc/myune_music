@@ -90,12 +90,16 @@ class VolumeControlState extends State<VolumeControl> {
       overlayOffset: const Offset(0, -170),
       overlayConstraints: const BoxConstraints(maxWidth: 40),
       overlayContentBuilder: (context) {
-        return _buildOverlayContent();
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return _buildOverlayContent(setState);
+          },
+        );
       },
     );
   }
 
-  Widget _buildOverlayContent() {
+  Widget _buildOverlayContent(StateSetter setState) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -122,6 +126,7 @@ class VolumeControlState extends State<VolumeControl> {
                   max: 1,
                   onChanged: (value) {
                     _updateVolume(value);
+                    setState(() {});
                   },
                 ),
               ),
