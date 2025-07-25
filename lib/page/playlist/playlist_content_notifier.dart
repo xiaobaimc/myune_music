@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
+import 'sort_options.dart';
 import '../../smtc_manager.dart';
 import '../setting/settings_provider.dart';
 
@@ -302,28 +303,55 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return true;
   }
 
-  bool deletePlaylist(int index) {
-    if (_playlists[index].isDefault) {
+  Future<bool> deletePlaylist(int index) async {
+    // 边界条件检查
+    if (index < 0 || index >= _playlists.length) {
       return false;
     }
 
-    // 如果删除的是当前选中的歌单，则重置选中索引并停止播放
-    if (_selectedIndex == index) {
-      _selectedIndex = -1;
-      _audioPlayer.stop();
-      _currentSong = null;
-      _currentSongIndex = -1;
-      _currentLyrics = [];
-      _currentLyricLineIndex = -1;
-    } else if (_selectedIndex > index) {
-      _selectedIndex--;
+    final playlistToDelete = _playlists[index];
+    if (playlistToDelete.isDefault) {
+      // 默认歌单不可删除，直接返回 false
+      return false;
     }
-    _playlists.removeAt(index);
-    _savePlaylists();
-    _updateAllSongsList();
-    notifyListeners();
-    _loadCurrentPlaylistSongs(); // 删除歌单后重新加载当前选中歌单的歌曲
-    return true;
+
+    // 如果正在播放的歌单被删除，则停止播放
+    if (_playingPlaylist?.id == playlistToDelete.id) {
+      await stop();
+    }
+
+    // 基于旧列表创建一个全新的列表实例
+    final newPlaylists = List<Playlist>.from(_playlists);
+    newPlaylists.removeAt(index); // 在新列表上执行删除操作
+
+    // 计算删除后，UI上应该选中的新索引
+    int newSelectedIndex = _selectedIndex;
+    if (_selectedIndex == index) {
+      newSelectedIndex = -1; // 如果删除的是当前选中的，则取消选中
+    } else if (_selectedIndex > index) {
+      newSelectedIndex--; // 否则，如果索引在被删除项之后，则减一
+    }
+
+    // 将新的列表和新的索引赋值给状态变量
+    _playlists = newPlaylists;
+    _selectedIndex = newSelectedIndex;
+
+    // 根据新的选中状态，更新右侧的歌曲列表显示
+    if (_selectedIndex == -1) {
+      _currentPlaylistSongs = [];
+    }
+
+    await _savePlaylists();
+    await _updateAllSongsList();
+
+    // 如果有新的选中项，则加载其歌曲；否则，手动通知UI刷新
+    if (_selectedIndex != -1) {
+      await _loadCurrentPlaylistSongs();
+    } else {
+      notifyListeners();
+    }
+
+    return true; // 表示删除成功
   }
 
   bool editPlaylistName(int index, String newName) {
@@ -764,49 +792,47 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> removeSongAtIndex(int index) async {
-    if (_selectedIndex == -1 || _selectedIndex >= _playlists.length) {
+  Future<void> removeSongFromCurrentPlaylist(int index) async {
+    if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) {
       return;
     }
-
     if (index < 0 || index >= _currentPlaylistSongs.length) {
       return;
     }
 
-    // 获取当前选中的歌单
     final currentPlaylist = _playlists[_selectedIndex];
     final songToRemove = _currentPlaylistSongs[index];
 
-    final newSongList = List<Song>.from(_currentPlaylistSongs);
-    newSongList.removeAt(index);
-    _currentPlaylistSongs = newSongList; // 指向新列表
-
+    // 从UI列表和数据模型列表中都移除
     currentPlaylist.songFilePaths.remove(songToRemove.filePath);
 
-    if (_currentSongIndex != -1) {
-      if (_currentSongIndex == index) {
-        // 如果删除的是当前正在播放的歌曲
-        await _audioPlayer.stop();
-        _currentSong = null;
-        _currentSongIndex = -1;
-        _currentLyrics = [];
-        _currentLyricLineIndex = -1;
-        _currentPosition = Duration.zero;
-        _totalDuration = Duration.zero;
-      } else if (_currentSongIndex > index) {
-        // 如果删除的歌曲在当前播放歌曲之前，需要调整当前播放索引
-        _currentSongIndex--;
-      }
+    // 如果删除的是正在播放的歌曲
+    if (_currentSong?.filePath == songToRemove.filePath &&
+        _playingPlaylist?.id == currentPlaylist.id) {
+      await stop(); // 直接停止
+    }
+    await _loadCurrentPlaylistSongs();
+
+    await _updateAllSongsList();
+  }
+
+  Future<void> removeSongFromAllPlaylists(String filePath) async {
+    final bool wasPlaying = _currentSong?.filePath == filePath;
+
+    // 遍历所有歌单，移除包含该路径的项
+    for (final playlist in _playlists) {
+      playlist.songFilePaths.remove(filePath);
     }
 
-    // 如果播放模式是随机播放
-    if (_playMode == PlayMode.shuffle) {
-      _generateShuffledIndices();
+    // 如果删除的是正在播放的歌曲，停止播放
+    if (wasPlaying) {
+      await stop();
     }
 
     await _savePlaylists();
 
     await _updateAllSongsList();
+    await _loadCurrentPlaylistSongs();
 
     notifyListeners();
   }
@@ -1035,5 +1061,120 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _playingSongIndex = index;
 
     await _startPlaybackNow();
+  }
+
+  Future<List<String>> _sortFilePaths({
+    required List<String> paths,
+    required SortCriterion criterion,
+    required bool descending,
+  }) async {
+    // 如果是按标题或歌手，需要歌曲的元数据
+    if (criterion == SortCriterion.title || criterion == SortCriterion.artist) {
+      // 创建一个包含路径和元数据的临时列表
+      final sortableList = <Map<String, dynamic>>[];
+      for (final path in paths) {
+        final metadata = await _parseSongMetadata(path);
+        sortableList.add({'path': path, 'metadata': metadata});
+      }
+
+      // 对这个临时列表进行排序
+      sortableList.sort((a, b) {
+        final songA = a['metadata'] as Song;
+        final songB = b['metadata'] as Song;
+        final valueA = criterion == SortCriterion.title
+            ? songA.title.toLowerCase()
+            : songA.artist.toLowerCase();
+        final valueB = criterion == SortCriterion.title
+            ? songB.title.toLowerCase()
+            : songB.artist.toLowerCase();
+        return descending ? valueB.compareTo(valueA) : valueA.compareTo(valueB);
+      });
+
+      // 提取出排好序的路径并返回
+      return sortableList.map((item) => item['path'] as String).toList();
+    }
+
+    // 如果是按修改日期
+    if (criterion == SortCriterion.dateModified) {
+      // 创建一个包含路径和修改日期的临时列表
+      final sortableList = <Map<String, dynamic>>[];
+      for (final path in paths) {
+        try {
+          final file = File(path);
+          final lastModified = await file.lastModified();
+          sortableList.add({'path': path, 'date': lastModified});
+        } catch (e) {
+          // 如果文件不存在或无法访问，给一个很早的日期，让它排在后面
+          sortableList.add({'path': path, 'date': DateTime(1970)});
+        }
+      }
+
+      // 对列表进行排序
+      sortableList.sort((a, b) {
+        final dateA = a['date'] as DateTime;
+        final dateB = b['date'] as DateTime;
+        return descending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
+      });
+
+      // 提取路径并返回
+      return sortableList.map((item) => item['path'] as String).toList();
+    }
+
+    return paths; // 如果出现意外情况，返回原列表
+  }
+
+  // 排序当前选中的歌单
+  Future<void> sortCurrentPlaylist({
+    required SortCriterion criterion,
+    required bool descending,
+  }) async {
+    if (_selectedIndex < 0) return;
+
+    final currentPlaylist = _playlists[_selectedIndex];
+    final originalPaths = List<String>.from(currentPlaylist.songFilePaths);
+
+    // 调用排序方法
+    final sortedPaths = await _sortFilePaths(
+      paths: originalPaths,
+      criterion: criterion,
+      descending: descending,
+    );
+
+    // 更新数据模型
+    currentPlaylist.songFilePaths = sortedPaths;
+
+    await _savePlaylists();
+
+    await _loadCurrentPlaylistSongs();
+
+    notifyListeners();
+  }
+
+  // 用于排序全部歌曲列表
+  Future<void> sortAllSongs({
+    required SortCriterion criterion,
+    required bool descending,
+  }) async {
+    final originalPaths = _allSongs.map((s) => s.filePath).toList();
+
+    // 调用核心排序方法
+    final sortedPaths = await _sortFilePaths(
+      paths: originalPaths,
+      criterion: criterion,
+      descending: descending,
+    );
+
+    // 持久化保存
+    await _playlistManager.saveAllSongsOrder(sortedPaths);
+
+    // 重新加载全部歌曲列表以匹配新顺序
+    final sortedSongList = <Song>[];
+    for (final path in sortedPaths) {
+      sortedSongList.add(await _parseSongMetadata(path));
+    }
+    _allSongs = sortedSongList;
+    _allSongsVirtualPlaylist.songFilePaths = sortedPaths;
+
+    notifyListeners();
   }
 }

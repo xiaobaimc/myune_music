@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:audioplayers/audioplayers.dart';
+
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
+import '../../widgets/sort_dialog.dart';
+import 'sort_options.dart';
 
 class PlaylistContentWidget extends StatelessWidget {
   const PlaylistContentWidget({super.key});
@@ -116,7 +119,7 @@ class PlaylistListWidget extends StatelessWidget {
         _showAddPlaylistDialog(context, playlistNotifier);
       }
     } else if (result == 'delete' && index != null) {
-      final deleted = playlistNotifier.deletePlaylist(index);
+      final bool deleted = await playlistNotifier.deletePlaylist(index);
       if (!deleted && context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -272,10 +275,33 @@ class _PlaylistTileWidgetState extends State<PlaylistTileWidget> {
 class HeadSongListWidget extends StatelessWidget {
   const HeadSongListWidget({super.key});
 
+  void _showSortDialog(BuildContext context) async {
+    final notifier = context.read<PlaylistContentNotifier>();
+    // 如果没有选中歌单或歌单为空，则不显示对话框
+    if (notifier.selectedIndex < 0 || notifier.currentPlaylistSongs.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('歌单为空或未选中，无法排序')));
+      return;
+    }
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => const SortDialog(),
+    );
+
+    if (result != null && context.mounted) {
+      await notifier.sortCurrentPlaylist(
+        criterion: result['criterion'] as SortCriterion,
+        descending: result['descending'] as bool,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -291,12 +317,12 @@ class HeadSongListWidget extends StatelessWidget {
             builder: (context, data, _) {
               final (playlistName, isPlaylistSelected) = data;
               return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     playlistName,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
+                  const Spacer(),
                   if (isPlaylistSelected)
                     ElevatedButton.icon(
                       onPressed: () => context
@@ -305,11 +331,18 @@ class HeadSongListWidget extends StatelessWidget {
                       icon: const Icon(Icons.add_circle_outline),
                       label: const Text('添加歌曲'),
                     ),
+                  const SizedBox(width: 8),
+                  if (isPlaylistSelected)
+                    IconButton(
+                      icon: const Icon(Icons.sort),
+                      tooltip: '排序歌曲',
+                      onPressed: () => _showSortDialog(context),
+                    ),
                 ],
               );
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           // 只在列表本身变化时才重建
           Expanded(
             child: Selector<PlaylistContentNotifier, (bool, List<Song>, int)>(
@@ -399,8 +432,8 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     Offset position,
     PlaylistContentNotifier playlistNotifier,
   ) async {
-    // 在异步操作前，如果需要使用 context，可以直接使用 State 的 context 属性
-    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final notifier = context.read<PlaylistContentNotifier>();
 
     final RenderBox overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -419,27 +452,33 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       ],
     );
 
-    if (!mounted) return;
+    if (!mounted || result == null) return;
 
     if (result == 'moveToTop') {
       final songTitle =
           playlistNotifier.currentPlaylistSongs[widget.index].title;
       await playlistNotifier.moveSongToTop(widget.index);
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
+      await notifier.moveSongToTop(widget.index);
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
+      }
     } else if (result == 'deleteSong') {
-      final songTitle = playlistNotifier.currentPlaylistSongs
-          .elementAt(widget.index)
-          .title;
-      await playlistNotifier.removeSongAtIndex(widget.index);
+      final songTitle = widget.song.title;
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
+      // 判断当前 widget 是在哪个上下文中
+      final isAllSongsContext =
+          widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
+
+      if (isAllSongsContext) {
+        // 如果在全部歌曲页面，就从所有歌单中删除
+        await notifier.removeSongFromAllPlaylists(widget.song.filePath);
+      } else {
+        // 如果在具体的歌单页面，只从当前歌单删除
+        await notifier.removeSongFromCurrentPlaylist(widget.index);
+      }
+
+      messenger.showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
     }
   }
 
