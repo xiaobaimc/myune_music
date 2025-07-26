@@ -5,8 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:colorgram/colorgram.dart';
 import '../widgets/lyrics_widget.dart';
 import 'playlist/playlist_content_notifier.dart';
-import '../widgets/song_detali_page/palybar.dart';
-import '../widgets/song_detali_page/app_window_title_bar.dart';
+import '../widgets/song_detail_page/playbar.dart';
+import '../widgets/song_detail_page/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
 import '../theme/theme_provider.dart';
 

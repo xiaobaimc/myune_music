@@ -300,69 +300,112 @@ class HeadSongListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final notifier = context.watch<PlaylistContentNotifier>();
+    final isSearching = notifier.isSearching;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 监听歌单名称和选中状态
-          Selector<PlaylistContentNotifier, (String, bool)>(
-            selector: (_, notifier) {
-              if (notifier.selectedIndex == -1 ||
-                  notifier.selectedIndex >= notifier.playlists.length) {
-                return ('无选中歌单', false);
-              }
-              return (notifier.playlists[notifier.selectedIndex].name, true);
-            },
-            builder: (context, data, _) {
-              final (playlistName, isPlaylistSelected) = data;
-              return Row(
-                children: [
-                  Text(
-                    playlistName,
-                    style: Theme.of(context).textTheme.titleLarge,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: isSearching
+                // --- 搜索状态下显示的UI ---
+                ? TextField(
+                    key: const ValueKey('search_field_playlist'),
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: '在当前歌单中搜索歌曲名、歌手名...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: notifier.stopSearch, // 点击关闭按钮，退出搜索
+                      ),
+                    ),
+                    onChanged: (keyword) => notifier.search(
+                      keyword,
+                      searchInAllSongs: false, // 指定在当前歌单中搜索
+                    ),
+                  )
+                // --- 正常状态下显示的UI ---
+                : Selector<PlaylistContentNotifier, (String, bool)>(
+                    key: const ValueKey('title_bar_playlist'),
+                    selector: (_, notifier) {
+                      if (notifier.selectedIndex == -1 ||
+                          notifier.selectedIndex >= notifier.playlists.length) {
+                        return ('无选中歌单', false);
+                      }
+                      return (
+                        notifier.playlists[notifier.selectedIndex].name,
+                        true,
+                      );
+                    },
+                    builder: (context, data, _) {
+                      final (playlistName, isPlaylistSelected) = data;
+                      return Row(
+                        children: [
+                          Text(
+                            playlistName,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const Spacer(),
+                          if (isPlaylistSelected)
+                            ElevatedButton.icon(
+                              onPressed: () => context
+                                  .read<PlaylistContentNotifier>()
+                                  .pickAndAddSongs(),
+                              icon: const Icon(Icons.add_circle_outline),
+                              label: const Text('添加歌曲'),
+                            ),
+                          const SizedBox(width: 8),
+                          if (isPlaylistSelected)
+                            IconButton(
+                              icon: const Icon(Icons.sort),
+                              tooltip: '排序歌曲',
+                              onPressed: () => _showSortDialog(context),
+                            ),
+                          const SizedBox(width: 8),
+                          // 新增：搜索按钮
+                          if (isPlaylistSelected)
+                            IconButton(
+                              icon: const Icon(Icons.search),
+                              tooltip: '搜索歌曲',
+                              onPressed: notifier.startSearch, // 点击触发搜索
+                            ),
+                        ],
+                      );
+                    },
                   ),
-                  const Spacer(),
-                  if (isPlaylistSelected)
-                    ElevatedButton.icon(
-                      onPressed: () => context
-                          .read<PlaylistContentNotifier>()
-                          .pickAndAddSongs(),
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('添加歌曲'),
-                    ),
-                  const SizedBox(width: 8),
-                  if (isPlaylistSelected)
-                    IconButton(
-                      icon: const Icon(Icons.sort),
-                      tooltip: '排序歌曲',
-                      onPressed: () => _showSortDialog(context),
-                    ),
-                ],
-              );
-            },
           ),
           const SizedBox(height: 8),
           // 只在列表本身变化时才重建
           Expanded(
-            child: Selector<PlaylistContentNotifier, (bool, List<Song>, int)>(
-              selector: (_, notifier) => (
-                notifier.isLoadingSongs,
-                notifier.currentPlaylistSongs,
-                notifier.selectedIndex,
-              ),
-              shouldRebuild: (previous, next) => previous != next,
+            child: Selector<PlaylistContentNotifier, (bool, List<Song>)>(
+              selector: (_, notifier) {
+                // 根据是否在搜索，决定使用哪个列表
+                final listToShow = notifier.isSearching
+                    ? notifier.filteredSongs
+                    : notifier.currentPlaylistSongs;
+
+                return (notifier.isLoadingSongs, listToShow);
+              },
+              // shouldRebuild: (previous, next) => previous != next,
+              // Selector 默认的比较已经足够
               builder: (context, data, _) {
-                final (isLoading, songs, selectedIndex) = data;
+                final (isLoading, songs) = data; // `selectedIndex` 不再需要
 
                 if (isLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (selectedIndex == -1) {
+                if (notifier.selectedIndex == -1) {
                   return const Center(child: Text('请选择一个歌单'));
                 }
                 if (songs.isEmpty) {
-                  return const Center(child: Text('此歌单暂无歌曲, 点击 "添加歌曲"'));
+                  // 根据是否在搜索显示不同的提示
+                  return Center(
+                    child: Text(isSearching ? '未找到匹配的歌曲' : '此歌单暂无歌曲'),
+                  );
                 }
 
                 // 列表本身
@@ -377,25 +420,47 @@ class HeadSongListWidget extends StatelessWidget {
                   itemCount: songs.length,
                   itemBuilder: (context, index) {
                     final song = songs[index];
-                    final currentPlaylist = context
-                        .read<PlaylistContentNotifier>()
-                        .playlists[selectedIndex];
-                    // 使用拆分出的 SongTileWidget
+                    final currentPlaylist =
+                        notifier.playlists[notifier.selectedIndex];
+
+                    // 播放和排序时，需要找到它在原始列表中的索引
+                    final originalIndex = notifier.currentPlaylistSongs.indexOf(
+                      song,
+                    );
                     return SongTileWidget(
-                      key: ValueKey(song.filePath), // Key是必须的
+                      key: ValueKey(song.filePath),
                       song: song,
                       index: index,
                       contextPlaylist: currentPlaylist,
-                      onTap: () => context
-                          .read<PlaylistContentNotifier>()
-                          .playSongAtIndex(index),
+                      onTap: () {
+                        if (originalIndex != -1) {
+                          notifier.playSongAtIndex(originalIndex); // 使用原始索引播放
+                        }
+                      },
                     );
                   },
+                  // 在搜索时禁用拖拽排序功能
                   onReorder: (oldIndex, newIndex) {
-                    context.read<PlaylistContentNotifier>().reorderSong(
-                      oldIndex,
-                      newIndex,
-                    );
+                    final isSearching = context
+                        .read<PlaylistContentNotifier>()
+                        .isSearching;
+                    if (isSearching) {
+                      return;
+                    }
+                    final songs = context
+                        .read<PlaylistContentNotifier>()
+                        .filteredSongs;
+                    final songToMove = songs[oldIndex];
+                    final originalOldIndex = context
+                        .read<PlaylistContentNotifier>()
+                        .currentPlaylistSongs
+                        .indexOf(songToMove);
+                    if (originalOldIndex != -1) {
+                      context.read<PlaylistContentNotifier>().reorderSong(
+                        originalOldIndex,
+                        newIndex,
+                      );
+                    }
                   },
                 );
               },

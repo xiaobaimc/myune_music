@@ -93,6 +93,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
   );
   Playlist get allSongsVirtualPlaylist => _allSongsVirtualPlaylist;
 
+  String _searchKeyword = '';
+  String get searchKeyword => _searchKeyword;
+
+  List<Song> _filteredSongs = [];
+  List<Song> get filteredSongs => _filteredSongs;
+
+  bool _isSearching = false; // 用于控制UI显示搜索框还是标题
+  bool get isSearching => _isSearching;
+
   final StreamController<int> _lyricLineIndexController =
       StreamController<int>.broadcast();
   Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
@@ -205,6 +214,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _currentPlaylistSongs = songsWithMetadata;
     _isLoadingSongs = false;
+    // if (_isSearching) {
+    //   _updateFilteredSongs(searchInAllSongs: false); // 如果正在搜索，同步更新结果
+    // }
     notifyListeners();
   }
 
@@ -985,7 +997,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     // 加载之前保存的“全部歌曲”顺序
-    List<String> savedOrder = await _playlistManager.loadAllSongsOrder();
+    final List<String> savedOrder = await _playlistManager.loadAllSongsOrder();
 
     // 从已保存的顺序中，删除那些在任何歌单中都已不存在的歌曲
     savedOrder.removeWhere((path) => !allAvailablePaths.contains(path));
@@ -1014,6 +1026,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _allSongsVirtualPlaylist.songFilePaths = _allSongs
         .map((s) => s.filePath)
         .toList();
+    // if (_isSearching) {
+    //   _updateFilteredSongs(searchInAllSongs: true); // 如果正在搜索，同步更新结果
+    // }
   }
 
   Future<void> reorderAllSongs(int oldIndex, int newIndex) async {
@@ -1176,5 +1191,50 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _allSongsVirtualPlaylist.songFilePaths = sortedPaths;
 
     notifyListeners();
+  }
+
+  void startSearch() {
+    if (_isSearching) return;
+    _isSearching = true;
+    _searchKeyword = ''; // 每次开始搜索时清空关键词
+    _updateFilteredSongs(); // 更新一次，显示原始列表
+    notifyListeners();
+  }
+
+  void stopSearch() {
+    if (!_isSearching) return;
+    _isSearching = false;
+    _searchKeyword = '';
+    _filteredSongs = []; // 清空过滤结果
+    notifyListeners();
+  }
+
+  void search(String keyword, {required bool searchInAllSongs}) {
+    _searchKeyword = keyword.toLowerCase();
+    _updateFilteredSongs(searchInAllSongs: searchInAllSongs);
+    notifyListeners();
+  }
+
+  void _updateFilteredSongs({bool searchInAllSongs = false}) {
+    List<Song> sourceList;
+
+    // 决定数据源是全部歌曲还是当前歌单
+    if (searchInAllSongs) {
+      sourceList = _allSongs;
+    } else {
+      sourceList = _currentPlaylistSongs;
+    }
+
+    if (_searchKeyword.isEmpty) {
+      // 如果关键词为空，则显示完整的源列表
+      _filteredSongs = List.from(sourceList);
+    } else {
+      // 否则进行过滤
+      _filteredSongs = sourceList.where((song) {
+        final titleMatch = song.title.toLowerCase().contains(_searchKeyword);
+        final artistMatch = song.artist.toLowerCase().contains(_searchKeyword);
+        return titleMatch || artistMatch;
+      }).toList();
+    }
   }
 }

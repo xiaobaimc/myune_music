@@ -22,7 +22,7 @@ class _MainViewState extends State<MainView> {
       case 0:
         return const Playlist();
       case 1:
-        return const AllSongsPage();
+        return const AllSongs();
       case 2:
         return const SongDetails();
       case 3:
