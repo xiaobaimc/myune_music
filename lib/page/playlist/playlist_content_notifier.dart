@@ -631,48 +631,29 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 排序歌曲
-  void reorderSong(int oldIndex, int newIndex) {
-    if (_selectedIndex == -1 || _currentPlaylistSongs.isEmpty) {
-      _errorStreamController.add('无法重新排序：没有选中歌单或歌单为空');
-      return;
-    }
+  Future<void> reorderSong(int oldIndex, int newIndex) async {
+    if (_selectedIndex < 0) return;
+
+    // 边界检查
+    if (oldIndex < 0 || oldIndex >= _currentPlaylistSongs.length) return;
 
     if (newIndex > oldIndex) {
       newIndex -= 1;
     }
+    // 确保 newIndex 也在有效范围内
+    if (newIndex < 0 || newIndex >= _currentPlaylistSongs.length) return;
 
-    try {
-      final newSongList = List<Song>.from(_currentPlaylistSongs);
-      final song = newSongList.removeAt(oldIndex);
-      newSongList.insert(newIndex, song);
-      _currentPlaylistSongs = newSongList; // 指向新列表
+    final song = _currentPlaylistSongs.removeAt(oldIndex);
+    _currentPlaylistSongs.insert(newIndex, song);
 
-      final currentPlaylist = _playlists[_selectedIndex];
-      final filePath = currentPlaylist.songFilePaths.removeAt(oldIndex);
-      currentPlaylist.songFilePaths.insert(newIndex, filePath);
+    // 确保数据同步
+    final currentPlaylist = _playlists[_selectedIndex];
+    final movedPath = currentPlaylist.songFilePaths.removeAt(oldIndex);
+    currentPlaylist.songFilePaths.insert(newIndex, movedPath);
 
-      // 调整当前播放歌曲的索引
-      if (_currentSongIndex == oldIndex) {
-        _currentSongIndex = newIndex;
-      } else if (_currentSongIndex > oldIndex &&
-          _currentSongIndex <= newIndex) {
-        _currentSongIndex--;
-      } else if (_currentSongIndex < oldIndex &&
-          _currentSongIndex >= newIndex) {
-        _currentSongIndex++;
-      }
+    await _savePlaylists();
 
-      // 重新生成随机索引
-      if (_playMode == PlayMode.shuffle) {
-        _generateShuffledIndices();
-      }
-
-      _savePlaylists();
-      notifyListeners();
-    } catch (e) {
-      _errorStreamController.add('重新排序失败：$e');
-      notifyListeners();
-    }
+    notifyListeners();
   }
 
   Future<void> _loadLyricsForSong(String songFilePath) async {

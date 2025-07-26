@@ -444,23 +444,18 @@ class HeadSongListWidget extends StatelessWidget {
                     final isSearching = context
                         .read<PlaylistContentNotifier>()
                         .isSearching;
+
+                    // 如果正在搜索，则不做任何事，直接返回
                     if (isSearching) {
                       return;
                     }
-                    final songs = context
-                        .read<PlaylistContentNotifier>()
-                        .filteredSongs;
-                    final songToMove = songs[oldIndex];
-                    final originalOldIndex = context
-                        .read<PlaylistContentNotifier>()
-                        .currentPlaylistSongs
-                        .indexOf(songToMove);
-                    if (originalOldIndex != -1) {
-                      context.read<PlaylistContentNotifier>().reorderSong(
-                        originalOldIndex,
-                        newIndex,
-                      );
-                    }
+
+                    // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
+                    // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
+                    context.read<PlaylistContentNotifier>().reorderSong(
+                      oldIndex,
+                      newIndex,
+                    );
                   },
                 );
               },
