@@ -971,6 +971,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> _updateAllSongsList() async {
+    // （已完成） 新的去重逻辑
+    // （目前通过歌曲路径进行去重）
+    // 先通过歌曲路径进行第1次去重 在去重的结果通过歌手名及歌曲名进行第2次去重
+    // 虽然可以通过歌曲路径来标识唯一的歌曲 但是不排除两个不同的路径存放同一首歌，此时就不会被去重
+    // （直觉告诉我同时去重可能会发生意料之外的事情）
+
     // 从所有歌单中获取当前所有可用的、不重复的歌曲路径集合
     final allAvailablePaths = <String>{};
     for (final playlist in _playlists) {
@@ -995,13 +1001,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 将这个经过合并后的、最新的顺序列表存回磁盘
     await _playlistManager.saveAllSongsOrder(savedOrder);
 
-    // 基于这个最终确定的顺序，生成UI上要显示的 `_allSongs` 列表
+    // 解析元数据
     final List<Song> songsWithMetadata = [];
     for (final path in savedOrder) {
       final song = await _parseSongMetadata(path);
       songsWithMetadata.add(song);
     }
     _allSongs = songsWithMetadata;
+
+    // 二次去重：通过歌手+歌曲名
+    final seen = <String>{};
+    final dedupedSongs = <Song>[];
+
+    for (final song in _allSongs) {
+      final artist = song.artist.trim().toLowerCase();
+      final title = song.title.trim().toLowerCase();
+      final key = '$artist|$title';
+
+      if (!seen.contains(key)) {
+        seen.add(key);
+        dedupedSongs.add(song);
+      }
+    }
+
+    _allSongs = dedupedSongs;
 
     // 同步更新虚拟播放列表的路径，以便播放逻辑正常工作
     _allSongsVirtualPlaylist.songFilePaths = _allSongs

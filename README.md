@@ -21,6 +21,8 @@
 
 👉 [https://docs.lrc.cx/docs/QuickStart](https://docs.lrc.cx/docs/QuickStart)
 
+> 完整URL为 [https://lrcapi.showby.top/api/v1/lyrics/single?album=歌曲标题&artist=歌手名称](https://lrcapi.showby.top/api/v1/lyrics/single?album=%E4%B8%8B%E4%B8%80%E4%B8%AA%E5%A4%A9%E4%BA%AE&artist=%E9%83%AD%E9%9D%99)
+
 ## 📸 项目截图
 ![](screenshot/92379F29815DB2236510F9AD0C520ECD.png)
 ![](screenshot/57116242568D08EF8791737C8D881C06.png)
