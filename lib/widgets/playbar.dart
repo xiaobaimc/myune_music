@@ -89,6 +89,10 @@ class _PlaybarState extends State<Playbar> {
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
 
+    // 获取屏幕宽度
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrowScreen = screenWidth < 700;
+
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
@@ -380,41 +384,39 @@ class _PlaybarState extends State<Playbar> {
                     ),
                     const SizedBox(width: 8),
                     // 随机播放/列表循环按钮 (根据 playMode 动态更新)
-                    Consumer<PlaylistContentNotifier>(
-                      builder: (context, notifier, _) {
-                        // 根据播放模式选择图标和工具提示
-                        IconData icon;
-                        String tooltip;
-                        Color iconColor = onBarColor.withValues(
-                          alpha: 0.7,
-                        ); // 默认颜色
-
-                        if (notifier.playMode == PlayMode.shuffle) {
-                          icon = Icons.shuffle;
-                          tooltip = '随机播放';
-                          iconColor = accentColor;
-                        } else if (notifier.playMode == PlayMode.repeatOne) {
-                          icon = Icons.repeat_one;
-                          tooltip = '单曲循环';
-                          iconColor = accentColor;
-                        } else {
-                          icon = Icons.repeat;
-                          tooltip = '列表循环';
-                        }
-
-                        return IconButton(
-                          tooltip: tooltip,
-                          icon: Icon(icon, color: iconColor),
-                          onPressed: () {
-                            notifier.togglePlayMode(); // 调用 notifier 中的方法改变模式
-                          },
-                        );
-                      },
-                    ),
-                    // 音量控制
-                    VolumeControl(player: player, iconColor: onBarColor),
-
-                    BalanceRateControl(player: player, iconColor: onBarColor),
+                    if (!isNarrowScreen) ...[
+                      // 播放模式
+                      Consumer<PlaylistContentNotifier>(
+                        builder: (context, notifier, _) {
+                          IconData icon;
+                          String tooltip;
+                          Color iconColor = onBarColor.withValues(alpha: 0.7);
+                          if (notifier.playMode == PlayMode.shuffle) {
+                            icon = Icons.shuffle;
+                            tooltip = '随机播放';
+                            iconColor = accentColor;
+                          } else if (notifier.playMode == PlayMode.repeatOne) {
+                            icon = Icons.repeat_one;
+                            tooltip = '单曲循环';
+                            iconColor = accentColor;
+                          } else {
+                            icon = Icons.repeat;
+                            tooltip = '列表循环';
+                          }
+                          return IconButton(
+                            tooltip: tooltip,
+                            icon: Icon(icon, color: iconColor),
+                            onPressed: () {
+                              notifier.togglePlayMode();
+                            },
+                          );
+                        },
+                      ),
+                      // 音量控制
+                      VolumeControl(player: player, iconColor: onBarColor),
+                      // 平衡速率控制
+                      BalanceRateControl(player: player, iconColor: onBarColor),
+                    ],
 
                     // // 桌面歌词按钮
                     // IconButton(

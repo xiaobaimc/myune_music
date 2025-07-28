@@ -519,7 +519,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
           playlistNotifier.currentPlaylistSongs[widget.index].title;
       await playlistNotifier.moveSongToTop(widget.index);
 
-      await notifier.moveSongToTop(widget.index);
+      // await notifier.moveSongToTop(widget.index); // 6
       if (mounted) {
         messenger.showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
       }
