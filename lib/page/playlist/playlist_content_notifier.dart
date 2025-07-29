@@ -21,97 +21,99 @@ import '../setting/settings_provider.dart';
 enum PlayMode { sequence, shuffle, repeatOne }
 
 class PlaylistContentNotifier extends ChangeNotifier {
+  // --- 播放列表相关 ---
   final PlaylistManager _playlistManager = PlaylistManager();
-  List<Playlist> _playlists = [];
-  int _selectedIndex = -1;
-  List<Song> _currentPlaylistSongs = [];
-  bool _isLoadingSongs = false;
-
-  final AudioPlayer _audioPlayer = AudioPlayer();
-
-  List<Playlist> get playlists => _playlists;
-  int get selectedIndex => _selectedIndex;
-  List<Song> get currentPlaylistSongs => _currentPlaylistSongs;
-  bool get isLoadingSongs => _isLoadingSongs;
-
-  PlayMode _playMode = PlayMode.sequence;
-  PlayMode get playMode => _playMode;
-
-  Song? _currentSong;
-  Song? get currentSong => _currentSong;
-
-  List<LyricLine> _currentLyrics = [];
-  List<LyricLine> get currentLyrics => _currentLyrics;
-
-  int _currentLyricLineIndex = -1;
-  int get currentLyricLineIndex => _currentLyricLineIndex;
-
-  PlayerState _playerState = PlayerState.stopped;
-  PlayerState get playerState => _playerState;
-
-  int _currentSongIndex = -1; // 手动维护当前播放歌曲的索引
-  int get currentSongIndex => _currentSongIndex;
-
-  List<int> _shuffledIndices = [];
-  final Random _random = Random();
-
-  AudioPlayer get audioPlayer => _audioPlayer;
-
-  Duration _currentPosition = Duration.zero;
-  Duration _totalDuration = Duration.zero;
-
-  Duration get currentPosition => _currentPosition;
-  Duration get totalDuration => _totalDuration;
-
-  static const _playModeKey = 'play_mode';
-
-  SmtcManager? _smtcManager;
-
-  double _currentBalance = 0.0;
-  double _currentPlaybackRate = 1.0;
-
-  double get currentBalance => _currentBalance;
-  double get currentPlaybackRate => _currentPlaybackRate;
-
-  SmtcManager? get smtcManager => _smtcManager;
-
   final SettingsProvider _settingsProvider;
 
-  Playlist? _playingPlaylist; // 真正正在播放的歌单
-  int _playingSongIndex = -1; // 真正正在播放的歌曲在其歌单文件路径列表中的索引
+  List<Playlist> _playlists = []; // 所有歌单列表
+  List<Playlist> get playlists => _playlists;
+  int _selectedIndex = -1; // 当前选中的歌单索引
+  int get selectedIndex => _selectedIndex;
+  Playlist? _playingPlaylist; // 当前正在播放的歌单
   Playlist? get playingPlaylist => _playingPlaylist;
-  int get playingSongIndex => _playingSongIndex;
+  int _playingSongIndex = -1; // 当前播放的歌曲在歌单路径列表中的索引
 
-  // 用于存储所有不重复歌曲的列表
-  List<Song> _allSongs = [];
-  List<Song> get allSongs => _allSongs;
-
-  // 使用这个的注释通常会叫做虚拟歌单,但后续已经改为实际存储的,忽略虚拟歌单的注释
   final Playlist _allSongsVirtualPlaylist = Playlist(
+    // 实际存储的“全部歌曲”歌单
     id: 'all-songs-virtual-id',
     name: '全部歌曲',
   );
   Playlist get allSongsVirtualPlaylist => _allSongsVirtualPlaylist;
 
-  String _searchKeyword = '';
-  String get searchKeyword => _searchKeyword;
+  List<Song> _allSongs = []; // 所有不重复歌曲的集合
+  List<Song> get allSongs => _allSongs;
 
-  List<Song> _filteredSongs = [];
-  List<Song> get filteredSongs => _filteredSongs;
+  // --- 播放器相关 ---
+  final AudioPlayer _audioPlayer = AudioPlayer(); // 音频播放器实例
+  AudioPlayer get audioPlayer => _audioPlayer;
 
-  bool _isSearching = false; // 用于控制UI显示搜索框还是标题
-  bool get isSearching => _isSearching;
+  PlayerState _playerState = PlayerState.stopped; // 播放器状态
+  PlayerState get playerState => _playerState;
+
+  int _currentSongIndex = -1; // 当前播放歌曲的索引（在当前歌单中）
+  Song? _currentSong; // 当前播放的歌曲
+  Song? get currentSong => _currentSong;
+
+  PlayMode _playMode = PlayMode.sequence; // 播放模式：顺序、随机、单曲循环
+  static const _playModeKey = 'play_mode'; // 存储播放模式的 key
+  PlayMode get playMode => _playMode;
+
+  List<int> _shuffledIndices = []; // 用于随机播放时的索引列表
+  final Random _random = Random(); // 用于打乱索引
+
+  // --- 播放进度相关 ---
+  Duration _currentPosition = Duration.zero; // 当前播放进度
+  Duration _totalDuration = Duration.zero; // 当前歌曲总时长
+
+  Duration get currentPosition => _currentPosition;
+  Duration get totalDuration => _totalDuration;
+
+  // --- 平衡与倍速 ---
+  double _currentBalance = 0.0; // 声道平衡
+  double _currentPlaybackRate = 1.0; // 播放速度
+
+  double get currentBalance => _currentBalance;
+  double get currentPlaybackRate => _currentPlaybackRate;
+
+  // --- 歌词相关 --
+  List<LyricLine> _currentLyrics = []; // 当前歌曲歌词列表
+  int _currentLyricLineIndex = -1; // 当前歌词行索引
+
+  List<LyricLine> get currentLyrics => _currentLyrics;
+  int get currentLyricLineIndex => _currentLyricLineIndex;
 
   final StreamController<int> _lyricLineIndexController =
-      StreamController<int>.broadcast();
+      StreamController<int>.broadcast(); // 歌词行变动流
   Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
 
+  // --- 搜索相关 ---
+  String _searchKeyword = ''; // 当前搜索关键词
+  bool _isSearching = false; // 是否正在搜索（用于切换UI）
+  List<Song> _filteredSongs = []; // 搜索结果列表
+
+  String get searchKeyword => _searchKeyword;
+  bool get isSearching => _isSearching;
+  List<Song> get filteredSongs => _filteredSongs;
+
+  // --- 当前歌单的歌曲 ---
+  List<Song> _currentPlaylistSongs = []; // 当前选中歌单下的所有歌曲
+  bool _isLoadingSongs = false; // 是否正在加载歌曲
+
+  List<Song> get currentPlaylistSongs => _currentPlaylistSongs;
+  bool get isLoadingSongs => _isLoadingSongs;
+
+  // --- SMTC ---
+  SmtcManager? _smtcManager;
+  SmtcManager? get smtcManager => _smtcManager;
+
+  // --- 消息通知 ---
   final StreamController<String> _errorStreamController =
-      StreamController<String>.broadcast();
-  Stream<String> get errorStream => _errorStreamController.stream;
+      StreamController<String>.broadcast(); // 错误信息流
 
   final StreamController<String> _infoStreamController =
-      StreamController<String>.broadcast();
+      StreamController<String>.broadcast(); // 普通信息流
+
+  Stream<String> get errorStream => _errorStreamController.stream;
   Stream<String> get infoStream => _infoStreamController.stream;
 
   PlaylistContentNotifier(this._settingsProvider) {
@@ -129,6 +131,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   @override
+  // --- 播放器相关 ---
   void dispose() {
     _lyricLineIndexController.close();
     _errorStreamController.close();
@@ -173,6 +176,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _smtcManager?.close();
   }
 
+  // --- 歌单相关 ---
+
   Future<void> _loadPlaylists() async {
     final List<Playlist> loadedPlaylists = await _playlistManager
         .loadPlaylists();
@@ -197,6 +202,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _loadCurrentPlaylistSongs(); // 选中索引变化时加载歌曲到 UI 和播放器
   }
 
+  // 加载当前选中歌单的歌曲列表
   Future<void> _loadCurrentPlaylistSongs() async {
     if (_selectedIndex == -1 || _playlists.isEmpty) {
       _currentPlaylistSongs = [];
@@ -426,6 +432,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return true;
   }
 
+  // --- 播放控制 ---
   Future<void> play() async {
     if (_playerState == PlayerState.stopped ||
         _playerState == PlayerState.completed) {
@@ -468,110 +475,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentPlaybackRate = rate;
     await _audioPlayer.setPlaybackRate(rate);
     notifyListeners(); // 通知 UI 更新
-  }
-
-  // 播放指定索引的歌曲
-  Future<void> playSongAtIndex(int index) async {
-    if (_selectedIndex < 0 ||
-        index < 0 ||
-        index >= _currentPlaylistSongs.length) {
-      return;
-    }
-
-    // 更新播放上下文
-    _playingPlaylist = _playlists[_selectedIndex];
-    _playingSongIndex = index;
-
-    await _startPlaybackNow();
-  }
-
-  Future<void> _startPlaybackNow() async {
-    if (_playingPlaylist == null ||
-        _playingSongIndex < 0 ||
-        _playingSongIndex >= _playingPlaylist!.songFilePaths.length) {
-      return;
-    }
-
-    final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
-    final songToPlay = await _parseSongMetadata(songFilePath);
-
-    // 检查文件是否存在
-    if (songToPlay.artist.contains('文件不存在')) {
-      _errorStreamController.add('文件不存在${p.basename(songFilePath)}');
-      await playNext();
-      return;
-    }
-
-    _currentSong = songToPlay;
-
-    try {
-      // 尝试执行播放操作
-      await _audioPlayer.stop();
-      _currentLyrics = [];
-      _currentLyricLineIndex = -1;
-      await _audioPlayer.setSource(DeviceFileSource(songFilePath));
-      _loadLyricsForSong(songFilePath);
-
-      // 在 resume 之前更新SMTC元数据
-      await _smtcManager?.updateMetadata(
-        title: songToPlay.title,
-        artist: songToPlay.artist,
-        albumArt: songToPlay.albumArt,
-      );
-      // await dumpCover(songToPlay.albumArt!);
-      await _smtcManager?.updateState(true); // 播放状态
-
-      await _audioPlayer.resume(); // 最后执行播放
-
-      notifyListeners();
-    } catch (e) {
-      // 捕获所有播放相关的异常
-      _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
-
-      await playNext();
-    }
-  }
-
-  Future<void> _savePlayMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_playModeKey, _playMode.index);
-  }
-
-  Future<void> loadPlayMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final index = prefs.getInt(_playModeKey);
-    if (index != null && index >= 0 && index < PlayMode.values.length) {
-      _playMode = PlayMode.values[index];
-      notifyListeners(); // 确保 UI 更新
-    }
-  }
-
-  // 切换播放模式
-  void togglePlayMode() {
-    switch (_playMode) {
-      case PlayMode.sequence:
-        _playMode = PlayMode.shuffle;
-        _generateShuffledIndices();
-        break;
-      case PlayMode.shuffle:
-        _playMode = PlayMode.repeatOne;
-        break;
-      case PlayMode.repeatOne:
-        _playMode = PlayMode.sequence;
-        break;
-    }
-    _savePlayMode(); // 保存当前模式
-    notifyListeners();
-  }
-
-  // 生成随机播放索引列表
-  void _generateShuffledIndices({int? count}) {
-    // 如果调用时没有传入 count (值为 null)，则使用旧的逻辑，以 _currentPlaylistSongs 的长度为准。
-    // 如果传入了 count，则使用传入的 count。
-    final int listSize = count ?? _currentPlaylistSongs.length;
-
-    _shuffledIndices = List.generate(listSize, (i) => i);
-    _shuffledIndices.shuffle(_random);
   }
 
   // 根据播放模式播放下一首
@@ -649,35 +552,113 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _startPlaybackNow();
   }
 
-  // 将歌曲移动到顶部
-  Future<void> moveSongToTop(int index) async {
-    if (_selectedIndex == -1 ||
+  // 切换播放模式
+  void togglePlayMode() {
+    switch (_playMode) {
+      case PlayMode.sequence:
+        _playMode = PlayMode.shuffle;
+        _generateShuffledIndices();
+        break;
+      case PlayMode.shuffle:
+        _playMode = PlayMode.repeatOne;
+        break;
+      case PlayMode.repeatOne:
+        _playMode = PlayMode.sequence;
+        break;
+    }
+    _savePlayMode(); // 保存当前模式
+    notifyListeners();
+  }
+
+  // 生成随机播放索引列表
+  void _generateShuffledIndices({int? count}) {
+    // 如果调用时没有传入 count (值为 null)，则使用旧的逻辑，以 _currentPlaylistSongs 的长度为准。
+    // 如果传入了 count，则使用传入的 count。
+    final int listSize = count ?? _currentPlaylistSongs.length;
+
+    _shuffledIndices = List.generate(listSize, (i) => i);
+    _shuffledIndices.shuffle(_random);
+  }
+
+  Future<void> _savePlayMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_playModeKey, _playMode.index);
+  }
+
+  Future<void> loadPlayMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final index = prefs.getInt(_playModeKey);
+    if (index != null && index >= 0 && index < PlayMode.values.length) {
+      _playMode = PlayMode.values[index];
+      notifyListeners(); // 确保 UI 更新
+    }
+  }
+
+  // --- 歌曲播放 ---
+
+  // 播放指定索引的歌曲
+  Future<void> playSongAtIndex(int index) async {
+    if (_selectedIndex < 0 ||
         index < 0 ||
-        index >= _currentPlaylistSongs.length ||
-        _playlists[_selectedIndex].songFilePaths.isEmpty) {
+        index >= _currentPlaylistSongs.length) {
       return;
     }
 
-    final newSongList = List<Song>.from(_currentPlaylistSongs);
-    final songToMove = newSongList.removeAt(index);
-    newSongList.insert(0, songToMove);
-    _currentPlaylistSongs = newSongList; // 指向新列表
+    // 更新播放上下文
+    _playingPlaylist = _playlists[_selectedIndex];
+    _playingSongIndex = index;
 
-    final songPath = _playlists[_selectedIndex].songFilePaths.removeAt(index);
-    _playlists[_selectedIndex].songFilePaths.insert(0, songPath);
-
-    // 如果当前播放的歌曲被移动，更新 currentSongIndex
-    if (_currentSongIndex == index) {
-      _currentSongIndex = 0;
-    } else if (_currentSongIndex > index) {
-      _currentSongIndex--;
-    }
-    _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
-
-    await _playlistManager.savePlaylists(_playlists);
-    await _smtcManager?.updateState(false);
-    notifyListeners();
+    await _startPlaybackNow();
   }
+
+  Future<void> _startPlaybackNow() async {
+    if (_playingPlaylist == null ||
+        _playingSongIndex < 0 ||
+        _playingSongIndex >= _playingPlaylist!.songFilePaths.length) {
+      return;
+    }
+
+    final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
+    final songToPlay = await _parseSongMetadata(songFilePath);
+
+    // 检查文件是否存在
+    if (songToPlay.artist.contains('文件不存在')) {
+      _errorStreamController.add('文件不存在${p.basename(songFilePath)}');
+      await playNext();
+      return;
+    }
+
+    _currentSong = songToPlay;
+
+    try {
+      // 尝试执行播放操作
+      await _audioPlayer.stop();
+      _currentLyrics = [];
+      _currentLyricLineIndex = -1;
+      await _audioPlayer.setSource(DeviceFileSource(songFilePath));
+      _loadLyricsForSong(songFilePath);
+
+      // 在 resume 之前更新SMTC元数据
+      await _smtcManager?.updateMetadata(
+        title: songToPlay.title,
+        artist: songToPlay.artist,
+        albumArt: songToPlay.albumArt,
+      );
+      // await dumpCover(songToPlay.albumArt!);
+      await _smtcManager?.updateState(true); // 播放状态
+
+      await _audioPlayer.resume(); // 最后执行播放
+
+      notifyListeners();
+    } catch (e) {
+      // 捕获所有播放相关的异常
+      _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
+
+      await playNext();
+    }
+  }
+
+  // --- 歌曲排序 ---
 
   // 排序歌曲
   Future<void> reorderSong(int oldIndex, int newIndex) async {
@@ -705,6 +686,97 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 使用指定方式进行排序
+  Future<List<String>> _sortFilePaths({
+    required List<String> paths,
+    required SortCriterion criterion,
+    required bool descending,
+  }) async {
+    // 如果是按标题或歌手，需要歌曲的元数据
+    if (criterion == SortCriterion.title || criterion == SortCriterion.artist) {
+      // 创建一个包含路径和元数据的临时列表
+      final sortableList = <Map<String, dynamic>>[];
+      for (final path in paths) {
+        final metadata = await _parseSongMetadata(path);
+        sortableList.add({'path': path, 'metadata': metadata});
+      }
+
+      // 对这个临时列表进行排序
+      sortableList.sort((a, b) {
+        final songA = a['metadata'] as Song;
+        final songB = b['metadata'] as Song;
+        final valueA = criterion == SortCriterion.title
+            ? songA.title.toLowerCase()
+            : songA.artist.toLowerCase();
+        final valueB = criterion == SortCriterion.title
+            ? songB.title.toLowerCase()
+            : songB.artist.toLowerCase();
+        return descending ? valueB.compareTo(valueA) : valueA.compareTo(valueB);
+      });
+
+      // 提取出排好序的路径并返回
+      return sortableList.map((item) => item['path'] as String).toList();
+    }
+
+    // 如果是按修改日期
+    if (criterion == SortCriterion.dateModified) {
+      // 创建一个包含路径和修改日期的临时列表
+      final sortableList = <Map<String, dynamic>>[];
+      for (final path in paths) {
+        try {
+          final file = File(path);
+          final lastModified = await file.lastModified();
+          sortableList.add({'path': path, 'date': lastModified});
+        } catch (e) {
+          // 如果文件不存在或无法访问，给一个很早的日期，让它排在后面
+          sortableList.add({'path': path, 'date': DateTime(1970)});
+        }
+      }
+
+      // 对列表进行排序
+      sortableList.sort((a, b) {
+        final dateA = a['date'] as DateTime;
+        final dateB = b['date'] as DateTime;
+        return descending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
+      });
+
+      // 提取路径并返回
+      return sortableList.map((item) => item['path'] as String).toList();
+    }
+
+    return paths; // 如果出现意外情况，返回原列表
+  }
+
+  // 排序当前选中的歌单
+  Future<void> sortCurrentPlaylist({
+    required SortCriterion criterion,
+    required bool descending,
+  }) async {
+    if (_selectedIndex < 0) return;
+
+    final currentPlaylist = _playlists[_selectedIndex];
+    final originalPaths = List<String>.from(currentPlaylist.songFilePaths);
+
+    // 调用排序方法
+    final sortedPaths = await _sortFilePaths(
+      paths: originalPaths,
+      criterion: criterion,
+      descending: descending,
+    );
+
+    // 更新数据模型
+    currentPlaylist.songFilePaths = sortedPaths;
+
+    await _savePlaylists();
+
+    await _loadCurrentPlaylistSongs();
+
+    notifyListeners();
+  }
+
+  // --- 歌词相关 ---
+
+  // 加载指定歌曲的歌词
   Future<void> _loadLyricsForSong(String songFilePath) async {
     _currentLyrics = []; // 清空之前的歌词
     _currentLyricLineIndex = -1; // 重置歌词行索引
@@ -834,56 +906,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> removeSongFromCurrentPlaylist(int index) async {
-    if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) {
-      return;
-    }
-    if (index < 0 || index >= _currentPlaylistSongs.length) {
-      return;
-    }
-
-    final currentPlaylist = _playlists[_selectedIndex];
-    final songToRemove = _currentPlaylistSongs[index];
-
-    // 从UI列表和数据模型列表中都移除
-    currentPlaylist.songFilePaths.remove(songToRemove.filePath);
-
-    // 如果删除的是正在播放的歌曲
-    if (_currentSong?.filePath == songToRemove.filePath &&
-        _playingPlaylist?.id == currentPlaylist.id) {
-      await stop(); // 直接停止
-    }
-    _infoStreamController.add('已删除歌曲：${songToRemove.title}');
-    await _loadCurrentPlaylistSongs();
-
-    await _updateAllSongsList();
-  }
-
-  Future<void> removeSongFromAllPlaylists(
-    String filePath, {
-    required String songTitle,
-  }) async {
-    final bool wasPlaying = _currentSong?.filePath == filePath;
-
-    // 遍历所有歌单，移除包含该路径的项
-    for (final playlist in _playlists) {
-      playlist.songFilePaths.remove(filePath);
-    }
-
-    // 如果删除的是正在播放的歌曲，停止播放
-    if (wasPlaying) {
-      await stop();
-    }
-
-    await _savePlaylists();
-
-    await _updateAllSongsList();
-    _infoStreamController.add('已删除歌曲：$songTitle');
-    await _loadCurrentPlaylistSongs();
-
-    notifyListeners();
-  }
-
   // 解析歌词
   List<LyricLine> _parseLrcContent(List<String> lines) {
     final Map<Duration, List<String>> groupedLyrics = {};
@@ -969,6 +991,93 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
+  // --- 对选中歌曲的一些操作 ---
+
+  // 删除选定的歌曲
+  Future<void> removeSongFromCurrentPlaylist(int index) async {
+    if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) {
+      return;
+    }
+    if (index < 0 || index >= _currentPlaylistSongs.length) {
+      return;
+    }
+
+    final currentPlaylist = _playlists[_selectedIndex];
+    final songToRemove = _currentPlaylistSongs[index];
+
+    // 从UI列表和数据模型列表中都移除
+    currentPlaylist.songFilePaths.remove(songToRemove.filePath);
+
+    // 如果删除的是正在播放的歌曲
+    if (_currentSong?.filePath == songToRemove.filePath &&
+        _playingPlaylist?.id == currentPlaylist.id) {
+      await stop(); // 直接停止
+    }
+    _infoStreamController.add('已删除歌曲：${songToRemove.title}');
+    await _loadCurrentPlaylistSongs();
+
+    await _updateAllSongsList();
+  }
+
+  // 同上,适用于全部歌曲页面
+  Future<void> removeSongFromAllPlaylists(
+    String filePath, {
+    required String songTitle,
+  }) async {
+    final bool wasPlaying = _currentSong?.filePath == filePath;
+
+    // 遍历所有歌单，移除包含该路径的项
+    for (final playlist in _playlists) {
+      playlist.songFilePaths.remove(filePath);
+    }
+
+    // 如果删除的是正在播放的歌曲，停止播放
+    if (wasPlaying) {
+      await stop();
+    }
+
+    await _savePlaylists();
+
+    await _updateAllSongsList();
+    _infoStreamController.add('已删除歌曲：$songTitle');
+    await _loadCurrentPlaylistSongs();
+
+    notifyListeners();
+  }
+
+  // 将歌曲移动到顶部
+  Future<void> moveSongToTop(int index) async {
+    if (_selectedIndex == -1 ||
+        index < 0 ||
+        index >= _currentPlaylistSongs.length ||
+        _playlists[_selectedIndex].songFilePaths.isEmpty) {
+      return;
+    }
+
+    final newSongList = List<Song>.from(_currentPlaylistSongs);
+    final songToMove = newSongList.removeAt(index);
+    newSongList.insert(0, songToMove);
+    _currentPlaylistSongs = newSongList; // 指向新列表
+
+    final songPath = _playlists[_selectedIndex].songFilePaths.removeAt(index);
+    _playlists[_selectedIndex].songFilePaths.insert(0, songPath);
+
+    // 如果当前播放的歌曲被移动，更新 currentSongIndex
+    if (_currentSongIndex == index) {
+      _currentSongIndex = 0;
+    } else if (_currentSongIndex > index) {
+      _currentSongIndex--;
+    }
+    _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
+
+    await _playlistManager.savePlaylists(_playlists);
+    await _smtcManager?.updateState(false);
+    notifyListeners();
+  }
+
+  // -------
+
+  // 这个方法是专门给歌曲详情页用的
   Future<SongDetails?> getCurrentSongDetails() async {
     if (_currentSong == null) {
       // _errorStreamController.add('没有当前播放的歌曲');
@@ -1024,13 +1133,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> _updateAllSongsList() async {
-    // （已完成） 新的去重逻辑
-    // （目前通过歌曲路径进行去重）
-    // 先通过歌曲路径进行第1次去重 在去重的结果通过歌手名及歌曲名进行第2次去重
-    // 虽然可以通过歌曲路径来标识唯一的歌曲 但是不排除两个不同的路径存放同一首歌，此时就不会被去重
-    // （直觉告诉我同时去重可能会发生意料之外的事情）
+  // --- 全部歌曲页面相关 ---
 
+  Future<void> _updateAllSongsList() async {
     // 从所有歌单中获取当前所有可用的、不重复的歌曲路径集合
     final allAvailablePaths = <String>{};
     for (final playlist in _playlists) {
@@ -1130,93 +1235,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _startPlaybackNow();
   }
 
-  Future<List<String>> _sortFilePaths({
-    required List<String> paths,
-    required SortCriterion criterion,
-    required bool descending,
-  }) async {
-    // 如果是按标题或歌手，需要歌曲的元数据
-    if (criterion == SortCriterion.title || criterion == SortCriterion.artist) {
-      // 创建一个包含路径和元数据的临时列表
-      final sortableList = <Map<String, dynamic>>[];
-      for (final path in paths) {
-        final metadata = await _parseSongMetadata(path);
-        sortableList.add({'path': path, 'metadata': metadata});
-      }
-
-      // 对这个临时列表进行排序
-      sortableList.sort((a, b) {
-        final songA = a['metadata'] as Song;
-        final songB = b['metadata'] as Song;
-        final valueA = criterion == SortCriterion.title
-            ? songA.title.toLowerCase()
-            : songA.artist.toLowerCase();
-        final valueB = criterion == SortCriterion.title
-            ? songB.title.toLowerCase()
-            : songB.artist.toLowerCase();
-        return descending ? valueB.compareTo(valueA) : valueA.compareTo(valueB);
-      });
-
-      // 提取出排好序的路径并返回
-      return sortableList.map((item) => item['path'] as String).toList();
-    }
-
-    // 如果是按修改日期
-    if (criterion == SortCriterion.dateModified) {
-      // 创建一个包含路径和修改日期的临时列表
-      final sortableList = <Map<String, dynamic>>[];
-      for (final path in paths) {
-        try {
-          final file = File(path);
-          final lastModified = await file.lastModified();
-          sortableList.add({'path': path, 'date': lastModified});
-        } catch (e) {
-          // 如果文件不存在或无法访问，给一个很早的日期，让它排在后面
-          sortableList.add({'path': path, 'date': DateTime(1970)});
-        }
-      }
-
-      // 对列表进行排序
-      sortableList.sort((a, b) {
-        final dateA = a['date'] as DateTime;
-        final dateB = b['date'] as DateTime;
-        return descending ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
-      });
-
-      // 提取路径并返回
-      return sortableList.map((item) => item['path'] as String).toList();
-    }
-
-    return paths; // 如果出现意外情况，返回原列表
-  }
-
-  // 排序当前选中的歌单
-  Future<void> sortCurrentPlaylist({
-    required SortCriterion criterion,
-    required bool descending,
-  }) async {
-    if (_selectedIndex < 0) return;
-
-    final currentPlaylist = _playlists[_selectedIndex];
-    final originalPaths = List<String>.from(currentPlaylist.songFilePaths);
-
-    // 调用排序方法
-    final sortedPaths = await _sortFilePaths(
-      paths: originalPaths,
-      criterion: criterion,
-      descending: descending,
-    );
-
-    // 更新数据模型
-    currentPlaylist.songFilePaths = sortedPaths;
-
-    await _savePlaylists();
-
-    await _loadCurrentPlaylistSongs();
-
-    notifyListeners();
-  }
-
   // 用于排序全部歌曲列表
   Future<void> sortAllSongs({
     required SortCriterion criterion,
@@ -1245,6 +1263,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 给全部歌曲页面用的置于顶部方法
+  Future<void> moveSongToTopInAllSongs(int index) async {
+    if (index <= 0 || index >= _allSongs.length) {
+      // 如果已经是第一首或索引无效，则不操作
+      return;
+    }
+
+    final songToMove = _allSongs.removeAt(index);
+    _allSongs.insert(0, songToMove);
+
+    // 提取出新的文件路径顺序
+    final newPathOrder = _allSongs.map((s) => s.filePath).toList();
+
+    await _playlistManager.saveAllSongsOrder(newPathOrder);
+
+    // 更新播放列表以匹配新顺序
+    _allSongsVirtualPlaylist.songFilePaths = newPathOrder;
+
+    _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
+
+    notifyListeners();
+  }
+
+  // --- 搜索相关 ---
   void startSearch() {
     if (_isSearching) return;
     _isSearching = true;
@@ -1290,28 +1332,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> moveSongToTopInAllSongs(int index) async {
-    if (index <= 0 || index >= _allSongs.length) {
-      // 如果已经是第一首或索引无效，则不操作
-      return;
-    }
-
-    final songToMove = _allSongs.removeAt(index);
-    _allSongs.insert(0, songToMove);
-
-    // 提取出新的文件路径顺序
-    final newPathOrder = _allSongs.map((s) => s.filePath).toList();
-
-    await _playlistManager.saveAllSongsOrder(newPathOrder);
-
-    // 更新播放列表以匹配新顺序
-    _allSongsVirtualPlaylist.songFilePaths = newPathOrder;
-
-    _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
-
-    notifyListeners();
-  }
-
+  // --- 消息通知 ---
   void postError(String errorMessage) {
     _errorStreamController.add(errorMessage);
   }

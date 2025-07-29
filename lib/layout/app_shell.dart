@@ -25,10 +25,9 @@ class _AppShellState extends State<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final notifier = context.read<PlaylistContentNotifier>();
+      // 错误提示
       _errorSubscription = notifier.errorStream.listen((errorMessage) {
         if (mounted) {
-          // 现在错误将在这里提示，有时间把其他的提示也整合在一起（也许大概已完成）
-          // 比如置于顶部的提示
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Container(
