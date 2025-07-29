@@ -57,12 +57,10 @@ class PlaylistListWidget extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                if (controller.text.isNotEmpty) {
-                  if (!notifier.addPlaylist(controller.text.trim())) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('歌单名称已存在')));
-                  }
+                final notifier = context.read<PlaylistContentNotifier>();
+
+                if (notifier.addPlaylist(controller.text)) {
+                  // 仅在操作成功时关闭对话框
                   Navigator.of(context).pop();
                 }
               },
@@ -121,9 +119,9 @@ class PlaylistListWidget extends StatelessWidget {
     } else if (result == 'delete' && index != null) {
       final bool deleted = await playlistNotifier.deletePlaylist(index);
       if (!deleted && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('默认歌单不可删除')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('默认歌单不可删除')),
+        ); // 这里不改了，因为这句话可能用户永远都看不到
       }
     } else if (result == 'edit' && index != null) {
       if (context.mounted) {
@@ -158,12 +156,11 @@ class PlaylistListWidget extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 final newName = controller.text.trim();
+                final notifier = context.read<PlaylistContentNotifier>();
+
                 if (notifier.editPlaylistName(index, newName)) {
+                  // 仅在操作成功时关闭对话框
                   Navigator.of(context).pop();
-                } else {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('歌单名称已存在或为空')));
                 }
               },
               child: const Text('保存'),
@@ -279,9 +276,7 @@ class HeadSongListWidget extends StatelessWidget {
     final notifier = context.read<PlaylistContentNotifier>();
     // 如果没有选中歌单或歌单为空，则不显示对话框
     if (notifier.selectedIndex < 0 || notifier.currentPlaylistSongs.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('歌单为空或未选中，无法排序')));
+      notifier.postError('歌单为空或未选中，无法排序');
       return;
     }
 
@@ -492,7 +487,6 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     Offset position,
     PlaylistContentNotifier playlistNotifier,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     final notifier = context.read<PlaylistContentNotifier>();
 
     final RenderBox overlay =
@@ -515,30 +509,31 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     if (!mounted || result == null) return;
 
     if (result == 'moveToTop') {
-      final songTitle =
-          playlistNotifier.currentPlaylistSongs[widget.index].title;
-      await playlistNotifier.moveSongToTop(widget.index);
-
-      // await notifier.moveSongToTop(widget.index); // 6
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('已将歌曲“$songTitle”置于顶部')));
+      final isAllSongsContext =
+          widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
+      // 根据页面判断调用哪个方法
+      if (isAllSongsContext) {
+        await notifier.moveSongToTopInAllSongs(widget.index);
+      } else {
+        await notifier.moveSongToTop(widget.index);
       }
     } else if (result == 'deleteSong') {
-      final songTitle = widget.song.title;
-
       // 判断当前 widget 是在哪个上下文中
       final isAllSongsContext =
           widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
 
       if (isAllSongsContext) {
         // 如果在全部歌曲页面，就从所有歌单中删除
-        await notifier.removeSongFromAllPlaylists(widget.song.filePath);
+        await notifier.removeSongFromAllPlaylists(
+          widget.song.filePath,
+          songTitle: widget.song.title,
+        );
       } else {
         // 如果在具体的歌单页面，只从当前歌单删除
         await notifier.removeSongFromCurrentPlaylist(widget.index);
       }
 
-      messenger.showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
+      // messenger.showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
     }
   }
 

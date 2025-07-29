@@ -12,9 +12,7 @@ class AllSongsPage extends StatelessWidget {
   void _showSortDialog(BuildContext context) async {
     final notifier = context.read<PlaylistContentNotifier>();
     if (notifier.allSongs.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('没有歌曲可以排序')));
+      notifier.postError('没有歌曲可以排序');
       return;
     }
 

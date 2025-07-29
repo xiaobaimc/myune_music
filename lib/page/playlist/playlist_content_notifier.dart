@@ -110,6 +110,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorStreamController.stream;
 
+  final StreamController<String> _infoStreamController =
+      StreamController<String>.broadcast();
+  Stream<String> get infoStream => _infoStreamController.stream;
+
   PlaylistContentNotifier(this._settingsProvider) {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadPlaylists();
@@ -266,7 +270,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   Future<bool> pickAndAddSongs() async {
     if (_selectedIndex == -1) {
-      throw Exception('请先选择一个歌单');
+      _infoStreamController.add('请先在左侧选择一个要添加歌曲的歌单');
+      return false;
     }
 
     final FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -290,29 +295,50 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
       }
     }
-
+    // 如果不为空，说明有新歌曲被添加
     if (newSongPaths.isNotEmpty) {
       currentPlaylist.songFilePaths.addAll(newSongPaths);
       await _savePlaylists();
       await _loadCurrentPlaylistSongs();
       await _updateAllSongsList();
+
+      _infoStreamController.add('成功添加 ${newSongPaths.length} 首歌曲');
+
       return true; // 真的有添加
     }
-
-    return false; // 虽然打开了文件选择器，但没有添加任何新歌曲
+    // 如果确实选择了文件，但 newSongPaths 为空，说明选择是重复歌曲
+    else if (result.files.isNotEmpty) {
+      _infoStreamController.add('所选歌曲已存在于当前歌单中');
+      return false;
+    }
+    // 其他情况不提示
+    else {
+      return false;
+    }
   }
 
   bool addPlaylist(String name) {
-    if (_playlists.any((playlist) => playlist.name == name)) {
-      return false;
+    final trimmedName = name.trim();
+
+    if (trimmedName.isEmpty) {
+      _infoStreamController.add('歌单名称不能为空');
+      return false; // 失败
     }
 
-    _playlists.add(Playlist(name: name));
+    if (_playlists.any((playlist) => playlist.name == trimmedName)) {
+      _infoStreamController.add('歌单名称 "$trimmedName" 已存在');
+      return false; // 失败
+    }
+
+    _playlists.add(Playlist(name: trimmedName));
     _selectedIndex = _playlists.length - 1;
     _savePlaylists();
+    _infoStreamController.add('已成功创建歌单 “$trimmedName”');
+
     notifyListeners();
     _loadCurrentPlaylistSongs();
-    return true;
+
+    return true; // 成功
   }
 
   Future<bool> deletePlaylist(int index) async {
@@ -323,9 +349,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     final playlistToDelete = _playlists[index];
     if (playlistToDelete.isDefault) {
-      // 默认歌单不可删除，直接返回 false
+      _errorStreamController.add('默认歌单不可删除');
       return false;
     }
+
+    final deletedPlaylistName = playlistToDelete.name;
 
     // 如果正在播放的歌单被删除，则停止播放
     if (_playingPlaylist?.id == playlistToDelete.id) {
@@ -362,19 +390,39 @@ class PlaylistContentNotifier extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+    _infoStreamController.add('已删除歌单 “$deletedPlaylistName”');
 
     return true; // 表示删除成功
   }
 
   bool editPlaylistName(int index, String newName) {
-    if (newName.isEmpty) return false;
-    if (_playlists.any((p) => p.name == newName && p != _playlists[index])) {
-      return false;
+    final trimmedName = newName.trim();
+
+    // 检查名称是否为空
+    if (trimmedName.isEmpty) {
+      _infoStreamController.add('歌单名称不能为空');
+      return false; // 操作失败
     }
 
-    _playlists[index].name = newName;
+    // 检查名称是否重复（要排除自己）
+    if (_playlists.any(
+      (p) => p.name == trimmedName && _playlists.indexOf(p) != index,
+    )) {
+      _infoStreamController.add('歌单名称 "$trimmedName" 已存在');
+      return false; // 操作失败
+    }
+
+    // 如果一切正常，执行重命名逻辑
+    final oldName = _playlists[index].name;
+    final newPlaylists = List<Playlist>.from(_playlists);
+    newPlaylists[index].name = trimmedName;
+    _playlists = newPlaylists;
+
     _savePlaylists();
+
+    _infoStreamController.add('已将歌单 “$oldName” 重命名为 “$trimmedName”');
     notifyListeners();
+
     return true;
   }
 
@@ -478,7 +526,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       // 捕获所有播放相关的异常
-      _errorStreamController.add('无法播放歌曲: ${songToPlay.title}, 错误: $e');
+      _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
 
       await playNext();
     }
@@ -624,6 +672,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     } else if (_currentSongIndex > index) {
       _currentSongIndex--;
     }
+    _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
 
     await _playlistManager.savePlaylists(_playlists);
     await _smtcManager?.updateState(false);
@@ -804,12 +853,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _playingPlaylist?.id == currentPlaylist.id) {
       await stop(); // 直接停止
     }
+    _infoStreamController.add('已删除歌曲：${songToRemove.title}');
     await _loadCurrentPlaylistSongs();
 
     await _updateAllSongsList();
   }
 
-  Future<void> removeSongFromAllPlaylists(String filePath) async {
+  Future<void> removeSongFromAllPlaylists(
+    String filePath, {
+    required String songTitle,
+  }) async {
     final bool wasPlaying = _currentSong?.filePath == filePath;
 
     // 遍历所有歌单，移除包含该路径的项
@@ -825,6 +878,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _savePlaylists();
 
     await _updateAllSongsList();
+    _infoStreamController.add('已删除歌曲：$songTitle');
     await _loadCurrentPlaylistSongs();
 
     notifyListeners();
@@ -867,7 +921,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
           if (text.isEmpty) continue;
         } catch (e) {
-          _errorStreamController.add('歌词解析错误: $line - $e');
+          _errorStreamController.add('无法解析当前歌词');
         }
       }
     }
@@ -958,7 +1012,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         filePath: filePath,
       );
     } catch (e) {
-      _errorStreamController.add('读取歌曲详情失败：${p.basename(filePath)} - $e');
+      _errorStreamController.add('读取歌曲详情失败：${p.basename(filePath)}');
       return SongDetails(
         title: (filePath), // 至少提供文件名作为标题
         artist: '未知歌手 (解析失败)',
@@ -983,23 +1037,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
       allAvailablePaths.addAll(playlist.songFilePaths);
     }
 
-    // 加载之前保存的“全部歌曲”顺序
+    // 加载旧顺序并合并新路径
     final List<String> savedOrder = await _playlistManager.loadAllSongsOrder();
-
-    // 从已保存的顺序中，删除那些在任何歌单中都已不存在的歌曲
     savedOrder.removeWhere((path) => !allAvailablePaths.contains(path));
-
-    // 找出所有歌单中新增的、但尚未出现在排序列表中的歌曲
     final existingPathsInOrder = savedOrder.toSet();
     final newPaths = allAvailablePaths.where(
       (path) => !existingPathsInOrder.contains(path),
     );
-
-    // 将所有新发现的歌曲追加到排序列表的末尾
     savedOrder.addAll(newPaths);
-
-    // 将这个经过合并后的、最新的顺序列表存回磁盘
-    await _playlistManager.saveAllSongsOrder(savedOrder);
 
     // 解析元数据
     final List<Song> songsWithMetadata = [];
@@ -1025,6 +1070,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     _allSongs = dedupedSongs;
+
+    final finalPathOrder = _allSongs.map((s) => s.filePath).toList();
+    await _playlistManager.saveAllSongsOrder(finalPathOrder);
 
     // 同步更新虚拟播放列表的路径，以便播放逻辑正常工作
     _allSongsVirtualPlaylist.songFilePaths = _allSongs
@@ -1240,5 +1288,35 @@ class PlaylistContentNotifier extends ChangeNotifier {
         return titleMatch || artistMatch;
       }).toList();
     }
+  }
+
+  Future<void> moveSongToTopInAllSongs(int index) async {
+    if (index <= 0 || index >= _allSongs.length) {
+      // 如果已经是第一首或索引无效，则不操作
+      return;
+    }
+
+    final songToMove = _allSongs.removeAt(index);
+    _allSongs.insert(0, songToMove);
+
+    // 提取出新的文件路径顺序
+    final newPathOrder = _allSongs.map((s) => s.filePath).toList();
+
+    await _playlistManager.saveAllSongsOrder(newPathOrder);
+
+    // 更新播放列表以匹配新顺序
+    _allSongsVirtualPlaylist.songFilePaths = newPathOrder;
+
+    _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
+
+    notifyListeners();
+  }
+
+  void postError(String errorMessage) {
+    _errorStreamController.add(errorMessage);
+  }
+
+  void postInfo(String infoMessage) {
+    _infoStreamController.add(infoMessage);
   }
 }

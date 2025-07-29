@@ -137,7 +137,7 @@ class PlaylistManager {
         return (jsonDecode(contents) as List<dynamic>).cast<String>();
       }
     } catch (e) {
-      // TODO someting
+      // TODO something
     }
     return []; // 如果文件不存在或出错，返回空列表
   }
@@ -148,7 +148,7 @@ class PlaylistManager {
       final file = await _getAllSongsOrderFile();
       await file.writeAsString(jsonEncode(songFilePaths));
     } catch (e) {
-      // TODO someting
+      // TODO something
     }
   }
 }
