@@ -7,6 +7,7 @@ import '../page/playlist/playlist_content_notifier.dart';
 import '../widgets/app_window_title_bar.dart';
 import 'main_view.dart';
 import '../widgets/playbar.dart';
+import '../widgets/playing_queue_drawer.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -91,6 +92,7 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
+      endDrawer: const PlayingQueueDrawer(),
       body: WindowBorder(
         color: Colors.transparent,
         width: 0,

@@ -9,6 +9,7 @@ import '../widgets/song_detail_page/playbar.dart';
 import '../widgets/song_detail_page/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
 import '../theme/theme_provider.dart';
+import '../widgets/playing_queue_drawer.dart';
 
 // 公共模糊背景组件
 class BackgroundBlurWidget extends StatelessWidget {
@@ -114,6 +115,7 @@ class SongDetailPage extends StatelessWidget {
     final isPortrait = aspectRatio <= 1.0; // 竖屏判断
 
     return Scaffold(
+      endDrawer: const PlayingQueueDrawer(),
       body: BackgroundBlurWidget(
         child: Column(
           children: [

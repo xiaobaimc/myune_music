@@ -249,6 +249,17 @@ class _PlaybarState extends State<Playbar> {
                     VolumeControl(player: player, iconColor: onBarColor),
                     // 声道平衡、倍速控制
                     BalanceRateControl(player: player, iconColor: onBarColor),
+                    // 播放列表
+                    IconButton(
+                      icon: const Icon(Icons.lyrics_outlined),
+                      iconSize: 23,
+                      tooltip: '播放列表',
+                      padding: const EdgeInsets.only(top: 1.5),
+                      onPressed: () {
+                        // 打开右侧抽屉
+                        Scaffold.of(context).openEndDrawer();
+                      },
+                    ),
                   ],
                 ),
               ],

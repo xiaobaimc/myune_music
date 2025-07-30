@@ -432,6 +432,47 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return true;
   }
 
+  // 获取当前播放队列的歌曲列表
+  List<Song> get playingQueueSongs {
+    // 如果没有正在播放的歌单，返回空
+    if (_playingPlaylist == null) {
+      return [];
+    }
+
+    // 创建多重映射以确保能找到所有歌曲
+    final allSongsMap = {for (final song in _allSongs) song.filePath: song};
+    final currentPlaylistSongsMap = {
+      for (final song in _currentPlaylistSongs) song.filePath: song,
+    };
+
+    final List<Song> queueSongs = [];
+
+    // 根据播放队列路径列表提取对应的歌曲
+    for (final path in _playingPlaylist!.songFilePaths) {
+      // 按优先级查找歌曲:
+      // 1. 首先尝试从当前歌单已解析的歌曲中查找
+      // 2. 然后尝试从全部歌曲中查找
+      // 3. 最后如果都找不到，创建一个临时Song对象
+      final song = currentPlaylistSongsMap[path] ?? allSongsMap[path];
+
+      if (song != null) {
+        queueSongs.add(song);
+      } else {
+        // 如果找不到已解析的歌曲信息，创建临时对象
+        queueSongs.add(
+          Song(
+            title: p.basenameWithoutExtension(path),
+            artist: '未知歌手',
+            filePath: path,
+            albumArt: null,
+          ),
+        );
+      }
+    }
+
+    return queueSongs;
+  }
+
   // --- 播放控制 ---
   Future<void> play() async {
     if (_playerState == PlayerState.stopped ||

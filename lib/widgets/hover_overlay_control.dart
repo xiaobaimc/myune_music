@@ -106,15 +106,22 @@ class HoverOverlayControlState extends State<HoverOverlayControl> {
               color: widget.iconColor.withAlpha(179),
               size: 24,
             ),
-            onPressed:
-                widget.onIconPressed ??
-                () {
-                  if (_overlayEntry == null) {
-                    _showOverlay();
-                  } else {
-                    _removeOverlay();
-                  }
-                },
+            onPressed: () {
+              // 如果外部传入了点击事件的处理函数
+              if (widget.onIconPressed != null) {
+                // 先执行外部的函数
+                widget.onIconPressed!();
+                // 再主动刷新浮层，以确保UI同步
+                _overlayEntry?.markNeedsBuild();
+              } else {
+                // 如果外部没有传入处理函数，就执行默认逻辑
+                if (_overlayEntry == null) {
+                  _showOverlay();
+                } else {
+                  _removeOverlay();
+                }
+              }
+            },
           ),
         ),
       ),

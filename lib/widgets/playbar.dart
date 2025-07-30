@@ -416,6 +416,17 @@ class _PlaybarState extends State<Playbar> {
                       VolumeControl(player: player, iconColor: onBarColor),
                       // 平衡速率控制
                       BalanceRateControl(player: player, iconColor: onBarColor),
+                      // 播放列表
+                      IconButton(
+                        icon: const Icon(Icons.lyrics_outlined),
+                        iconSize: 23,
+                        tooltip: '播放列表',
+                        padding: const EdgeInsets.only(top: 1.5),
+                        onPressed: () {
+                          // 打开右侧抽屉
+                          Scaffold.of(context).openEndDrawer();
+                        },
+                      ),
                     ],
 
                     // // 桌面歌词按钮
@@ -426,7 +437,7 @@ class _PlaybarState extends State<Playbar> {
                     //     size: 24,
                     //   ),
                     //   onPressed: () {
-                    //     // todo: 桌面歌词功能
+                    //     // TODO: 桌面歌词功能
                     //     // 使用desktop_multi_window或等待官方更新
                     //   },
                     // ),
