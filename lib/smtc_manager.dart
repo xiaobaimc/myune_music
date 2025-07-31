@@ -1,3 +1,5 @@
+// 考虑添加对linux的支持
+// 使用 anni_mpris_service 或者 audio_service+audio_service_mpris
 import 'dart:io';
 import 'dart:async';
 
