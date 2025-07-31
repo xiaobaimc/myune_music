@@ -318,10 +318,7 @@ class HeadSongListWidget extends StatelessWidget {
                         onPressed: notifier.stopSearch, // 点击关闭按钮，退出搜索
                       ),
                     ),
-                    onChanged: (keyword) => notifier.search(
-                      keyword,
-                      searchInAllSongs: false, // 指定在当前歌单中搜索
-                    ),
+                    onChanged: (keyword) => notifier.search(keyword),
                   )
                 // --- 正常状态下显示的UI ---
                 : Selector<PlaylistContentNotifier, (String, bool)>(

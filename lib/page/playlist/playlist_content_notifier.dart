@@ -20,6 +20,8 @@ import '../setting/settings_provider.dart';
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
+enum DetailViewContext { playlist, allSongs, artist, album }
+
 class PlaylistContentNotifier extends ChangeNotifier {
   // --- 播放列表相关 ---
   final PlaylistManager _playlistManager = PlaylistManager();
@@ -106,6 +108,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
   SmtcManager? _smtcManager;
   SmtcManager? get smtcManager => _smtcManager;
 
+  // --- 视图上下文管理 ---
+  DetailViewContext _currentDetailViewContext = DetailViewContext.playlist;
+  String _activeDetailTitle = ''; // 当前详情页的标题
+  List<Song> _activeSongList = []; // 当前详情页显示的歌曲列表
+
+  DetailViewContext get currentDetailViewContext => _currentDetailViewContext;
+  String get activeDetailTitle => _activeDetailTitle;
+  List<Song> get activeSongList => _activeSongList;
+
+  // --- 存储从JSON加载的排序信息 ---
+  Map<String, List<String>> _artistSortOrders = {};
+  Map<String, List<String>> _albumSortOrders = {};
+
   // --- 消息通知 ---
   final StreamController<String> _errorStreamController =
       StreamController<String>.broadcast(); // 错误信息流
@@ -118,6 +133,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   PlaylistContentNotifier(this._settingsProvider) {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
+    _loadAllData(); // 使用一个统一的方法来加载所有数据
     _loadPlaylists();
     loadPlayMode();
     _audioPlayer.setBalance(_currentBalance);
@@ -128,6 +144,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
       onNext: playNext,
       onPrevious: playPrevious,
     );
+  }
+
+  Future<void> _loadAllData() async {
+    // 加载您现有的播放列表
+    await _loadPlaylists();
+    // 加载播放模式
+    await loadPlayMode();
+
+    // 加载歌手和专辑的排序
+    _artistSortOrders = await _playlistManager.loadArtistSortOrders();
+    _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
   }
 
   @override
@@ -234,6 +261,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<Song> _parseSongMetadata(String filePath) async {
     String title = p.basenameWithoutExtension(filePath);
     String artist = '未知歌手';
+    String album = '未知专辑';
     Uint8List? albumArt;
 
     final normalizedPath = Uri.file(
@@ -245,6 +273,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return Song(
         title: title,
         artist: '文件不存在 (解析失败)',
+        album: '未知专辑',
         filePath: filePath,
         albumArt: null,
       );
@@ -258,6 +287,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       if (metadata.artist != null && metadata.artist!.isNotEmpty) {
         artist = metadata.artist!;
       }
+      if (metadata.album != null && metadata.album!.isNotEmpty) {
+        album = metadata.album!;
+      }
       albumArt = metadata.pictures.isNotEmpty
           ? metadata.pictures.first.bytes
           : null;
@@ -269,6 +301,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return Song(
       title: title,
       artist: artist,
+      album: album,
       filePath: filePath,
       albumArt: albumArt,
     );
@@ -1145,6 +1178,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     try {
       final metadata = readMetadata(file, getImage: true);
+      final stat = await file.stat();
 
       Uint8List? albumArtBytes;
       if (metadata.pictures.isNotEmpty) {
@@ -1160,6 +1194,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
         bitrate: metadata.bitrate,
         sampleRate: metadata.sampleRate,
         filePath: filePath,
+        created: stat.type == FileSystemEntityType.file ? stat.changed : null,
+        modified: stat.type == FileSystemEntityType.file ? stat.modified : null,
       );
     } catch (e) {
       _errorStreamController.add('读取歌曲详情失败：${p.basename(filePath)}');
@@ -1172,6 +1208,174 @@ class PlaylistContentNotifier extends ChangeNotifier {
         filePath: filePath,
       );
     }
+  }
+
+  // --- 上下文管理 ---
+
+  void setActiveArtistView(String artistName) {
+    _currentDetailViewContext = DetailViewContext.artist;
+    _activeDetailTitle = artistName;
+    _activeSongList = List<Song>.from(songsByArtist[artistName] ?? []);
+
+    // 应用持久化排序
+    final savedOrder = _artistSortOrders[artistName];
+    if (savedOrder != null) {
+      // 如果存在已保存的顺序，就按这个顺序重新排列歌曲列表
+      final songMap = {for (var song in _activeSongList) song.filePath: song};
+      // 过滤掉已不存在的歌曲路径，并按保存的顺序排列
+      _activeSongList = savedOrder
+          .map((path) => songMap[path])
+          .where((song) => song != null)
+          .cast<Song>()
+          .toList();
+    }
+
+    if (_isSearching) stopSearch();
+    notifyListeners();
+  }
+
+  void setActiveAlbumView(String albumName) {
+    _currentDetailViewContext = DetailViewContext.album;
+    _activeDetailTitle = albumName;
+    _activeSongList = List<Song>.from(songsByAlbum[albumName] ?? []);
+
+    // 应用持久化排序
+    final savedOrder = _albumSortOrders[albumName];
+    if (savedOrder != null) {
+      final songMap = {for (var song in _activeSongList) song.filePath: song};
+      _activeSongList = savedOrder
+          .map((path) => songMap[path])
+          .where((song) => song != null)
+          .cast<Song>()
+          .toList();
+    }
+
+    if (_isSearching) stopSearch();
+    notifyListeners();
+  }
+
+  // 返回到主播放列表视图时调用
+  void clearActiveDetailView() {
+    _currentDetailViewContext = DetailViewContext.playlist;
+    _activeDetailTitle = '';
+    _activeSongList = [];
+    if (_isSearching) {
+      stopSearch();
+    }
+    notifyListeners();
+  }
+
+  // 为歌手/专辑详情页提供排序的功能
+  Future<void> sortActiveSongList({
+    required SortCriterion criterion,
+    required bool descending,
+  }) async {
+    // 确保当前视图是歌手或专辑，否则直接返回
+    if (_currentDetailViewContext != DetailViewContext.artist &&
+        _currentDetailViewContext != DetailViewContext.album) {
+      return;
+    }
+
+    if (_activeSongList.isEmpty) {
+      return;
+    }
+
+    final sortedPaths = await _sortFilePaths(
+      paths: _activeSongList.map((s) => s.filePath).toList(),
+      criterion: criterion,
+      descending: descending,
+    );
+
+    // 根据排好序的路径，更新内存中的_activeSongList
+    final Map<String, Song> songMap = {
+      for (var s in _activeSongList) s.filePath: s,
+    };
+    _activeSongList = sortedPaths.map((path) => songMap[path]!).toList();
+
+    if (_currentDetailViewContext == DetailViewContext.artist) {
+      // 如果当前是歌手视图，更新歌手排序 Map
+      _artistSortOrders[_activeDetailTitle] = sortedPaths;
+
+      await _playlistManager.saveArtistSortOrders(_artistSortOrders);
+    } else if (_currentDetailViewContext == DetailViewContext.album) {
+      // 如果当前是专辑视图，更新专辑排序 Map
+      _albumSortOrders[_activeDetailTitle] = sortedPaths;
+
+      await _playlistManager.saveAlbumSortOrders(_albumSortOrders);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> playFromDynamicList(List<Song> songs, int startIndex) async {
+    // 确保索引有效
+    if (startIndex < 0 || startIndex >= songs.length) {
+      return;
+    }
+
+    final dynamicPlaylist = Playlist(
+      // 使用时间戳确保ID的唯一性，避免与现有歌单冲突
+      id: 'dynamic-playlist-${DateTime.now().millisecondsSinceEpoch}',
+      name: '动态播放列表',
+      // 将 List<Song> 转换为播放器需要的 List<String>
+      songFilePaths: songs.map((s) => s.filePath).toList(),
+    );
+
+    // 设置播放上下文为这个新创建的临时歌单
+    _playingPlaylist = dynamicPlaylist;
+    _playingSongIndex = startIndex;
+
+    // 所有后续的播放逻辑都将在这个临时歌单上进行
+    await _startPlaybackNow();
+  }
+
+  // --- 分组歌曲 ---
+
+  // 多歌手识别与分组
+  Map<String, List<Song>> get songsByArtist {
+    final Map<String, List<Song>> grouped = {};
+
+    // 匹配可能大概的分隔符
+    final RegExp separators = RegExp(r'[;、；，,]');
+
+    // 遍历所有歌曲
+    for (final song in _allSongs) {
+      // 1. 使用正则表达式拆分 artist 字符串
+      final individualArtists = song.artist
+          .split(separators)
+          // 2. 对拆分后的每个名字进行处理，去除首尾的空格
+          .map((artist) => artist.trim())
+          // 3. 过滤掉因连续分隔符而产生的空字符串
+          .where((artist) => artist.isNotEmpty)
+          .toList();
+
+      // 如果拆分后没有有效的歌手名 则直接使用原始字段作为唯一的歌手名
+      if (individualArtists.isEmpty) {
+        if (song.artist.isNotEmpty) {
+          individualArtists.add(song.artist);
+        } else {
+          // 如果字段为空 则归类到未知歌手
+          individualArtists.add('未知歌手');
+        }
+      }
+
+      // 遍历拆分出的每一个独立歌手名
+      for (final artistName in individualArtists) {
+        // 将当前歌曲添加到这位歌手的列表中
+        grouped.putIfAbsent(artistName, () => []).add(song);
+      }
+    }
+    return grouped;
+  }
+
+  // 这个的逻辑与上面类似，只是键变成了专辑名
+  Map<String, List<Song>> get songsByAlbum {
+    final Map<String, List<Song>> grouped = {};
+    for (final song in _allSongs) {
+      // 使用专辑名作为分组的键
+      grouped.putIfAbsent(song.album, () => []).add(song);
+    }
+    return grouped;
   }
 
   // --- 全部歌曲页面相关 ---
@@ -1344,20 +1548,28 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  void search(String keyword, {required bool searchInAllSongs}) {
+  void search(String keyword) {
     _searchKeyword = keyword.toLowerCase();
-    _updateFilteredSongs(searchInAllSongs: searchInAllSongs);
+    _updateFilteredSongs();
     notifyListeners();
   }
 
-  void _updateFilteredSongs({bool searchInAllSongs = false}) {
+  void _updateFilteredSongs() {
     List<Song> sourceList;
 
-    // 决定数据源是全部歌曲还是当前歌单
-    if (searchInAllSongs) {
-      sourceList = _allSongs;
-    } else {
-      sourceList = _currentPlaylistSongs;
+    // 根据当前视图上下文，选择正确的数据源
+    switch (_currentDetailViewContext) {
+      case DetailViewContext.playlist:
+        sourceList = _currentPlaylistSongs;
+        break;
+      case DetailViewContext.allSongs:
+        sourceList = _allSongs;
+        break;
+      case DetailViewContext.artist:
+      case DetailViewContext.album:
+        // 对于歌手和专辑详情页，都从_activeSongList中搜索
+        sourceList = _activeSongList;
+        break;
     }
 
     if (_searchKeyword.isEmpty) {

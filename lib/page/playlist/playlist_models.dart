@@ -4,12 +4,14 @@ import 'dart:typed_data';
 class Song {
   final String title;
   final String artist;
+  final String album;
   final String filePath;
   final Uint8List? albumArt;
 
   Song({
     required this.title,
     required this.artist,
+    this.album = '未知专辑',
     required this.filePath,
     this.albumArt,
   });
@@ -80,6 +82,8 @@ class SongDetails {
   final int? bitrate;
   final int? sampleRate;
   final String filePath;
+  final DateTime? created;
+  final DateTime? modified;
 
   SongDetails({
     this.title,
@@ -90,5 +94,7 @@ class SongDetails {
     this.bitrate,
     this.sampleRate,
     required this.filePath,
+    this.created,
+    this.modified,
   });
 }

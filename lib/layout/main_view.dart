@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../page/pages/play_list.dart';
 import '../page/pages/setting.dart';
 import '../page/pages/song_details.dart';
 import '../page/pages/all_songs.dart';
+import '../page/pages/album_list_page.dart';
+import '../page/pages/artist_list_page.dart';
+
+import '../page/playlist/playlist_content_notifier.dart';
 
 class MainView extends StatefulWidget {
   const MainView({super.key});
@@ -24,8 +29,12 @@ class _MainViewState extends State<MainView> {
       case 1:
         return const AllSongs();
       case 2:
-        return const SongDetails();
+        return const ArtistListPage();
       case 3:
+        return const AlbumListPage();
+      case 4:
+        return const SongDetails();
+      case 5:
         return const Setting();
       default:
         return const SizedBox.shrink();
@@ -39,6 +48,7 @@ class _MainViewState extends State<MainView> {
 
   @override
   Widget build(BuildContext context) {
+    final playlistNotifier = context.read<PlaylistContentNotifier>();
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isWideScreen = constraints.maxWidth >= 1000;
@@ -59,6 +69,13 @@ class _MainViewState extends State<MainView> {
                 extended: actualExtended,
                 selectedIndex: _currentIndex,
                 onDestinationSelected: (int index) {
+                  switch (index) {
+                    case 0:
+                      playlistNotifier.clearActiveDetailView();
+                      break;
+                    case 1:
+                      break;
+                  }
                   setState(() {
                     _currentIndex = index;
                   });
@@ -75,13 +92,23 @@ class _MainViewState extends State<MainView> {
                     label: Text('全部歌曲', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.library_music),
-                    selectedIcon: const Icon(Icons.library_music_outlined),
+                    icon: const Icon(Icons.person_outlined),
+                    selectedIcon: const Icon(Icons.person),
+                    label: Text('歌手', style: _mainViewTextStyle),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.album_outlined),
+                    selectedIcon: const Icon(Icons.album),
+                    label: Text('专辑', style: _mainViewTextStyle),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.library_music_outlined),
+                    selectedIcon: const Icon(Icons.library_music),
                     label: Text('歌曲详情信息', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.settings),
-                    selectedIcon: const Icon(Icons.settings_outlined),
+                    icon: const Icon(Icons.settings_outlined),
+                    selectedIcon: const Icon(Icons.settings),
                     label: Text('设置', style: _mainViewTextStyle),
                   ),
                 ],

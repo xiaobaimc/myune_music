@@ -111,6 +111,18 @@ class SongDetailsPage extends StatelessWidget {
                             value: details.filePath,
                             selectable: true,
                           ),
+                          _infoCard(
+                            context: context,
+                            icon: Icons.create,
+                            label: '创建日期',
+                            value: _formatDate(details.created),
+                          ),
+                          _infoCard(
+                            context: context,
+                            icon: Icons.update,
+                            label: '修改日期',
+                            value: _formatDate(details.modified),
+                          ),
                         ],
                       ),
                     ),
@@ -129,6 +141,19 @@ class SongDetailsPage extends StatelessWidget {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '未知';
+
+    final y = date.year;
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    final h = date.hour.toString().padLeft(2, '0');
+    final min = date.minute.toString().padLeft(2, '0');
+    final s = date.second.toString().padLeft(2, '0');
+
+    return '$y-$m-$d $h:$min:$s';
   }
 
   Widget _infoCard({

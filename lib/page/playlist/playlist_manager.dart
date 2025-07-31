@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'playlist_models.dart';
 
 class PlaylistManager {
   static const String _playlistMetadataFileName = 'playlists_metadata.json';
   static const String _songsSubdirectory = 'playlist_songs';
   static const String _allSongsOrderFileName = 'all_songs_order.json';
+  static const String _artistSortOrderFileName = 'artist_sort_order.json';
+  static const String _albumSortOrderFileName = 'album_sort_order.json';
 
   Future<String> _getLocalPath() async {
     // 当前目录 + list_data 子目录
@@ -142,13 +145,78 @@ class PlaylistManager {
     return []; // 如果文件不存在或出错，返回空列表
   }
 
-  // 新增：保存“全部歌曲”的顺序
+  // 保存“全部歌曲”的顺序
   Future<void> saveAllSongsOrder(List<String> songFilePaths) async {
     try {
       final file = await _getAllSongsOrderFile();
       await file.writeAsString(jsonEncode(songFilePaths));
     } catch (e) {
       // TODO something
+    }
+  }
+
+  Future<File> _getArtistSortOrderFile() async {
+    final path = await _getLocalPath();
+    return File(p.join(path, _artistSortOrderFileName));
+  }
+
+  // 获取专辑排序文件的路径
+  Future<File> _getAlbumSortOrderFile() async {
+    final path = await _getLocalPath();
+    return File(p.join(path, _albumSortOrderFileName));
+  }
+
+  // 加载歌手的排序配置
+  Future<Map<String, List<String>>> loadArtistSortOrders() async {
+    try {
+      final file = await _getArtistSortOrderFile();
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        final json = jsonDecode(contents) as Map<String, dynamic>;
+        return json.map(
+          (key, value) => MapEntry(key, List<String>.from(value)),
+        );
+      }
+    } catch (e) {
+      print('加载歌手排序失败: $e');
+    }
+    return {};
+  }
+
+  // 保存歌手的排序配置
+  Future<void> saveArtistSortOrders(Map<String, List<String>> orders) async {
+    try {
+      final file = await _getArtistSortOrderFile();
+      await file.writeAsString(jsonEncode(orders));
+    } catch (e) {
+      print('保存歌手排序失败: $e');
+    }
+  }
+
+  // 加载专辑的排序配置
+  Future<Map<String, List<String>>> loadAlbumSortOrders() async {
+    try {
+      final file = await _getAlbumSortOrderFile();
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        final json = jsonDecode(contents) as Map<String, dynamic>;
+        return json.map(
+          (key, value) => MapEntry(key, List<String>.from(value)),
+        );
+      }
+    } catch (e) {
+      print('加载专辑排序失败: $e');
+    }
+    return {};
+  }
+
+  // 保存专辑的排序配置
+  Future<void> saveAlbumSortOrders(Map<String, List<String>> orders) async {
+    try {
+      final file = await _getAlbumSortOrderFile();
+      await file.writeAsString(jsonEncode(orders));
+    } catch (e) {
+      print('保存专辑排序失败: $e');
     }
   }
 }

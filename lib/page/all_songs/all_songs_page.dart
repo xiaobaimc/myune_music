@@ -60,10 +60,7 @@ class AllSongsPage extends StatelessWidget {
                               onPressed: notifier.stopSearch, // 点击关闭按钮，退出搜索
                             ),
                           ),
-                          onChanged: (keyword) => notifier.search(
-                            keyword,
-                            searchInAllSongs: true, // 指定在全部歌曲中搜索
-                          ),
+                          onChanged: (keyword) => notifier.search(keyword),
                         )
                       // --- 常规状态下显示的UI ---
                       : Row(
