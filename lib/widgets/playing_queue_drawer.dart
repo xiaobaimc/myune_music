@@ -59,26 +59,8 @@ class PlayingQueueDrawer extends StatelessWidget {
                           // 传入当前播放的歌单作为上下文
                           contextPlaylist: playingPlaylist!,
                           onTap: () {
-                            // 检查当前是否在全部歌曲中播放
-                            if (playingPlaylist.id ==
-                                notifier.allSongsVirtualPlaylist.id) {
-                              // 在 allSongs 列表中找到它的索引
-                              final originalIndex = notifier.allSongs
-                                  .indexWhere(
-                                    (s) => s.filePath == song.filePath,
-                                  );
-                              if (originalIndex != -1) {
-                                notifier.playSongFromAllSongs(originalIndex);
-                              }
-                            } else {
-                              // 在普通歌单中找到它的索引
-                              final originalIndex = playingPlaylist
-                                  .songFilePaths
-                                  .indexOf(song.filePath);
-                              if (originalIndex != -1) {
-                                notifier.playSongAtIndex(originalIndex);
-                              }
-                            }
+                            // 这里的index正好就是歌曲在队列中的索引
+                            notifier.playSongFromQueue(index);
                           },
                         );
                       },

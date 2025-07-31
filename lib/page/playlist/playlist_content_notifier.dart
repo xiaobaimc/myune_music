@@ -1323,7 +1323,24 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _playingPlaylist = dynamicPlaylist;
     _playingSongIndex = startIndex;
 
+    notifyListeners();
+
     // 所有后续的播放逻辑都将在这个临时歌单上进行
+    await _startPlaybackNow();
+  }
+
+  // 这个方法专门用于播放抽屉内的点击事件
+  Future<void> playSongFromQueue(int indexInQueue) async {
+    // 安全检查
+    if (_playingPlaylist == null ||
+        indexInQueue < 0 ||
+        indexInQueue >= _playingPlaylist!.songFilePaths.length) {
+      return;
+    }
+
+    // 只更新歌曲索引
+    _playingSongIndex = indexInQueue;
+
     await _startPlaybackNow();
   }
 
