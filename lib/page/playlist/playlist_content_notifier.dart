@@ -134,8 +134,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
   PlaylistContentNotifier(this._settingsProvider) {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadAllData(); // 使用一个统一的方法来加载所有数据
-    _loadPlaylists();
-    loadPlayMode();
     _audioPlayer.setBalance(_currentBalance);
     _audioPlayer.setPlaybackRate(_currentPlaybackRate);
     _smtcManager = SmtcManager(

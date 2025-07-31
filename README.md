@@ -5,6 +5,7 @@
 ## ✨ 特性
 
 * 使用歌单管理歌曲
+* 根据**歌手**和**专辑**自动分类歌曲
 * 使用 [**Material 3**](https://m3.material.io/) 配色
 * 支持导入多种**本地音频格式**，自动读取**音频元数据**
 * 支持**歌词显示**，兼容本地 `.lrc` 文件及音频文件中的**内嵌歌词**，支持从网络获取歌词
@@ -24,10 +25,13 @@
 > 完整URL为 [https://lrcapi.showby.top/api/v1/lyrics/single?album=歌曲标题&artist=歌手名称](https://lrcapi.showby.top/api/v1/lyrics/single?album=%E4%B8%8B%E4%B8%80%E4%B8%AA%E5%A4%A9%E4%BA%AE&artist=%E9%83%AD%E9%9D%99)
 
 ## 📸 项目截图
-![](screenshot/92379F29815DB2236510F9AD0C520ECD.png)
-![](screenshot/57116242568D08EF8791737C8D881C06.png)
-![](screenshot/D022283844CC6305B4473129E49BBAE2.png) 
-![](screenshot/ADDF04814968BACDC75CAD173DA0C4AD.png)
+![](screenshot/0ed4c6045d9d5ec7ffbb1e2d37fbc082.png)
+![](screenshot/80b1797d1eeffb5e676c999e9111c29e.png)
+![](screenshot/b9c1ea02a032da463abe86ec6fbedbe4.png) 
+![](screenshot/8525ee8949583b6648132a43849dbab3.png)
+![](screenshot/a55adee800e474ac31f5ea79a36f2a57.png)
+![](screenshot/43b5446daf9a740ea7cf7b596f2bad1f.png)
+![](screenshot/8ee8249892e86a396a181306406e3a9d.png) 
 
 ## 🚀 快速开始
 

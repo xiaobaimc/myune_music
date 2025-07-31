@@ -47,13 +47,7 @@ class _ArtistListState extends State<ArtistList> {
                 : Row(
                     key: const ValueKey('artist_title_bar'),
                     children: [
-                      const Text(
-                        '歌手',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      const Text('歌手', style: TextStyle(fontSize: 22)),
                       const SizedBox(width: 16),
                       Text(
                         '共 ${notifier.songsByArtist.keys.length} 位',

@@ -47,13 +47,7 @@ class _AlbumListState extends State<AlbumList> {
                 : Row(
                     key: const ValueKey('album_title_bar'),
                     children: [
-                      const Text(
-                        '专辑',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      const Text('专辑', style: TextStyle(fontSize: 22)),
                       const SizedBox(width: 16),
                       Text(
                         '共 ${notifier.songsByAlbum.keys.length} 张',
