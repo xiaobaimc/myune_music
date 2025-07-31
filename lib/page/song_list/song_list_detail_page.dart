@@ -125,32 +125,35 @@ class SongListDetailWidget extends StatelessWidget {
                 return Center(child: Text(isSearching ? '未找到匹配的歌曲' : '没有歌曲'));
               }
 
-              return ListView.builder(
-                itemCount: songs.length,
-                itemBuilder: (context, index) {
-                  final song = songs[index];
-                  return SongTileWidget(
-                    key: ValueKey(song.filePath),
-                    song: song,
-                    index: index,
-                    contextPlaylist:
-                        notifier.playingPlaylist ??
-                        Playlist(id: 'dummy', name: 'dummy'),
-                    onTap: () {
-                      final listToPlay = isSearching
-                          ? notifier.filteredSongs
-                          : notifier.activeSongList;
-                      final originalIndexInList = listToPlay.indexOf(song);
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                child: ListView.builder(
+                  itemCount: songs.length,
+                  itemBuilder: (context, index) {
+                    final song = songs[index];
+                    return SongTileWidget(
+                      key: ValueKey(song.filePath),
+                      song: song,
+                      index: index,
+                      contextPlaylist:
+                          notifier.playingPlaylist ??
+                          Playlist(id: 'dummy', name: 'dummy'),
+                      onTap: () {
+                        final listToPlay = isSearching
+                            ? notifier.filteredSongs
+                            : notifier.activeSongList;
+                        final originalIndexInList = listToPlay.indexOf(song);
 
-                      if (originalIndexInList != -1) {
-                        notifier.playFromDynamicList(
-                          listToPlay,
-                          originalIndexInList,
-                        );
-                      }
-                    },
-                  );
-                },
+                        if (originalIndexInList != -1) {
+                          notifier.playFromDynamicList(
+                            listToPlay,
+                            originalIndexInList,
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
               );
             },
           ),
