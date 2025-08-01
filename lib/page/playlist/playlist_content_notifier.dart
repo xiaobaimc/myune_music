@@ -1255,6 +1255,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 进入全部歌曲页面时调用
+  void setActiveAllSongsView() {
+    _currentDetailViewContext = DetailViewContext.allSongs;
+    // 进入新视图时，如果正在搜索，则停止上一个视图的搜索
+    if (_isSearching) {
+      stopSearch();
+    }
+    notifyListeners();
+  }
+
   // 返回到主播放列表视图时调用
   void clearActiveDetailView() {
     _currentDetailViewContext = DetailViewContext.playlist;

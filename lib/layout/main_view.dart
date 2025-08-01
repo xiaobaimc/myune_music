@@ -74,6 +74,7 @@ class _MainViewState extends State<MainView> {
                       playlistNotifier.clearActiveDetailView();
                       break;
                     case 1:
+                      playlistNotifier.setActiveAllSongsView();
                       break;
                   }
                   setState(() {
