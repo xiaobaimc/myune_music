@@ -3,7 +3,7 @@
 一个基于 **Flutter (Dart)** 实现的简易本地音乐播放器。
 
 ## ✨ 特性
-
+* 支持**windows**/**linux**双端 (linux可能会有点小问题)
 * 使用歌单管理歌曲
 * 根据**歌手**和**专辑**自动分类歌曲
 * 使用 [**Material 3**](https://m3.material.io/) 配色

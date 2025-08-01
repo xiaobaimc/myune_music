@@ -141,13 +141,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
       onPause: pause,
       onNext: playNext,
       onPrevious: playPrevious,
-      onSeek: (position) async {
-        await _audioPlayer.seek(position);
-      },
-      onSetPosition: (trackId, position) async {
-        // 对于简单播放器，trackId 可以暂时忽略，直接 seek
-        await _audioPlayer.seek(position);
-      },
     );
   }
 
@@ -1259,6 +1252,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     if (_isSearching) stopSearch();
+    notifyListeners();
+  }
+
+  // 进入全部歌曲页面时调用
+  void setActiveAllSongsView() {
+    _currentDetailViewContext = DetailViewContext.allSongs;
+    // 进入新视图时，如果正在搜索，则停止上一个视图的搜索
+    if (_isSearching) {
+      stopSearch();
+    }
     notifyListeners();
   }
 
