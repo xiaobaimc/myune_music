@@ -15,7 +15,7 @@ import 'package:http/http.dart' as http;
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
 import 'sort_options.dart';
-import '../../smtc_manager.dart';
+import '../../media_service/smtc_manager.dart';
 import '../setting/settings_provider.dart';
 
 enum PlayMode { sequence, shuffle, repeatOne }
@@ -141,6 +141,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
       onPause: pause,
       onNext: playNext,
       onPrevious: playPrevious,
+      onSeek: (position) async {
+        await _audioPlayer.seek(position);
+      },
+      onSetPosition: (trackId, position) async {
+        // 对于简单播放器，trackId 可以暂时忽略，直接 seek
+        await _audioPlayer.seek(position);
+      },
     );
   }
 
@@ -181,8 +188,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentPosition = position; // 更新当前位置
       updateLyricLine(position);
       _smtcManager?.updateTimeline(
-        position: position.inMilliseconds,
-        duration: _totalDuration.inMilliseconds,
+        position: position,
+        duration: _totalDuration,
       );
       // notifyListeners();
     });
@@ -190,15 +197,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _audioPlayer.onDurationChanged.listen((duration) {
       _totalDuration = duration; // 更新总时长
       _smtcManager?.updateTimeline(
-        position: _currentPosition.inMilliseconds,
-        duration: duration.inMilliseconds,
+        position: _currentPosition,
+        duration: duration,
       );
       // notifyListeners();
     });
   }
 
   Future<void> _cleanupSmtc() async {
-    await _smtcManager?.close();
+    await _smtcManager?.dispose();
   }
 
   // --- 歌单相关 ---
@@ -532,7 +539,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
     await _smtcManager?.updateState(false);
-    await _smtcManager?.updateTimeline(position: 0, duration: 0);
+    await _smtcManager?.updateTimeline(
+      position: Duration.zero,
+      duration: Duration.zero,
+    );
   }
 
   Future<void> setBalance(double balance) async {
@@ -1219,7 +1229,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final savedOrder = _artistSortOrders[artistName];
     if (savedOrder != null) {
       // 如果存在已保存的顺序，就按这个顺序重新排列歌曲列表
-      final songMap = {for (var song in _activeSongList) song.filePath: song};
+      final songMap = {for (final song in _activeSongList) song.filePath: song};
       // 过滤掉已不存在的歌曲路径，并按保存的顺序排列
       _activeSongList = savedOrder
           .map((path) => songMap[path])
@@ -1240,7 +1250,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 应用持久化排序
     final savedOrder = _albumSortOrders[albumName];
     if (savedOrder != null) {
-      final songMap = {for (var song in _activeSongList) song.filePath: song};
+      final songMap = {for (final song in _activeSongList) song.filePath: song};
       _activeSongList = savedOrder
           .map((path) => songMap[path])
           .where((song) => song != null)
@@ -1286,7 +1296,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 根据排好序的路径，更新内存中的_activeSongList
     final Map<String, Song> songMap = {
-      for (var s in _activeSongList) s.filePath: s,
+      for (final s in _activeSongList) s.filePath: s,
     };
     _activeSongList = sortedPaths.map((path) => songMap[path]!).toList();
 

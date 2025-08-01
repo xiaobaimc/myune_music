@@ -267,9 +267,8 @@ class _PlaybarState extends State<Playbar> {
                           );
                           player.seek(seekPosition); // 拖动结束后才实际 seek
                           playlistNotifier.smtcManager?.updateTimeline(
-                            position: seekPosition.inMilliseconds,
-                            duration: totalDuration.inMilliseconds,
-                            isDragging: true,
+                            position: seekPosition,
+                            duration: totalDuration,
                           );
                           // 拖动结束后，立即更新滑块到最终位置，即使定时器还未触发
                           setState(() {

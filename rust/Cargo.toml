@@ -9,6 +9,7 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 flutter_rust_bridge = "=2.10.0"
 
+[target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.3", features = [
     "Media_Playback",
     "Storage",

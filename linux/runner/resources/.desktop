@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Myune Music
+Comment=Music player application
+Exec=myune_music
+Icon=app_icon
+Terminal=false
+Type=Application
+Categories=AudioVideo;Player;Music;
+StartupNotify=true
