@@ -114,6 +114,7 @@ class _AlbumListState extends State<AlbumList> {
                         ),
                       );
                     },
+                    borderRadius: BorderRadius.circular(12.0),
                     child: Card(
                       clipBehavior: Clip.antiAlias,
                       child: Column(

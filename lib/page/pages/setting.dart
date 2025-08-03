@@ -17,7 +17,12 @@ class Setting extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
       ),
-      body: const SettingPage(),
+      body: const Column(
+        children: [
+          Divider(height: 1, thickness: 1),
+          Expanded(child: SettingPage()),
+        ],
+      ),
     );
   }
 }

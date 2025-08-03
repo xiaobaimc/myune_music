@@ -1406,6 +1406,38 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return grouped;
   }
 
+  // 处理在歌手/专辑详情页中的拖动排序
+  Future<void> reorderActiveSongList(int oldIndex, int newIndex) async {
+    // 安全检查，确保当前视图是歌手或专辑
+    if (_currentDetailViewContext != DetailViewContext.artist &&
+        _currentDetailViewContext != DetailViewContext.album) {
+      return;
+    }
+
+    // 如果项目向下移动，新的索引会比实际插入位置大1
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+
+    // 更新列表顺序
+    final song = _activeSongList.removeAt(oldIndex);
+    _activeSongList.insert(newIndex, song);
+
+    // 提取出新的文件路径顺序
+    final newPathOrder = _activeSongList.map((s) => s.filePath).toList();
+
+    // 根据当前视图上下文，保存到对应的json文件
+    if (_currentDetailViewContext == DetailViewContext.artist) {
+      _artistSortOrders[_activeDetailTitle] = newPathOrder;
+      await _playlistManager.saveArtistSortOrders(_artistSortOrders);
+    } else if (_currentDetailViewContext == DetailViewContext.album) {
+      _albumSortOrders[_activeDetailTitle] = newPathOrder;
+      await _playlistManager.saveAlbumSortOrders(_albumSortOrders);
+    }
+
+    notifyListeners();
+  }
+
   // --- 全部歌曲页面相关 ---
 
   Future<void> _updateAllSongsList() async {

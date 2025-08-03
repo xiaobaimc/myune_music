@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
-// 导入我们新创建的文件
 import 'platform_media_service.dart';
 import 'windows_media_service.dart';
 import 'linux_media_service.dart';
@@ -14,7 +13,6 @@ class SmtcManager {
     Future<void> Function()? onPause,
     Future<void> Function()? onNext,
     Future<void> Function()? onPrevious,
-    // 添加新的回调
     Future<void> Function(Duration position)? onSeek,
     Future<void> Function(String trackId, Duration position)? onSetPosition,
   }) {

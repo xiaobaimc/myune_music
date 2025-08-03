@@ -119,6 +119,9 @@ class _ArtistListState extends State<ArtistList> {
                         ),
                       );
                     },
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
                   );
                 },
               );

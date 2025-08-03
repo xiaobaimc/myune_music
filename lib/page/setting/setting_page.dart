@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import './theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
-import './settings_provider.dart'; // 确保路径正确
+import './settings_provider.dart';
 import '../../widgets/font_selector_row.dart';
 
 class SettingPage extends StatefulWidget {
@@ -40,7 +40,7 @@ class _SettingPageState extends State<SettingPage> {
 
   @override
   void dispose() {
-    // Looking up a deactivated widget's ancestor is unsafe.
+    // 小部件已销毁，需要移除监听器避免内存泄漏
     _settingsProvider.removeListener(_onSettingsChanged);
 
     // 释放控制器
@@ -63,7 +63,6 @@ class _SettingPageState extends State<SettingPage> {
 
     return ListView(
       children: [
-        const Divider(height: 1, thickness: 1),
         const ThemeSelectionScreen(),
         SwitchListTile(
           title: Text('深色模式', style: Theme.of(context).textTheme.titleMedium),

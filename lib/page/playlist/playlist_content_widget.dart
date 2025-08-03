@@ -464,6 +464,8 @@ class SongTileWidget extends StatefulWidget {
   final int index;
   final VoidCallback? onTap;
   final Playlist contextPlaylist;
+  // 控制右键菜单是否显示
+  final bool enableContextMenu;
 
   const SongTileWidget({
     super.key,
@@ -471,6 +473,7 @@ class SongTileWidget extends StatefulWidget {
     required this.index,
     this.onTap,
     required this.contextPlaylist,
+    this.enableContextMenu = true,
   });
 
   @override
@@ -567,8 +570,12 @@ class _SongTileWidgetState extends State<SongTileWidget> {
         child: InkWell(
           onTap: widget.onTap,
           onSecondaryTapDown: (details) {
-            _showSongContextMenu(details.globalPosition, notifier);
+            // 根据 enableContextMenu 参数决定是否显示右键菜单
+            if (widget.enableContextMenu) {
+              _showSongContextMenu(details.globalPosition, notifier);
+            }
           },
+
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             decoration: BoxDecoration(

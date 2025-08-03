@@ -127,14 +127,22 @@ class SongListDetailWidget extends StatelessWidget {
 
               return Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                child: ListView.builder(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   itemCount: songs.length,
+                  onReorder: (oldIndex, newIndex) {
+                    // 在搜索时，禁用拖拽排序功能
+                    if (isSearching) return;
+
+                    notifier.reorderActiveSongList(oldIndex, newIndex);
+                  },
                   itemBuilder: (context, index) {
                     final song = songs[index];
                     return SongTileWidget(
                       key: ValueKey(song.filePath),
                       song: song,
                       index: index,
+                      enableContextMenu: false, // 禁用右键菜单
                       contextPlaylist:
                           notifier.playingPlaylist ??
                           Playlist(id: 'dummy', name: 'dummy'),

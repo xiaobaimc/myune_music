@@ -32,7 +32,7 @@ void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
   };
-
+  // TODO: bitsdojo_window太久没人维护了 考虑更换window_manager
   doWhenWindowReady(() {
     const initialSize = Size(1200, 700);
     const minPossibleSize = Size(550, 600);
