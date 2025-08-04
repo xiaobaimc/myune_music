@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
+
+import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
 import 'layout/app_shell.dart';
 import 'page/playlist/playlist_content_notifier.dart';
@@ -60,6 +62,10 @@ class MyApp extends StatelessWidget {
           theme: themeProvider.lightThemeData,
           darkTheme: themeProvider.darkThemeData,
           themeMode: themeProvider.themeMode,
+          builder: (context, materialAppChild) {
+            return Hotkeys(child: materialAppChild!);
+          },
+
           home: const AppShell(),
         );
       },

@@ -141,11 +141,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
       onPause: pause,
       onNext: playNext,
       onPrevious: playPrevious,
+      onSeek: (position) async {
+        await _audioPlayer.seek(position);
+      },
+      onSetPosition: (trackId, position) async {
+        await _audioPlayer.seek(position);
+      },
     );
   }
 
   Future<void> _loadAllData() async {
-    // 加载您现有的播放列表
+    // 加载现有的播放列表
     await _loadPlaylists();
     // 加载播放模式
     await loadPlayMode();

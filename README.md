@@ -24,6 +24,13 @@
 
 > 完整URL为 [https://lrcapi.showby.top/api/v1/lyrics/single?album=歌曲标题&artist=歌手名称](https://lrcapi.showby.top/api/v1/lyrics/single?album=%E4%B8%8B%E4%B8%80%E4%B8%AA%E5%A4%A9%E4%BA%AE&artist=%E9%83%AD%E9%9D%99)
 
+## 关于 Linux
+
+目前 Linux 版本仅在 **Debian 12 + Gnome(X11)** 测试过，已知问题有**无法选择字体**
+
+目前只提供可执行文件 且图标之类的也没有，后续会考虑其他方案
+
+
 ## 📸 项目截图
 ![](screenshot/0ed4c6045d9d5ec7ffbb1e2d37fbc082.png)
 ![](screenshot/80b1797d1eeffb5e676c999e9111c29e.png)
@@ -56,6 +63,7 @@ flutter run
 
 * [**audio\_metadata\_reader**](https://pub.dev/packages/audio_metadata_reader)：读取音频元信息
 * [**audioplayers**](https://pub.dev/packages/audioplayers)：音频播放支持
+* [**anni\_mpris\_service**](https://pub.dev/packages/anni_mpris_service): D-Bus MPRIS 控件
 * 更多依赖请查看 [pubspec.yaml](pubspec.yaml)
 
 感谢以下项目和开发者的无私分享：
