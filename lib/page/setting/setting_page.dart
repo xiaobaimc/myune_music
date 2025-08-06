@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../playlist/playlist_content_notifier.dart';
 import './theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
 import './settings_provider.dart';
@@ -17,6 +18,7 @@ class _SettingPageState extends State<SettingPage> {
 
   // 直接初始化 TextEditingController
   late final TextEditingController _onlineLyricsApiController;
+  late final FocusNode _onlineLyricsApiFocusNode;
 
   // 先存下 SettingsProvider
   late final SettingsProvider _settingsProvider;
@@ -33,6 +35,10 @@ class _SettingPageState extends State<SettingPage> {
       text: _settingsProvider.onlineLyricsApi,
     );
 
+    // 初始化FocusNode并添加监听器
+    _onlineLyricsApiFocusNode = FocusNode();
+    _onlineLyricsApiFocusNode.addListener(_onLyricsApiFocusChange);
+
     // 监听 settingsProvider 的变化，同步更新 TextEditingController
     // 确保在 dispose 中移除监听
     _settingsProvider.addListener(_onSettingsChanged);
@@ -42,10 +48,27 @@ class _SettingPageState extends State<SettingPage> {
   void dispose() {
     // 小部件已销毁，需要移除监听器避免内存泄漏
     _settingsProvider.removeListener(_onSettingsChanged);
-
-    // 释放控制器
+    _onlineLyricsApiFocusNode.removeListener(_onLyricsApiFocusChange); // 移除监听器
+    _onlineLyricsApiFocusNode.dispose(); // 释放FocusNode
     _onlineLyricsApiController.dispose();
     super.dispose();
+  }
+
+  // 处理焦点变化
+  // 用于屏蔽快捷键的（屏蔽快捷键通过检测isSearching屏蔽的）
+  void _onLyricsApiFocusChange() {
+    final notifier = context.read<PlaylistContentNotifier>();
+    if (_onlineLyricsApiFocusNode.hasFocus) {
+      // 当输入框获得焦点时，触发搜索状态以屏蔽快捷键
+      if (!notifier.isSearching) {
+        notifier.startSearch();
+      }
+    } else {
+      // 当输入框失去焦点时，取消搜索状态以恢复快捷键
+      if (notifier.isSearching) {
+        notifier.stopSearch();
+      }
+    }
   }
 
   // 监听器方法，当 SettingsProvider 变化时更新 _onlineLyricsApiController 的文本
@@ -141,6 +164,7 @@ class _SettingPageState extends State<SettingPage> {
             ),
             child: TextField(
               controller: _onlineLyricsApiController,
+              focusNode: _onlineLyricsApiFocusNode,
               decoration: InputDecoration(
                 labelText: '歌词API地址',
                 hintText: '请输入歌词获取API地址 (例如: https://lrcapi.showby.top)',
