@@ -65,67 +65,71 @@ class _ArtistListState extends State<ArtistList> {
         ),
         // 列表部分
         Expanded(
-          child: Builder(
-            builder: (context) {
-              final artists = notifier.songsByArtist;
-              var artistNames = artists.keys.toList();
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Builder(
+              builder: (context) {
+                final artists = notifier.songsByArtist;
+                var artistNames = artists.keys.toList();
 
-              // 应用搜索过滤逻辑
-              if (_searchKeyword.isNotEmpty) {
-                artistNames = artistNames.where((name) {
-                  return name.toLowerCase().contains(
-                    _searchKeyword.toLowerCase(),
+                // 应用搜索过滤逻辑
+                if (_searchKeyword.isNotEmpty) {
+                  artistNames = artistNames.where((name) {
+                    return name.toLowerCase().contains(
+                      _searchKeyword.toLowerCase(),
+                    );
+                  }).toList();
+                }
+                // 简化为固定的字母排序
+                artistNames.sort(
+                  (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+                );
+
+                if (artistNames.isEmpty) {
+                  return Center(
+                    child: Text(_isSearching ? '未找到匹配的歌手' : '未找到歌手'),
                   );
-                }).toList();
-              }
-              // 简化为固定的字母排序
-              artistNames.sort(
-                (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-              );
+                }
 
-              if (artistNames.isEmpty) {
-                return Center(child: Text(_isSearching ? '未找到匹配的歌手' : '未找到歌手'));
-              }
+                return ListView.builder(
+                  itemCount: artistNames.length,
+                  itemBuilder: (context, index) {
+                    final artistName = artistNames[index];
+                    final songs = artists[artistName]!;
+                    final representativeArt = songs
+                        .firstWhere(
+                          (s) => s.albumArt != null,
+                          orElse: () => songs.first,
+                        )
+                        .albumArt;
 
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
-                itemCount: artistNames.length,
-                itemBuilder: (context, index) {
-                  final artistName = artistNames[index];
-                  final songs = artists[artistName]!;
-                  final representativeArt = songs
-                      .firstWhere(
-                        (s) => s.albumArt != null,
-                        orElse: () => songs.first,
-                      )
-                      .albumArt;
-
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage: representativeArt != null
-                          ? MemoryImage(representativeArt)
-                          : null,
-                      child: representativeArt == null
-                          ? const Icon(Icons.person)
-                          : null,
-                    ),
-                    title: Text(artistName),
-                    subtitle: Text('${songs.length} 首歌曲'),
-                    onTap: () {
-                      notifier.setActiveArtistView(artistName);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const SongListDetailPage(),
-                        ),
-                      );
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.0),
-                    ),
-                  );
-                },
-              );
-            },
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: representativeArt != null
+                            ? MemoryImage(representativeArt)
+                            : null,
+                        child: representativeArt == null
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                      title: Text(artistName),
+                      subtitle: Text('${songs.length} 首歌曲'),
+                      onTap: () {
+                        notifier.setActiveArtistView(artistName);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SongListDetailPage(),
+                          ),
+                        );
+                      },
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ),
       ],
