@@ -40,7 +40,7 @@ class AllSongsPage extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 16.0,
-              vertical: 8.0,
+              vertical: 6.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,54 +93,57 @@ class AllSongsPage extends StatelessWidget {
                           ],
                         ),
                 ),
-                const SizedBox(height: 8),
                 Expanded(
-                  child: Selector<PlaylistContentNotifier, List<Song>>(
-                    selector: (_, notifier) {
-                      // 根据是否在搜索，决定使用哪个列表
-                      return notifier.isSearching
-                          ? notifier.filteredSongs
-                          : notifier.allSongs;
-                    },
-                    builder: (context, songs, _) {
-                      if (songs.isEmpty) {
-                        return Center(
-                          child: Text(isSearching ? '未找到匹配的歌曲' : '没有发现任何歌曲'),
-                        );
-                      }
-
-                      return ReorderableListView.builder(
-                        buildDefaultDragHandles: false,
-                        proxyDecorator: (child, index, animation) => Material(
-                          elevation: 4,
-                          color: colorScheme.surface,
-                          borderRadius: BorderRadius.circular(8),
-                          child: child,
-                        ),
-                        itemCount: songs.length,
-                        itemBuilder: (context, index) {
-                          final song = songs[index];
-                          // 播放时需要找到它在原始 allSongs 列表中的索引
-                          final originalIndex = notifier.allSongs.indexOf(song);
-                          return SongTileWidget(
-                            key: ValueKey(song.filePath),
-                            song: song,
-                            index: index,
-                            contextPlaylist: notifier.allSongsVirtualPlaylist,
-                            onTap: () {
-                              if (originalIndex != -1) {
-                                notifier.playSongFromAllSongs(originalIndex);
-                              }
-                            },
+                  child: Material(
+                    child: Selector<PlaylistContentNotifier, List<Song>>(
+                      selector: (_, notifier) {
+                        // 根据是否在搜索，决定使用哪个列表
+                        return notifier.isSearching
+                            ? notifier.filteredSongs
+                            : notifier.allSongs;
+                      },
+                      builder: (context, songs, _) {
+                        if (songs.isEmpty) {
+                          return Center(
+                            child: Text(isSearching ? '未找到匹配的歌曲' : '没有发现任何歌曲'),
                           );
-                        },
-                        onReorder: (oldIndex, newIndex) {
-                          // 在搜索时，不执行排序操作
-                          if (isSearching) return;
-                          notifier.reorderAllSongs(oldIndex, newIndex);
-                        },
-                      );
-                    },
+                        }
+
+                        return ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
+                          proxyDecorator: (child, index, animation) => Material(
+                            elevation: 4,
+                            color: colorScheme.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            child: child,
+                          ),
+                          itemCount: songs.length,
+                          itemBuilder: (context, index) {
+                            final song = songs[index];
+                            // 播放时需要找到它在原始 allSongs 列表中的索引
+                            final originalIndex = notifier.allSongs.indexOf(
+                              song,
+                            );
+                            return SongTileWidget(
+                              key: ValueKey(song.filePath),
+                              song: song,
+                              index: index,
+                              contextPlaylist: notifier.allSongsVirtualPlaylist,
+                              onTap: () {
+                                if (originalIndex != -1) {
+                                  notifier.playSongFromAllSongs(originalIndex);
+                                }
+                              },
+                            );
+                          },
+                          onReorder: (oldIndex, newIndex) {
+                            // 在搜索时，不执行排序操作
+                            if (isSearching) return;
+                            notifier.reorderAllSongs(oldIndex, newIndex);
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],

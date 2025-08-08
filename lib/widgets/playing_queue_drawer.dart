@@ -46,24 +46,27 @@ class PlayingQueueDrawer extends StatelessWidget {
                   const Expanded(child: Center(child: Text('当前没有播放任何歌曲')))
                 else
                   Expanded(
-                    child: ListView.builder(
-                      itemCount: queue.length,
-                      itemBuilder: (context, index) {
-                        final song = queue[index];
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: ListView.builder(
+                        itemCount: queue.length,
+                        itemBuilder: (context, index) {
+                          final song = queue[index];
 
-                        // 再次复用 SongTileWidget
-                        return SongTileWidget(
-                          key: ValueKey(song.filePath),
-                          song: song,
-                          index: index,
-                          // 传入当前播放的歌单作为上下文
-                          contextPlaylist: playingPlaylist!,
-                          onTap: () {
-                            // 这里的index正好就是歌曲在队列中的索引
-                            notifier.playSongFromQueue(index);
-                          },
-                        );
-                      },
+                          // 再次复用 SongTileWidget
+                          return SongTileWidget(
+                            key: ValueKey(song.filePath),
+                            song: song,
+                            index: index,
+                            // 传入当前播放的歌单作为上下文
+                            contextPlaylist: playingPlaylist!,
+                            onTap: () {
+                              // 这里的index正好就是歌曲在队列中的索引
+                              notifier.playSongFromQueue(index);
+                            },
+                          );
+                        },
+                      ),
                     ),
                   ),
               ],

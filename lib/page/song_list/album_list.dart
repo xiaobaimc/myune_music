@@ -21,7 +21,7 @@ class _AlbumListState extends State<AlbumList> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             child: _isSearching
@@ -66,105 +66,110 @@ class _AlbumListState extends State<AlbumList> {
 
         // 列表部分
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Builder(
-              builder: (context) {
-                final albums = notifier.songsByAlbum;
-                var albumNames = albums.keys.toList();
+          child: Material(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Builder(
+                builder: (context) {
+                  final albums = notifier.songsByAlbum;
+                  var albumNames = albums.keys.toList();
 
-                // 应用搜索过滤逻辑
-                if (_searchKeyword.isNotEmpty) {
-                  albumNames = albumNames.where((name) {
-                    return name.toLowerCase().contains(
-                      _searchKeyword.toLowerCase(),
-                    );
-                  }).toList();
-                }
+                  // 应用搜索过滤逻辑
+                  if (_searchKeyword.isNotEmpty) {
+                    albumNames = albumNames.where((name) {
+                      return name.toLowerCase().contains(
+                        _searchKeyword.toLowerCase(),
+                      );
+                    }).toList();
+                  }
 
-                // 简化为固定的字母排序
-                albumNames.sort(
-                  (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-                );
-
-                if (albumNames.isEmpty) {
-                  return Center(
-                    child: Text(_isSearching ? '未找到匹配的专辑' : '没有找到任何专辑'),
+                  // 简化为固定的字母排序
+                  albumNames.sort(
+                    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
                   );
-                }
 
-                return GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 200,
-                    childAspectRatio: 0.8,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: albumNames.length,
-                  itemBuilder: (context, index) {
-                    final albumName = albumNames[index];
-                    final songs = albums[albumName]!;
-                    final albumArt = songs.first.albumArt;
-
-                    return InkWell(
-                      onTap: () {
-                        notifier.setActiveAlbumView(albumName);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SongListDetailPage(),
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(12.0),
-                      child: Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Container(
-                                width: double.infinity,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.secondaryContainer,
-                                child: albumArt != null
-                                    ? Image.memory(
-                                        albumArt,
-                                        fit: BoxFit.cover,
-                                        gaplessPlayback: true,
-                                      )
-                                    : const Icon(Icons.album, size: 50),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Text(
-                                albumName,
-                                style: Theme.of(context).textTheme.titleMedium,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0,
-                              ),
-                              child: Text(
-                                songs.first.artist,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        ),
-                      ),
+                  if (albumNames.isEmpty) {
+                    return Center(
+                      child: Text(_isSearching ? '未找到匹配的专辑' : '没有找到任何专辑'),
                     );
-                  },
-                );
-              },
+                  }
+
+                  return GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          childAspectRatio: 0.8,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: albumNames.length,
+                    itemBuilder: (context, index) {
+                      final albumName = albumNames[index];
+                      final songs = albums[albumName]!;
+                      final albumArt = songs.first.albumArt;
+
+                      return InkWell(
+                        onTap: () {
+                          notifier.setActiveAlbumView(albumName);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SongListDetailPage(),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12.0),
+                        child: Card(
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  width: double.infinity,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.secondaryContainer,
+                                  child: albumArt != null
+                                      ? Image.memory(
+                                          albumArt,
+                                          fit: BoxFit.cover,
+                                          gaplessPlayback: true,
+                                        )
+                                      : const Icon(Icons.album, size: 50),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text(
+                                  albumName,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0,
+                                ),
+                                child: Text(
+                                  songs.first.artist,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ),

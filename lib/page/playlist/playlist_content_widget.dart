@@ -13,7 +13,7 @@ class PlaylistContentWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
+    return Material(
       color: colorScheme.surface,
       child: Row(
         children: [
