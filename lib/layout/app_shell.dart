@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:provider/provider.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
@@ -90,21 +89,17 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: Colors.transparent,
-      endDrawer: const PlayingQueueDrawer(),
-      body: WindowBorder(
+      endDrawer: PlayingQueueDrawer(),
+      body: Material(
         color: Colors.transparent,
-        width: 0,
-        child: const Material(
-          color: Colors.transparent,
-          child: Column(
-            children: [
-              AppWindowTitleBar(),
-              Expanded(child: MainView()),
-              Playbar(),
-            ],
-          ),
+        child: Column(
+          children: [
+            AppWindowTitleBar(),
+            Expanded(child: MainView()),
+            Playbar(),
+          ],
         ),
       ),
     );

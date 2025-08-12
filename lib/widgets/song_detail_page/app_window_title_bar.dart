@@ -1,76 +1,80 @@
 import 'package:flutter/material.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:window_manager/window_manager.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
   const AppWindowTitleBar({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return WindowTitleBarBox(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.transparent, // 透明背景以显示模糊效果
-        ),
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Row(
-                children: [
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.arrow_back,
-                      color: Theme.of(context).textTheme.bodyLarge?.color,
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    tooltip: '返回',
+    return Container(
+      height: 31.0,
+      decoration: const BoxDecoration(
+        color: Colors.transparent, // 透明背景以显示模糊效果
+      ),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    Icons.arrow_back,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
                   ),
-                  ColorFiltered(
-                    colorFilter: ColorFilter.mode(
-                      Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : Colors.black,
-                      BlendMode.srcIn,
-                    ),
-                    child: Image.asset(
-                      'assets/images/icon/icon.png',
-                      width: 21,
-                      height: 21,
-                    ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  tooltip: '返回',
+                ),
+                ColorFiltered(
+                  colorFilter: ColorFilter.mode(
+                    Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    BlendMode.srcIn,
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    "MyuneMusic",
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  child: Image.asset(
+                    'assets/images/icon/icon.png',
+                    width: 21,
+                    height: 21,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  "MyuneMusic",
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ],
             ),
-            Expanded(child: MoveWindow()),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _WindowButton(
-                    icon: Icons.remove,
-                    onPressed: () => appWindow.minimize(),
-                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                  ),
-                  const SizedBox(width: 2),
-                  _WindowButton(
-                    icon: Icons.close,
-                    onPressed: () => appWindow.close(),
-                    hoverColor: const Color.fromRGBO(239, 154, 154, 1),
-                  ),
-                ],
-              ),
+          ),
+          Expanded(
+            child: DragToMoveArea(
+              // 这里的Container是为了保证这个区域可以拖动
+              child: Container(),
             ),
-          ],
-        ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _WindowButton(
+                  icon: Icons.remove,
+                  onPressed: () => windowManager.minimize(),
+                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                ),
+                const SizedBox(width: 2),
+                _WindowButton(
+                  icon: Icons.close,
+                  onPressed: () => windowManager.close(),
+                  hoverColor: const Color.fromRGBO(239, 154, 154, 1),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

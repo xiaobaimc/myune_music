@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:window_manager/window_manager.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
   const AppWindowTitleBar({super.key});
@@ -8,58 +8,62 @@ class AppWindowTitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
     final Color titleBarBackgroundColor = colorScheme.surface;
-    return WindowTitleBarBox(
-      child: Container(
-        color: titleBarBackgroundColor,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Row(
-                children: [
-                  ColorFiltered(
-                    colorFilter: ColorFilter.mode(
-                      Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : Colors.black,
-                      BlendMode.srcIn,
-                    ),
-                    child: Image.asset(
-                      'assets/images/icon/icon.png',
-                      width: 21,
-                      height: 21,
-                    ),
+    return Container(
+      height: 31.0,
+      color: titleBarBackgroundColor,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                ColorFiltered(
+                  colorFilter: ColorFilter.mode(
+                    Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    BlendMode.srcIn,
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    "MyuneMusic",
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  child: Image.asset(
+                    'assets/images/icon/icon.png',
+                    width: 21,
+                    height: 21,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  "MyuneMusic",
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ],
             ),
-            Expanded(child: MoveWindow()),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _WindowButton(
-                    icon: Icons.remove,
-                    onPressed: () => appWindow.minimize(),
-                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                  ),
-                  const SizedBox(width: 2),
-                  _WindowButton(
-                    icon: Icons.close,
-                    onPressed: () => appWindow.close(),
-                    hoverColor: const Color.fromRGBO(239, 154, 154, 1),
-                  ),
-                ],
-              ),
+          ),
+          Expanded(
+            child: DragToMoveArea(
+              // 这里的Container是为了保证这个区域可以拖动
+              child: Container(),
             ),
-          ],
-        ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _WindowButton(
+                  icon: Icons.remove,
+                  onPressed: () => windowManager.minimize(),
+                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                ),
+                const SizedBox(width: 2),
+                _WindowButton(
+                  icon: Icons.close,
+                  onPressed: () => windowManager.close(),
+                  hoverColor: const Color.fromRGBO(239, 154, 154, 1),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

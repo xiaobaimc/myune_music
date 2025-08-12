@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -14,6 +14,25 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await RustLib.init();
+
+  // 初始化window_manager
+  await windowManager.ensureInitialized();
+  const initialSize = Size(1200, 700);
+  const minPossibleSize = Size(550, 600);
+  const WindowOptions windowOptions = WindowOptions(
+    size: initialSize,
+    minimumSize: minPossibleSize,
+    center: true,
+    title: "MyuneMusic",
+    titleBarStyle: TitleBarStyle.hidden,
+    backgroundColor: Colors.transparent, // 让原生窗口背景透明
+  );
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.setAsFrameless();
+    await windowManager.setHasShadow(true);
+    await windowManager.show();
+    await windowManager.focus();
+  });
 
   final themeProvider = ThemeProvider();
   await themeProvider.initialize();
@@ -36,16 +55,6 @@ void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
   };
-  // TODO: bitsdojo_window太久没人维护了 考虑更换window_manager
-  doWhenWindowReady(() {
-    const initialSize = Size(1200, 700);
-    const minPossibleSize = Size(550, 600);
-    appWindow.minSize = minPossibleSize;
-    appWindow.size = initialSize;
-    appWindow.alignment = Alignment.center;
-    appWindow.title = "MyuneMusic";
-    appWindow.show();
-  });
 
   final systemFonts = SystemFonts();
   await themeProvider.loadCurrentFont(systemFonts);
