@@ -1,45 +1,17 @@
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:colorgram/colorgram.dart';
 import '../widgets/lyrics_widget.dart';
 import 'playlist/playlist_content_notifier.dart';
 import '../widgets/song_detail_page/playbar.dart';
 import '../widgets/song_detail_page/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
-import '../theme/theme_provider.dart';
 import '../widgets/playing_queue_drawer.dart';
 
 // 公共模糊背景组件
 class BackgroundBlurWidget extends StatelessWidget {
   final Widget child;
   const BackgroundBlurWidget({super.key, required this.child});
-
-  Future<void> _extractAndUpdateColor(
-    BuildContext context,
-    Uint8List albumArt,
-  ) async {
-    try {
-      final themeProvider = context.read<ThemeProvider>();
-      final colors = await extractColor(
-        MemoryImage(albumArt),
-        1, // 提取一种主色调
-      );
-      if (colors.isNotEmpty) {
-        final dominantColor = colors[0];
-        final color = Color.fromRGBO(
-          dominantColor.r,
-          dominantColor.g,
-          dominantColor.b,
-          1.0,
-        );
-        themeProvider.setSeedColor(color);
-      }
-    } catch (e) {
-      // print('提取颜色失败 $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,20 +20,6 @@ class BackgroundBlurWidget extends StatelessWidget {
         final currentSong = playlistNotifier.currentSong;
         final settings = context.watch<SettingsProvider>();
         final useBlurBackground = settings.useBlurBackground;
-        final useDynamicColor = settings.useDynamicColor;
-
-        // 根据 useDynamicColor 决定是否提取颜色
-        if (useDynamicColor) {
-          // 异步提取颜色
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _extractAndUpdateColor(context, currentSong!.albumArt!);
-          });
-          // } else {
-          //   // 禁用动态颜色时，恢复默认种子颜色
-          //   WidgetsBinding.instance.addPostFrameCallback((_) {
-          //     context.read<ThemeProvider>().setSeedColor(Colors.blue);
-          //   });
-        }
 
         // 当没有封面图或用户未启用模糊背景时，使用纯色背景
         if (currentSong?.albumArt == null || !useBlurBackground) {

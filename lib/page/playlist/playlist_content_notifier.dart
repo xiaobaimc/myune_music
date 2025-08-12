@@ -11,12 +11,14 @@ import 'package:path/path.dart' as p;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:colorgram/colorgram.dart';
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
 import 'sort_options.dart';
 import '../../media_service/smtc_manager.dart';
 import '../setting/settings_provider.dart';
+import '../../theme/theme_provider.dart';
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -26,6 +28,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 播放列表相关 ---
   final PlaylistManager _playlistManager = PlaylistManager();
   final SettingsProvider _settingsProvider;
+  final ThemeProvider _themeProvider;
 
   List<Playlist> _playlists = []; // 所有歌单列表
   List<Playlist> get playlists => _playlists;
@@ -131,7 +134,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Stream<String> get errorStream => _errorStreamController.stream;
   Stream<String> get infoStream => _infoStreamController.stream;
 
-  PlaylistContentNotifier(this._settingsProvider) {
+  PlaylistContentNotifier(this._settingsProvider, this._themeProvider) {
     _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
     _loadAllData(); // 使用一个统一的方法来加载所有数据
     _audioPlayer.setBalance(_currentBalance);
@@ -728,6 +731,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // await dumpCover(songToPlay.albumArt!);
       await _smtcManager?.updateState(true); // 播放状态
 
+      // 提取并应用动态主题色
+      _extractAndApplyDynamicColor(songToPlay.albumArt);
+
       await _audioPlayer.resume(); // 最后执行播放
 
       notifyListeners();
@@ -736,6 +742,36 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
 
       await playNext();
+    }
+  }
+
+  // -- 主题管理 --
+  // 提取并应用动态主题色
+  Future<void> _extractAndApplyDynamicColor(Uint8List? albumArt) async {
+    // 检查设置是否启用了动态颜色
+    if (!_settingsProvider.useDynamicColor || albumArt == null) {
+      return;
+    }
+
+    try {
+      final colors = await extractColor(
+        MemoryImage(albumArt),
+        1, // 提取一种主色调
+      );
+      if (colors.isNotEmpty) {
+        final dominantColor = colors[0];
+        final color = Color.fromRGBO(
+          dominantColor.r,
+          dominantColor.g,
+          dominantColor.b,
+          1.0,
+        );
+
+        // 设置主题色
+        _themeProvider.setSeedColor(color);
+      }
+    } catch (e) {
+      // print('提取颜色失败 $e');
     }
   }
 

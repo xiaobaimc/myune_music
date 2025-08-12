@@ -93,6 +93,7 @@ class AllSongsPage extends StatelessWidget {
                           ],
                         ),
                 ),
+                const SizedBox(height: 6),
                 Expanded(
                   child: Material(
                     child: Selector<PlaylistContentNotifier, List<Song>>(

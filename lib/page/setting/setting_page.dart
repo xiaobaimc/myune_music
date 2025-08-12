@@ -86,7 +86,24 @@ class _SettingPageState extends State<SettingPage> {
 
     return ListView(
       children: [
+        // 主题配色选择
         const ThemeSelectionScreen(),
+        // 启用动态获取颜色
+        SwitchListTile(
+          title: Text(
+            '提取当前播放的封面图颜色作为主题配色',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          value: settings.useDynamicColor, // 使用 settings
+          onChanged: (value) {
+            _settingsProvider.setUseDynamicColor(value);
+            // 当关闭动态颜色时，恢复默认颜色
+            if (!value) {
+              context.read<ThemeProvider>().setSeedColor(Colors.blue);
+            }
+          },
+        ),
+        // 深色模式
         SwitchListTile(
           title: Text('深色模式', style: Theme.of(context).textTheme.titleMedium),
           value: context.watch<ThemeProvider>().isDarkMode,
@@ -126,7 +143,17 @@ class _SettingPageState extends State<SettingPage> {
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: FontSelectorRow(),
           ),
-
+        // 启用模糊背景
+        SwitchListTile(
+          title: Text(
+            '启用详情页模糊背景',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          value: settings.useBlurBackground, // 使用 settings
+          onChanged: (value) {
+            _settingsProvider.setUseBlurBackground(value);
+          },
+        ),
         // 是否启用从网络获取歌词
         SwitchListTile(
           title: Text(
@@ -252,32 +279,6 @@ class _SettingPageState extends State<SettingPage> {
               ),
             ],
           ),
-        ),
-        // 启用模糊背景
-        SwitchListTile(
-          title: Text(
-            '启用详情页模糊背景',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          value: settings.useBlurBackground, // 使用 settings
-          onChanged: (value) {
-            _settingsProvider.setUseBlurBackground(value);
-          },
-        ),
-        // 启用动态获取颜色
-        SwitchListTile(
-          title: Text(
-            '在详情页时,提取封面图颜色作为主题配色',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          value: settings.useDynamicColor, // 使用 settings
-          onChanged: (value) {
-            _settingsProvider.setUseDynamicColor(value);
-            // 当关闭动态颜色时，恢复默认颜色
-            if (!value) {
-              context.read<ThemeProvider>().setSeedColor(Colors.blue);
-            }
-          },
         ),
       ],
     );
