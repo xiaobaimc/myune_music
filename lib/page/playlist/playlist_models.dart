@@ -34,6 +34,7 @@ class Playlist {
   String name;
   final bool isDefault;
   List<String> songFilePaths;
+  List<Song>? songs; // 直接在歌单对象中存储已解析的歌曲
 
   // 保存当前歌单播放歌曲的索引
   int? currentPlayingIndex;
@@ -44,6 +45,7 @@ class Playlist {
     this.isDefault = false,
     List<String>? songFilePaths,
     this.currentPlayingIndex,
+    this.songs,
   }) : id = id ?? const Uuid().v4(),
        songFilePaths = songFilePaths ?? [];
 

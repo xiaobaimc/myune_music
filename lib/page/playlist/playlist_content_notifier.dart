@@ -249,14 +249,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
 
     final currentPlaylist = _playlists[_selectedIndex];
-    final List<Song> songsWithMetadata = [];
+    // 确保当前播放列表的歌曲已被解析且与文件路径列表一致
+    await _ensurePlaylistSongs(currentPlaylist);
+    _currentPlaylistSongs = currentPlaylist.songs!;
 
-    for (final filePath in currentPlaylist.songFilePaths) {
-      final song = await _parseSongMetadata(filePath);
-      songsWithMetadata.add(song);
-    }
-
-    _currentPlaylistSongs = songsWithMetadata;
     _isLoadingSongs = false;
     // if (_isSearching) {
     //   _updateFilteredSongs(searchInAllSongs: false); // 如果正在搜索，同步更新结果
@@ -475,42 +471,54 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 获取当前播放队列的歌曲列表
   List<Song> get playingQueueSongs {
     // 如果没有正在播放的歌单，返回空
-    if (_playingPlaylist == null) {
+    if (_playingPlaylist == null || _playingPlaylist!.songs == null) {
       return [];
     }
 
-    // 创建多重映射以确保能找到所有歌曲
-    final allSongsMap = {for (final song in _allSongs) song.filePath: song};
-    final currentPlaylistSongsMap = {
-      for (final song in _currentPlaylistSongs) song.filePath: song,
-    };
+    // 直接使用_playingPlaylist对象中已解析好的songs列表
+    return _playingPlaylist!.songs!;
+  }
 
-    final List<Song> queueSongs = [];
-
-    // 根据播放队列路径列表提取对应的歌曲
-    for (final path in _playingPlaylist!.songFilePaths) {
-      // 按优先级查找歌曲:
-      // 1. 首先尝试从当前歌单已解析的歌曲中查找
-      // 2. 然后尝试从全部歌曲中查找
-      // 3. 最后如果都找不到，创建一个临时Song对象
-      final song = currentPlaylistSongsMap[path] ?? allSongsMap[path];
-
-      if (song != null) {
-        queueSongs.add(song);
+  // 确保播放列表的歌曲已被解析
+  Future<void> _ensurePlaylistSongs(Playlist playlist) async {
+    if (playlist.songs == null) {
+      final List<Song> songsWithMetadata = [];
+      for (final filePath in playlist.songFilePaths) {
+        final song = await _parseSongMetadata(filePath);
+        songsWithMetadata.add(song);
+      }
+      playlist.songs = songsWithMetadata;
+    } else {
+      // 检查歌曲列表是否与文件路径列表一致
+      if (playlist.songs!.length != playlist.songFilePaths.length) {
+        // 重新解析所有歌曲
+        final List<Song> songsWithMetadata = [];
+        for (final filePath in playlist.songFilePaths) {
+          final song = await _parseSongMetadata(filePath);
+          songsWithMetadata.add(song);
+        }
+        playlist.songs = songsWithMetadata;
       } else {
-        // 如果找不到已解析的歌曲信息，创建临时对象
-        queueSongs.add(
-          Song(
-            title: p.basenameWithoutExtension(path),
-            artist: '未知歌手',
-            filePath: path,
-            albumArt: null,
-          ),
-        );
+        // 检查文件路径是否匹配
+        bool needsUpdate = false;
+        for (int i = 0; i < playlist.songFilePaths.length; i++) {
+          if (playlist.songs![i].filePath != playlist.songFilePaths[i]) {
+            needsUpdate = true;
+            break;
+          }
+        }
+
+        if (needsUpdate) {
+          // 重新解析所有歌曲
+          final List<Song> songsWithMetadata = [];
+          for (final filePath in playlist.songFilePaths) {
+            final song = await _parseSongMetadata(filePath);
+            songsWithMetadata.add(song);
+          }
+          playlist.songs = songsWithMetadata;
+        }
       }
     }
-
-    return queueSongs;
   }
 
   // --- 播放控制 ---
@@ -702,8 +710,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return;
     }
 
+    // 确保播放列表的歌曲已被解析
+    await _ensurePlaylistSongs(_playingPlaylist!);
+
     final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
-    final songToPlay = await _parseSongMetadata(songFilePath);
+    final songToPlay = _playingPlaylist!.songs![_playingSongIndex];
 
     // 检查文件是否存在
     if (songToPlay.artist.contains('文件不存在')) {
@@ -883,6 +894,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 更新数据模型
     currentPlaylist.songFilePaths = sortedPaths;
+
+    // 同时更新songs列表的顺序
+    if (currentPlaylist.songs != null) {
+      final songMap = {
+        for (final song in currentPlaylist.songs!) song.filePath: song,
+      };
+      currentPlaylist.songs = sortedPaths
+          .map((path) => songMap[path]!)
+          .toList();
+    }
 
     await _savePlaylists();
 
