@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/lyrics_widget.dart';
@@ -162,7 +163,6 @@ class SongDetailPage extends StatelessWidget {
                                             ),
                                             textAlign: TextAlign.center,
                                           ),
-                                          const SizedBox(height: 3),
                                           // 艺术家
                                           Text(
                                             (currentSong?.artist ?? '未知艺术家')
@@ -177,63 +177,79 @@ class SongDetailPage extends StatelessWidget {
                                             ),
                                             textAlign: TextAlign.center,
                                           ),
-                                          const SizedBox(height: 10),
+                                          const SizedBox(height: 8),
                                           // 专辑封面
-                                          Container(
-                                            width: 300,
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.3),
-                                                  blurRadius: 12,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              child: AspectRatio(
-                                                aspectRatio: 1,
-                                                child:
-                                                    (currentSong?.albumArt !=
-                                                            null &&
-                                                        currentSong!
-                                                            .albumArt!
-                                                            .isNotEmpty)
-                                                    ? Image.memory(
-                                                        currentSong.albumArt!,
-                                                        fit: BoxFit.cover,
-                                                        errorBuilder:
-                                                            (
-                                                              context,
-                                                              error,
-                                                              stackTrace,
-                                                            ) {
-                                                              return const Icon(
-                                                                Icons
-                                                                    .music_note,
-                                                                size: 72,
-                                                                color: Colors
-                                                                    .black12,
-                                                              );
-                                                            },
-                                                      )
-                                                    : Container(
-                                                        color: Colors.black12,
-                                                        child: const Icon(
-                                                          Icons.music_note,
-                                                          size: 72,
-                                                          color: Colors.black12,
+                                          LayoutBuilder(
+                                            builder: (context, constraints) {
+                                              final w = constraints.maxWidth;
+                                              // 按父容器宽度的60%计算封面大小，再限制在330~480像素之间，最后不超过父容器宽度
+                                              final double size = min(
+                                                w,
+                                                ((w * 0.6)).clamp(330.0, 480.0),
+                                              );
+
+                                              final borderRadius =
+                                                  BorderRadius.circular(12);
+                                              const Widget fallback = Icon(
+                                                Icons.music_note,
+                                                size: 72,
+                                                color: Colors.black12,
+                                              );
+
+                                              return SizedBox.square(
+                                                dimension: size,
+                                                child: DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: borderRadius,
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: Colors.black
+                                                            .withValues(
+                                                              alpha: 0.3,
+                                                            ),
+                                                        blurRadius: 12,
+                                                        offset: const Offset(
+                                                          0,
+                                                          2,
                                                         ),
                                                       ),
-                                              ),
-                                            ),
+                                                    ],
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius: borderRadius,
+                                                    child: AspectRatio(
+                                                      aspectRatio: 1,
+                                                      child:
+                                                          (currentSong?.albumArt !=
+                                                                  null &&
+                                                              currentSong!
+                                                                  .albumArt!
+                                                                  .isNotEmpty)
+                                                          ? Image.memory(
+                                                              currentSong
+                                                                  .albumArt!,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder:
+                                                                  (
+                                                                    _,
+                                                                    __,
+                                                                    ___,
+                                                                  ) => fallback,
+                                                            )
+                                                          : const ColoredBox(
+                                                              color: Colors
+                                                                  .black12,
+                                                              child: Center(
+                                                                child: fallback,
+                                                              ),
+                                                            ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
-                                          const SizedBox(height: 10),
+                                          const SizedBox(height: 8),
                                           // 播放控制区域
                                           const Playbar(),
                                         ],

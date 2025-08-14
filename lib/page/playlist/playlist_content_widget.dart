@@ -13,7 +13,7 @@ class PlaylistContentWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Material(
+    return Container(
       color: colorScheme.surface,
       child: Row(
         children: [
@@ -562,60 +562,63 @@ class _SongTileWidgetState extends State<SongTileWidget> {
               n.playerState == PlayerState.paused);
     });
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: ReorderableDragStartListener(
-        index: widget.index,
-        child: InkWell(
-          onTap: widget.onTap,
-          onSecondaryTapDown: (details) {
-            // 根据 enableContextMenu 参数决定是否显示右键菜单
-            if (widget.enableContextMenu) {
-              _showSongContextMenu(details.globalPosition, notifier);
-            }
-          },
+    return Material(
+      color: Colors.transparent,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: ReorderableDragStartListener(
+          index: widget.index,
+          child: InkWell(
+            onTap: widget.onTap,
+            onSecondaryTapDown: (details) {
+              // 根据 enableContextMenu 参数决定是否显示右键菜单
+              if (widget.enableContextMenu) {
+                _showSongContextMenu(details.globalPosition, notifier);
+              }
+            },
 
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            decoration: BoxDecoration(
-              color: _isHovered
-                  ? colorScheme.onSurface.withValues(alpha: 0.1)
-                  : isPlaying
-                  ? colorScheme.primary.withValues(alpha: 0.1)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ListTile(
-              leading: SizedBox(
-                width: 50,
-                height: 50,
-                child: widget.song.albumArt != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.memory(
-                          widget.song.albumArt!,
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              decoration: BoxDecoration(
+                color: _isHovered
+                    ? colorScheme.onSurface.withValues(alpha: 0.1)
+                    : isPlaying
+                    ? colorScheme.primary.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListTile(
+                leading: SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: widget.song.albumArt != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.memory(
+                            widget.song.albumArt!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.music_note,
+                          size: 40,
+                          color: Colors.grey,
                         ),
-                      )
-                    : const Icon(
-                        Icons.music_note,
-                        size: 40,
-                        color: Colors.grey,
-                      ),
+                ),
+                title: Text(
+                  widget.song.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  widget.song.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Text('${widget.index + 1}.'),
               ),
-              title: Text(
-                widget.song.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                widget.song.artist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Text('${widget.index + 1}.'),
             ),
           ),
         ),

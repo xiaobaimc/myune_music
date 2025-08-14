@@ -74,7 +74,7 @@ class MyApp extends StatelessWidget {
           darkTheme: themeProvider.darkThemeData,
           themeMode: themeProvider.themeMode,
           builder: (context, materialAppChild) {
-            return Hotkeys(child: materialAppChild!);
+            return DragToResizeArea(child: Hotkeys(child: materialAppChild!));
           },
 
           home: const AppShell(),
