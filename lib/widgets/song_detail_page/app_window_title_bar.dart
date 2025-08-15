@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
-  const AppWindowTitleBar({super.key});
+  final VoidCallback onSettingsPressed;
+
+  const AppWindowTitleBar({super.key, required this.onSettingsPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +29,14 @@ class AppWindowTitleBar extends StatelessWidget {
                     Navigator.of(context).pop();
                   },
                   tooltip: '返回',
+                  padding: EdgeInsets.zero,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.more_horiz),
+                  onPressed: onSettingsPressed,
+                  tooltip: '歌词设置',
+                  padding: EdgeInsets.zero,
                 ),
                 ColorFiltered(
                   colorFilter: ColorFilter.mode(

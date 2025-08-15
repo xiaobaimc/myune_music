@@ -1,13 +1,16 @@
 import 'dart:ui' as ui;
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../widgets/lyrics_widget.dart';
 import 'playlist/playlist_content_notifier.dart';
 import '../widgets/song_detail_page/playbar.dart';
 import '../widgets/song_detail_page/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
 import '../widgets/playing_queue_drawer.dart';
+import '../widgets/lyrics_settings_drawer.dart';
 
 // 公共模糊背景组件
 class BackgroundBlurWidget extends StatelessWidget {
@@ -79,7 +82,15 @@ class SongDetailPage extends StatelessWidget {
         child: Column(
           children: [
             // 标题栏（保留）
-            const AppWindowTitleBar(),
+            Builder(
+              builder: (BuildContext context) {
+                return AppWindowTitleBar(
+                  onSettingsPressed: () {
+                    Scaffold.of(context).openDrawer();
+                  },
+                );
+              },
+            ),
             // 主内容区域
             Expanded(
               child: isPortrait
@@ -182,10 +193,10 @@ class SongDetailPage extends StatelessWidget {
                                           LayoutBuilder(
                                             builder: (context, constraints) {
                                               final w = constraints.maxWidth;
-                                              // 按父容器宽度的60%计算封面大小，再限制在330~480像素之间，最后不超过父容器宽度
+                                              // 按父容器宽度的60%计算封面大小，再限制在310~480像素之间，最后不超过父容器宽度
                                               final double size = min(
                                                 w,
-                                                ((w * 0.6)).clamp(330.0, 480.0),
+                                                ((w * 0.6)).clamp(310.0, 480.0),
                                               );
 
                                               final borderRadius =
@@ -320,6 +331,7 @@ class SongDetailPage extends StatelessWidget {
           ],
         ),
       ),
+      drawer: const LyricsSettingsDrawer(),
     );
   }
 }
