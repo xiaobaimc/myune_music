@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
@@ -23,21 +24,23 @@ class LyricsWidget extends StatefulWidget {
 }
 
 class _LyricsWidgetState extends State<LyricsWidget> {
-  final ScrollController _scrollController = ScrollController();
-  final Map<int, GlobalKey> _itemKeys = {};
-  final Map<int, double> _cachedItemHeights = {}; // 清除高度缓存
+  final ItemScrollController _itemScrollController = ItemScrollController();
+  final ItemPositionsListener _itemPositionsListener =
+      ItemPositionsListener.create();
   int? _hoveredIndex;
 
-  // 记录用于估算的上一次宽度与设置（用于在这些变化时清理缓存并重新定位）
   double? _lastEstimatedMaxWidth;
   double? _lastFontSize;
   TextAlign? _lastAlignment;
+  int? _lastMaxLinesPerLyric;
 
   @override
   void initState() {
     super.initState();
     // 首次构建后滚动到当前行
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrentLine());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollToCurrentLine(instant: true),
+    );
   }
 
   @override
@@ -48,71 +51,28 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     if (widget.currentIndex != oldWidget.currentIndex) {
       _scrollToCurrentLine();
     }
-
-    // 歌词列表对象变化时，清理 key/高度缓存
-    if (!identical(widget.lyrics, oldWidget.lyrics)) {
-      _itemKeys.clear();
-      _cachedItemHeights.clear(); // 清除高度缓存
-    }
-
-    if (widget.maxLinesPerLyric != oldWidget.maxLinesPerLyric) {
-      _cachedItemHeights.clear(); // 清除高度缓存
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _scrollToCurrentLine(),
-      );
-    }
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
+  // 滚动方法
+  void _scrollToCurrentLine({bool instant = false}) {
+    if (!mounted || !_itemScrollController.isAttached) return;
 
-  void _scrollToCurrentLine() {
-    if (!mounted) return;
-    final targetKey = _itemKeys[widget.currentIndex];
+    // 检查索引是否有效
+    if (widget.currentIndex < 0 ||
+        widget.currentIndex >= widget.lyrics.length) {
+      return;
+    }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      // 如果 GlobalKey 可用，优先精准滚动
-      if (targetKey?.currentContext != null) {
-        Scrollable.ensureVisible(
-          targetKey!.currentContext!,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          alignment: 0.5, // 目标歌词行居中
-        );
-        return;
-      }
-
-      // 如果 GlobalKey 不可用，使用估算滚动
-      if (!_scrollController.hasClients) return;
-
-      double offset = 0;
-      // 累加从列表开始到目标歌词行之前的每一个歌词项的估算高度
-      for (int i = 0; i < widget.currentIndex; i++) {
-        offset += _estimateLyricItemHeight(i);
-      }
-
-      // 调整偏移量，使目标歌词行大致居中
-      final double listViewHeight =
-          _scrollController.position.viewportDimension;
-      offset -= (listViewHeight / 2);
-      offset += _estimateLyricItemHeight(widget.currentIndex) / 2;
-
-      // 限制偏移量在滚动范围之内，避免超出内容区域
-      final min = _scrollController.position.minScrollExtent;
-      final max = _scrollController.position.maxScrollExtent;
-      offset = offset.clamp(min, max);
-
-      _scrollController.animateTo(
-        offset,
+    if (instant) {
+      _itemScrollController.jumpTo(index: widget.currentIndex, alignment: 0.5);
+    } else {
+      _itemScrollController.scrollTo(
+        index: widget.currentIndex,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
+        alignment: 0.4, // 0.4 看起来更顺眼一点
       );
-    });
+    }
   }
 
   @override
@@ -132,30 +92,38 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         // 与下方 Container 宽度保持一致（减去 padding）
         final double maxWidth = constraints.maxWidth - 12;
 
-        // 当宽度/字体/对齐变化时，清除高度缓存并补一次滚动，避免错位
-        if (_lastEstimatedMaxWidth != maxWidth ||
+        final bool settingsChanged =
+            _lastEstimatedMaxWidth != maxWidth ||
             _lastFontSize != fontSize ||
-            _lastAlignment != lyricAlignment) {
-          _cachedItemHeights.clear(); // 清除高度缓存
+            _lastAlignment != lyricAlignment ||
+            _lastMaxLinesPerLyric != widget.maxLinesPerLyric;
+
+        if (settingsChanged) {
+          // 更新记录的值
           _lastEstimatedMaxWidth = maxWidth;
           _lastFontSize = fontSize;
           _lastAlignment = lyricAlignment;
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _scrollToCurrentLine(),
-          );
+          _lastMaxLinesPerLyric = widget.maxLinesPerLyric;
+
+          // 使用 Future.delayed 将滚动任务推迟到下一事件循环
+          // 增加延迟用于确保布局完全稳定
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted) {
+              _scrollToCurrentLine(instant: false);
+            }
+          });
         }
 
         return ScrollConfiguration(
           behavior: const ScrollBehavior().copyWith(scrollbars: false),
-          child: ListView.builder(
-            controller: _scrollController,
+          child: ScrollablePositionedList.builder(
+            itemScrollController: _itemScrollController,
+            itemPositionsListener: _itemPositionsListener,
             itemCount: widget.lyrics.length,
             itemBuilder: (context, index) {
               final line = widget.lyrics[index];
               final isCurrent = index == widget.currentIndex;
               final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
-
-              final itemKey = _itemKeys.putIfAbsent(index, () => GlobalKey());
 
               final List<Widget> columnChildren = [
                 for (final text in visibleTexts)
@@ -183,7 +151,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                   child: Align(
                     alignment: _getAlignmentFromTextAlign(lyricAlignment),
                     child: Container(
-                      key: itemKey,
                       width: maxWidth, // 使用固定宽度，减去padding
                       padding: const EdgeInsets.symmetric(
                         vertical: 8,
@@ -209,54 +176,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         );
       },
     );
-  }
-
-  // 测量单行文本在给定样式和最大宽度下的实际高度
-  double _measureTextHeight(String text, double fontSize, double maxWidth) {
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(fontSize: fontSize, height: 1.6), // 使用动态字体大小
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1, // 测量单段文本的高度，无论它有多少行
-    );
-    textPainter.layout(maxWidth: maxWidth);
-    return textPainter.height;
-  }
-
-  double _estimateLyricItemHeight(int index) {
-    // 如果已经缓存，直接返回
-    if (_cachedItemHeights.containsKey(index)) {
-      return _cachedItemHeights[index]!;
-    }
-
-    // 边界检查
-    if (index < 0 || index >= widget.lyrics.length) {
-      return 0.0;
-    }
-    final LyricLine line = widget.lyrics[index];
-    final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
-
-    // 从 SettingsProvider 获取动态字体大小
-    final double fontSize =
-        _lastFontSize ?? context.read<SettingsProvider>().fontSize;
-    final double estimatedMaxWidth =
-        _lastEstimatedMaxWidth ?? (MediaQuery.of(context).size.width - (6 * 2));
-
-    double totalTextHeight = 0;
-    for (final String text in visibleTexts) {
-      // 测量每段文本的高度
-      totalTextHeight += _measureTextHeight(text, fontSize, estimatedMaxWidth);
-    }
-
-    // 加上歌词项的垂直内边距
-    const double verticalPaddingPerItem = 16.0;
-    final double estimatedHeight = totalTextHeight + verticalPaddingPerItem;
-
-    // 缓存高度
-    _cachedItemHeights[index] = estimatedHeight;
-    return estimatedHeight;
   }
 
   Alignment _getAlignmentFromTextAlign(TextAlign textAlign) {

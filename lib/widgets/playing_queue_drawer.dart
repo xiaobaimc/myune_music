@@ -58,6 +58,7 @@ class PlayingQueueDrawer extends StatelessWidget {
                             key: ValueKey(song.filePath),
                             song: song,
                             index: index,
+                            enableContextMenu: false, // 禁用右键菜单
                             // 传入当前播放的歌单作为上下文
                             contextPlaylist: playingPlaylist!,
                             onTap: () {
