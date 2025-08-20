@@ -265,6 +265,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     String title = p.basenameWithoutExtension(filePath);
     String artist = '未知歌手';
     String album = '未知专辑';
+    Duration? duration;
     Uint8List? albumArt;
 
     final normalizedPath = Uri.file(
@@ -279,6 +280,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         album: '未知专辑',
         filePath: filePath,
         albumArt: null,
+        duration: null,
       );
     }
 
@@ -293,6 +295,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       if (metadata.album != null && metadata.album!.isNotEmpty) {
         album = metadata.album!;
       }
+      duration = metadata.duration;
       albumArt = metadata.pictures.isNotEmpty
           ? metadata.pictures.first.bytes
           : null;
@@ -307,6 +310,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       album: album,
       filePath: filePath,
       albumArt: albumArt,
+      duration: duration,
     );
   }
 

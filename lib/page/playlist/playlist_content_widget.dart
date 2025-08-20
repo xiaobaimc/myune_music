@@ -341,6 +341,14 @@ class HeadSongListWidget extends StatelessWidget {
                             playlistName,
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
+                          const SizedBox(width: 16),
+                          // 显示当前歌单歌曲总数
+                          if (isPlaylistSelected &&
+                              notifier.currentPlaylistSongs.isNotEmpty)
+                            Text(
+                              '共 ${notifier.currentPlaylistSongs.length} 首',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
                           const Spacer(),
                           if (isPlaylistSelected)
                             ElevatedButton.icon(
@@ -617,7 +625,11 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailing: Text('${widget.index + 1}.'),
+                trailing: widget.song.duration != null
+                    ? Text(
+                        '${widget.song.duration!.inMinutes}:${(widget.song.duration!.inSeconds % 60).toString().padLeft(2, '0')}',
+                      )
+                    : null,
               ),
             ),
           ),

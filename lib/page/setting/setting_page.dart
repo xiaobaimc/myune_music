@@ -112,7 +112,7 @@ class _SettingPageState extends State<SettingPage> {
         // 启用系统字体选择器
         SwitchListTile(
           title: Text(
-            '启用系统字体选择器 (可能会卡顿)',
+            '启用系统字体选择器',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           value: _fontSelectorEnabled,
@@ -120,21 +120,6 @@ class _SettingPageState extends State<SettingPage> {
             setState(() {
               _fontSelectorEnabled = value;
             });
-            if (value) {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('提示'),
-                  content: const Text('选择完字体，建议关闭该选项。因为字体已经生效了。保持开启可能会导致页面卡顿'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('好的'),
-                    ),
-                  ],
-                ),
-              );
-            }
           },
         ),
         // 系统字体选择器
