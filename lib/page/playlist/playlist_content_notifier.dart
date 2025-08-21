@@ -322,7 +322,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     final FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a'],
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'aac',
+        'flac',
+        'm4a',
+        '3g2',
+        '3gp',
+        'adts',
+      ],
       allowMultiple: true,
     );
 
