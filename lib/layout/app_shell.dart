@@ -47,6 +47,12 @@ class _AppShellState extends State<AppShell> {
                 borderRadius: BorderRadius.circular(8),
               ),
               margin: const EdgeInsets.only(bottom: 80, left: 12, right: 12),
+              action: SnackBarAction(
+                label: '关闭',
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                },
+              ),
             ),
           );
         }
@@ -73,6 +79,12 @@ class _AppShellState extends State<AppShell> {
                 borderRadius: BorderRadius.circular(8),
               ),
               margin: const EdgeInsets.only(bottom: 80, left: 12, right: 12),
+              action: SnackBarAction(
+                label: '关闭',
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                },
+              ),
             ),
           );
         }

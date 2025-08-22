@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../playlist/playlist_content_notifier.dart';
 import './theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
 import './settings_provider.dart';
 import '../../widgets/font_selector_row.dart';
+import 'update_checker.dart';
+
+// 定义应用版本号常量
+const String appVersion = '0.6.1';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -15,6 +20,8 @@ class SettingPage extends StatefulWidget {
 
 class _SettingPageState extends State<SettingPage> {
   bool _fontSelectorEnabled = false;
+  final bool _isCheckingUpdate = false; // 是否正在检查更新
+  final String _updateStatus = ''; // 更新状态信息
 
   // 直接初始化 TextEditingController
   late final TextEditingController _onlineLyricsApiController;
@@ -79,6 +86,63 @@ class _SettingPageState extends State<SettingPage> {
     }
   }
 
+  // 检查更新
+  Future<void> _checkForUpdates() async {
+    final notifier = context.read<PlaylistContentNotifier>();
+
+    try {
+      notifier.postInfo('正在检查更新...');
+
+      // 使用写好的版本号
+      final result = await UpdateChecker.checkForUpdates(appVersion);
+
+      switch (result.type) {
+        case UpdateCheckResultType.successUpdateAvailable:
+          notifier.postInfo('发现新版本 ${result.updateInfo!.latestVersion}');
+          _showUpdateDialog(result.updateInfo!);
+          break;
+        case UpdateCheckResultType.successNoUpdate:
+          notifier.postInfo('当前已是最新版本');
+          break;
+        case UpdateCheckResultType.error:
+          notifier.postError('检查更新失败: ${result.errorMessage}');
+          break;
+      }
+    } catch (e) {
+      notifier.postError('检查更新失败: ${e.toString()}');
+    }
+  }
+
+  // 显示更新对话框
+  void _showUpdateDialog(UpdateInfo updateInfo) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('发现新版本 ${updateInfo.latestVersion}'),
+          content: SingleChildScrollView(child: Text(updateInfo.releaseNotes)),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('稍后更新'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (await canLaunchUrl(Uri.parse(updateInfo.downloadUrl))) {
+                  await launchUrl(Uri.parse(updateInfo.downloadUrl));
+                }
+              },
+              child: const Text('前往下载'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 使用 watch 来监听 SettingsProvider 的变化
@@ -88,6 +152,42 @@ class _SettingPageState extends State<SettingPage> {
       children: [
         // 主题配色选择
         const ThemeSelectionScreen(),
+        // 检查更新按钮
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '当前版本: $appVersion',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              ElevatedButton.icon(
+                onPressed: _checkForUpdates,
+                icon: _isCheckingUpdate
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.update, size: 20),
+                label: const Text('检查更新'),
+              ),
+            ],
+          ),
+        ),
+        if (_updateStatus.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _updateStatus,
+              style: TextStyle(
+                color: _updateStatus.contains('失败')
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
         // 启用动态获取颜色
         SwitchListTile(
           title: Text(

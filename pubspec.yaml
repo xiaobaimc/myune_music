@@ -45,6 +45,7 @@ dependencies:
   anni_mpris_service: ^0.1.0 
   window_manager: ^0.5.1
   scrollable_positioned_list: ^0.3.8
+  url_launcher: ^6.3.1
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
