@@ -16,13 +16,7 @@
 
 ## 🌐 关于网络歌词获取
 
-项目内置的歌词 API 是由我个人部署的，**不保证稳定性或可用性**。
-
-如有条件，建议自行部署歌词 API，参考官方部署文档：
-
-👉 [https://docs.lrc.cx/docs/QuickStart](https://docs.lrc.cx/docs/QuickStart)
-
-> 完整URL为 [https://lrcapi.showby.top/api/v1/lyrics/single?album=歌曲标题&artist=歌手名称](https://lrcapi.showby.top/api/v1/lyrics/single?album=%E4%B8%8B%E4%B8%80%E4%B8%AA%E5%A4%A9%E4%BA%AE&artist=%E9%83%AD%E9%9D%99)
+实现参考 [通过歌曲名获取原文+翻译歌词](https://www.showby.top/archives/624)
 
 ## 关于 Linux
 
@@ -69,7 +63,6 @@ flutter run
 感谢以下项目和开发者的无私分享：
 
 * [**爱情终是残念**](https://aqzscn.cn/archives/flutter-smtc) 与 [**Ferry-200**](https://github.com/Ferry-200/coriander_player)：提供了 Rust + Flutter 的 **SMTC 实现参考**
-* [**LrcApi**](https://github.com/HisAtri/LrcApi)：提供了开源的**歌词 API 服务**
 
 🙏 再次致敬所有热爱开源、默默付出的开发者们！
 

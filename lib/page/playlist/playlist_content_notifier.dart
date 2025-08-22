@@ -997,62 +997,125 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 后台异步加载网络歌词
   Future<void> _loadOnlineLyrics(String songTitle) async {
     try {
-      final cleanTitle = songTitle.trim().replaceAll(
-        RegExp(
-          r'[!"#$%&'
-          '()*+,./:;<=>?@[\\]^_`{|}~-]',
-        ),
-        '',
-      );
-
       // 检查 artist 是否为默认值，如果是则设置为空字符串
       final rawArtist = _currentSong?.artist ?? '';
       final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
           ? ''
-          : rawArtist.replaceAll(
-              RegExp(
-                r'[!"#$%&'
-                '()*+,./:;<=>?@[\\]^_`{|}~-]',
-              ),
-              '',
-            );
+          : rawArtist;
 
-      // 对清理后的标题和歌手名称进行 URL 编码
-      final encodedTitle = Uri.encodeComponent(cleanTitle);
-      final encodedArtist = Uri.encodeComponent(artist);
+      // 组合搜索关键词（有歌手时：歌名 + 歌手；否则只用歌名）
+      final searchKeyword = artist.isEmpty
+          ? songTitle.trim()
+          : '${songTitle.trim()} ${artist.trim()}';
 
-      // 获取用户自定义的 API 基础地址
-      final String apiBaseUrl = _settingsProvider.onlineLyricsApi.trim();
+      // 对搜索关键词进行 url 编码
+      final encodedSearchKeyword = Uri.encodeComponent(searchKeyword);
 
-      // 如果用户没有设置API地址，或者API地址为空，则不进行网络请求
-      if (apiBaseUrl.isEmpty) {
+      // 第一步：搜索歌曲获取歌曲id
+      final searchUrl =
+          'https://music.163.com/api/search/get/?s=$encodedSearchKeyword&type=1&limit=1';
+      final searchUri = Uri.parse(searchUrl);
+
+      final searchResponse = await http.get(
+        searchUri,
+        headers: {
+          'Referer': 'https://music.163.com',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+      );
+
+      // 如果状态码不为200，清空并返回
+      if (searchResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
         return;
       }
 
-      // 拼接完整的 API URL
-      final finalApiUrl =
-          '$apiBaseUrl/api/v1/lyrics/single?album=$encodedTitle&artist=$encodedArtist';
-      final apiUri = Uri.parse(finalApiUrl);
+      // 解析搜索结果
+      final searchResult = json.decode(searchResponse.body);
 
-      // debugPrint('请求歌词API: $apiUri');
-
-      final response = await http.get(apiUri); // 使用 http.get 发送 GET 请求
-
-      if (response.statusCode == 200) {
-        final apiLyrics = utf8.decode(response.bodyBytes).trim(); // 直接获取响应体并解码
-
-        if (!apiLyrics.contains('Lyrics not found.') && apiLyrics.isNotEmpty) {
-          _currentLyrics = _parseLrcContent(apiLyrics.split('\n'));
-        } else {
-          _currentLyrics = [];
-        }
-      } else {
-        // 处理非200状态码，例如 404, 500 等
+      // 如果没有找到歌曲，同样清空歌词
+      if (searchResult['result'] == null ||
+          searchResult['result']['songs'] == null ||
+          searchResult['result']['songs'].isEmpty) {
         _currentLyrics = [];
+        notifyListeners();
+        return;
       }
+
+      // 取第一首匹配歌曲的id
+      final songId = searchResult['result']['songs'][0]['id'].toString();
+
+      // 第二步：分别获取原文歌词和翻译歌词
+      // 获取原文歌词
+      final lrcUrl =
+          'https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1';
+      final lrcUri = Uri.parse(lrcUrl);
+
+      final lrcResponse = await http.get(
+        lrcUri,
+        headers: {
+          'Referer': 'https://music.163.com',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+      );
+
+      // 如果状态码不为200，清空并返回
+      if (lrcResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      final lrcResult = json.decode(lrcResponse.body);
+
+      // 获取翻译歌词
+      final tlyricUrl =
+          'https://music.163.com/api/song/lyric?os=pc&id=$songId&tv=-1';
+      final tlyricUri = Uri.parse(tlyricUrl);
+
+      final tlyricResponse = await http.get(
+        tlyricUri,
+        headers: {
+          'Referer': 'https://music.163.com',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+      );
+
+      final tlyricResult = json.decode(tlyricResponse.body);
+
+      // 处理原文歌词数据
+      List<String> lrcLines = [];
+      if (lrcResult['lrc'] != null &&
+          lrcResult['lrc']['lyric'] != null &&
+          lrcResult['lrc']['lyric'].toString().isNotEmpty) {
+        lrcLines = lrcResult['lrc']['lyric'].toString().split('\n');
+      }
+
+      // 处理翻译歌词数据
+      List<String> tlyricLines = [];
+      if (tlyricResult['tlyric'] != null &&
+          tlyricResult['tlyric']['lyric'] != null &&
+          tlyricResult['tlyric']['lyric'].toString().isNotEmpty) {
+        tlyricLines = tlyricResult['tlyric']['lyric'].toString().split('\n');
+      }
+
+      // 合并歌词
+      final List<String> mergedLyrics = [];
+      mergedLyrics.addAll(lrcLines);
+
+      if (tlyricLines.isNotEmpty) {
+        mergedLyrics.add(''); // 空行分隔
+        mergedLyrics.addAll(tlyricLines);
+      }
+
+      // 解析歌词
+      _currentLyrics = _parseLrcContent(mergedLyrics);
     } catch (e) {
       _currentLyrics = [];
-      // debugPrint('网络歌词加载失败：$e');
     }
     notifyListeners();
   }

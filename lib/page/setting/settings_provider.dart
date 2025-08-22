@@ -9,7 +9,6 @@ class SettingsProvider with ChangeNotifier {
   static const _useDynamicColorKey = 'useDynamicColor'; // 动态颜色设置的 key
 
   static const _enableOnlineLyricsKey = 'enableOnlineLyrics';
-  static const _onlineLyricsApiKey = 'onlineLyricsApi';
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -18,7 +17,6 @@ class SettingsProvider with ChangeNotifier {
   bool _useDynamicColor = true; // 默认启用动态颜色
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
-  String _onlineLyricsApi = 'https://lrcapi.showby.top'; // 默认api
 
   int get maxLinesPerLyric => _maxLinesPerLyric;
   double get fontSize => _fontSize;
@@ -27,7 +25,6 @@ class SettingsProvider with ChangeNotifier {
   bool get useDynamicColor => _useDynamicColor; // 获取动态颜色设置
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
-  String get onlineLyricsApi => _onlineLyricsApi;
 
   SettingsProvider() {
     _loadFromPrefs();
@@ -40,7 +37,6 @@ class SettingsProvider with ChangeNotifier {
     _useBlurBackground = prefs.getBool(_useBlurBackgroundKey) ?? true;
     _useDynamicColor = prefs.getBool(_useDynamicColorKey) ?? true; // 加载动态颜色设置
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
-    _onlineLyricsApi = prefs.getString(_onlineLyricsApiKey) ?? '';
 
     final alignmentString = prefs.getString(_lyricAlignmentKey);
     _lyricAlignment = alignmentString != null
@@ -94,12 +90,5 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableOnlineLyricsKey, value);
-  }
-
-  void setOnlineLyricsApi(String value) async {
-    _onlineLyricsApi = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_onlineLyricsApiKey, value);
   }
 }
