@@ -35,8 +35,10 @@ class Hotkeys extends StatelessWidget {
       // 绑定快捷键
       shortcuts: const <SingleActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.space): PlayPauseIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowRight): NextTrackIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowLeft): PreviousTrackIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowRight, control: true):
+            NextTrackIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowLeft, control: true):
+            PreviousTrackIntent(),
       },
       actions: {
         // 绑定意图

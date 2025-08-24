@@ -1,1 +1,1 @@
-enum SortCriterion { title, artist, dateModified }
+enum SortCriterion { title, artist, dateModified, random }

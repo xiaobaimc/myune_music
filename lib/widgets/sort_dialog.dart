@@ -38,12 +38,20 @@ class _SortDialogState extends State<SortDialog> {
             groupValue: _selectedCriterion,
             onChanged: (value) => setState(() => _selectedCriterion = value!),
           ),
+          RadioListTile<SortCriterion>(
+            title: const Text('随机排序'),
+            value: SortCriterion.random,
+            groupValue: _selectedCriterion,
+            onChanged: (value) => setState(() => _selectedCriterion = value!),
+          ),
           const Divider(),
           // 倒序复选框
           CheckboxListTile(
             title: const Text('倒序排列'),
             value: _isDescending,
-            onChanged: (value) => setState(() => _isDescending = value!),
+            onChanged: _selectedCriterion == SortCriterion.random
+                ? null // 当选择随机排序时禁用倒序选项
+                : (value) => setState(() => _isDescending = value!),
           ),
         ],
       ),

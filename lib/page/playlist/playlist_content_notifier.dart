@@ -595,13 +595,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final currentIndex = _playingSongIndex;
 
     if (_playMode == PlayMode.shuffle) {
-      _generateShuffledIndices(count: songCount);
-      int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
-      if (currentShuffledPos == -1 ||
-          currentShuffledPos == _shuffledIndices.length - 1) {
-        _generateShuffledIndices(count: songCount); // 重新生成随机列表或从头开始
-        currentShuffledPos = -1; // 从新的随机列表的第一个开始
+      // 只有在随机索引列表为空或者长度不匹配时才重新生成
+      if (_shuffledIndices.length != songCount) {
+        _generateShuffledIndices(count: songCount);
       }
+
+      int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
+      // 如果当前歌曲不在随机列表中（异常情况）
+      if (currentShuffledPos == -1) {
+        // 重新生成随机列表
+        _generateShuffledIndices(count: songCount);
+        currentShuffledPos = -1; // 从新的随机列表的第一首开始
+      }
+      // 如果已经播放到列表末尾
+      else if (currentShuffledPos == _shuffledIndices.length - 1) {
+        // 播放完一轮后重新生成随机列表
+        _generateShuffledIndices(count: songCount);
+        currentShuffledPos = -1; // 从新的随机列表的第一首开始
+      }
+      // 有10%的概率重新生成随机列表
+      else if (_random.nextDouble() < 0.1) {
+        _generateShuffledIndices(count: songCount);
+        currentShuffledPos = -1; // 从新的随机列表的第一首开始
+      }
+
       nextIndex =
           _shuffledIndices[(currentShuffledPos + 1) % _shuffledIndices.length];
     } else if (_playMode == PlayMode.repeatOne) {
@@ -883,6 +900,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 提取路径并返回
       return sortableList.map((item) => item['path'] as String).toList();
+    }
+
+    // 如果是随机排序
+    if (criterion == SortCriterion.random) {
+      final random = Random();
+      final randomizedPaths = List<String>.from(paths);
+      // dart 自带的列表元素随机排序
+      randomizedPaths.shuffle(random);
+      return randomizedPaths;
     }
 
     return paths; // 如果出现意外情况，返回原列表
