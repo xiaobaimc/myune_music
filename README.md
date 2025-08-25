@@ -20,7 +20,7 @@
 
 实现参考 [通过歌曲名获取原文+翻译歌词](https://www.showby.top/archives/624)
 
-## 关于 Linux
+## 🔧关于 Linux
 
 目前 Linux 版本仅在 **Debian 12 + Gnome(X11)** 测试过，已知问题有**无法选择字体**
 
