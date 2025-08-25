@@ -13,18 +13,25 @@ class PlaylistContentWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    // 获取窗口宽高比
+    final aspectRatio = MediaQuery.of(context).size.aspectRatio;
+    final isPortrait = aspectRatio <= 1.0; // 竖屏判断
+
     return Container(
       color: colorScheme.surface,
       child: Row(
         children: [
-          const SizedBox(width: 150, child: PlaylistListWidget()),
-          VerticalDivider(
-            width: 1,
-            thickness: 1,
-            color: colorScheme.outlineVariant,
-            indent: 0,
-            endIndent: 0,
-          ),
+          // 竖屏时隐藏歌单列表
+          if (!isPortrait) ...[
+            const SizedBox(width: 150, child: PlaylistListWidget()),
+            VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: colorScheme.outlineVariant,
+              indent: 0,
+              endIndent: 0,
+            ),
+          ],
           const Expanded(child: HeadSongListWidget()),
         ],
       ),

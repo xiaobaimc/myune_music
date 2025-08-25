@@ -94,47 +94,59 @@ class SongDetailPage extends StatelessWidget {
             // 主内容区域
             Expanded(
               child: isPortrait
-                  ? // 竖屏：仅显示歌词
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Center(
-                        child: Builder(
-                          builder: (context) {
-                            final playlistNotifier = context
-                                .watch<PlaylistContentNotifier>();
-                            final currentLyrics =
-                                playlistNotifier.currentLyrics;
-                            if (currentLyrics.isEmpty) {
-                              return const Center(
-                                child: Text(
-                                  '无歌词数据',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              );
-                            }
-                            return StreamBuilder<int>(
-                              stream: playlistNotifier.lyricLineIndexStream,
-                              initialData:
-                                  playlistNotifier.currentLyricLineIndex,
-                              builder: (context, snapshot) {
-                                return LyricsView(
-                                  maxLinesPerLyric: context
-                                      .watch<SettingsProvider>()
-                                      .maxLinesPerLyric,
-                                  onTapLine: (index) {
-                                    final seekTime =
-                                        currentLyrics[index].timestamp;
-                                    playlistNotifier.audioPlayer.seek(seekTime);
-                                  },
-                                );
-                              },
-                            );
-                          },
+                  ? // 竖屏：显示歌词和底部播放控制
+                    Column(
+                      children: [
+                        // 歌词区域
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Center(
+                              child: Builder(
+                                builder: (context) {
+                                  final playlistNotifier = context
+                                      .watch<PlaylistContentNotifier>();
+                                  final currentLyrics =
+                                      playlistNotifier.currentLyrics;
+                                  if (currentLyrics.isEmpty) {
+                                    return const Center(
+                                      child: Text(
+                                        '无歌词数据',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return StreamBuilder<int>(
+                                    stream:
+                                        playlistNotifier.lyricLineIndexStream,
+                                    initialData:
+                                        playlistNotifier.currentLyricLineIndex,
+                                    builder: (context, snapshot) {
+                                      return LyricsView(
+                                        maxLinesPerLyric: context
+                                            .watch<SettingsProvider>()
+                                            .maxLinesPerLyric,
+                                        onTapLine: (index) {
+                                          final seekTime =
+                                              currentLyrics[index].timestamp;
+                                          playlistNotifier.audioPlayer.seek(
+                                            seekTime,
+                                          );
+                                        },
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        // 底部播放控制栏
+                        const PortraitPlaybar(),
+                      ],
                     )
                   : // 横屏：保留原有布局
                     Row(

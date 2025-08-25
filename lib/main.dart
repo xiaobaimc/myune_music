@@ -18,7 +18,7 @@ void main() async {
   // 初始化window_manager
   await windowManager.ensureInitialized();
   const initialSize = Size(1200, 700);
-  const minPossibleSize = Size(550, 600);
+  const minPossibleSize = Size(480, 600);
   const WindowOptions windowOptions = WindowOptions(
     size: initialSize,
     minimumSize: minPossibleSize,
