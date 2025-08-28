@@ -1,11 +1,11 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'hover_overlay_control.dart';
 
 class VolumeControl extends StatefulWidget {
-  final AudioPlayer player;
+  final Player player;
   final Color iconColor;
 
   const VolumeControl({
@@ -19,8 +19,8 @@ class VolumeControl extends StatefulWidget {
 }
 
 class VolumeControlState extends State<VolumeControl> {
-  double _lastVolume = 1.0;
-  double _currentVolume = 1.0;
+  double _lastVolume = 100.0;
+  double _currentVolume = 100.0;
 
   @override
   void initState() {
@@ -31,8 +31,7 @@ class VolumeControlState extends State<VolumeControl> {
   // 初始化音量，尝试从本地缓存读取
   Future<void> _loadInitialVolume() async {
     final prefs = await SharedPreferences.getInstance();
-    final storedVolume =
-        prefs.getDouble('player_volume') ?? widget.player.volume;
+    final storedVolume = prefs.getDouble('player_volume') ?? 100.0;
     await _updateVolume(storedVolume, save: false);
   }
 
@@ -48,7 +47,7 @@ class VolumeControlState extends State<VolumeControl> {
     if (mounted) {
       setState(() {
         _currentVolume = newVolume;
-        if (newVolume > 0) _lastVolume = newVolume; // 非静音时更新上次音量
+        if (newVolume > 1.0) _lastVolume = newVolume;
       });
     }
     if (save) {
@@ -58,7 +57,7 @@ class VolumeControlState extends State<VolumeControl> {
 
   // 点击图标时切换静音与恢复上次音量
   void _toggleMute() {
-    final isMuted = _currentVolume < 0.001;
+    final isMuted = _currentVolume < 1.0;
     final newVolume = isMuted ? _lastVolume : 0.0;
     _updateVolume(newVolume);
   }
@@ -66,17 +65,19 @@ class VolumeControlState extends State<VolumeControl> {
   // 处理滚轮事件，增加/减少音量
   void _handleScroll(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
-      const double step = 0.03;
+      const double step = 3.0;
       final newVolume = (_currentVolume - event.scrollDelta.dy.sign * step)
-          .clamp(0.0, 1.0);
+          .clamp(0.0, 100.0);
       _updateVolume(newVolume);
     }
   }
 
   // 获取当前应显示的音量图标
   IconData get _volumeIcon {
-    if (_currentVolume < 0.001) return Icons.volume_off;
-    if (_currentVolume <= 0.5) return Icons.volume_down;
+    if (_currentVolume < 1.0) return Icons.volume_off;
+    if (_currentVolume <= 50.0) {
+      return Icons.volume_down;
+    }
     return Icons.volume_up;
   }
 
@@ -123,7 +124,7 @@ class VolumeControlState extends State<VolumeControl> {
                 child: Slider(
                   value: _currentVolume,
                   min: 0,
-                  max: 1,
+                  max: 100,
                   onChanged: (value) {
                     _updateVolume(value);
                     setState(() {});
@@ -134,7 +135,7 @@ class VolumeControlState extends State<VolumeControl> {
           ),
           const SizedBox(height: 6),
           Text(
-            '${(_currentVolume * 100).round()}%',
+            '${(_currentVolume).round()}%',
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ],

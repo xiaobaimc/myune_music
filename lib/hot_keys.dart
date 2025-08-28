@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:audioplayers/audioplayers.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 
 // 定义三种意图：播放/暂停、下一首、上一首
@@ -44,7 +43,7 @@ class Hotkeys extends StatelessWidget {
         // 绑定意图
         PlayPauseIntent: CallbackAction<PlayPauseIntent>(
           onInvoke: (intent) {
-            if (notifier.playerState == PlayerState.playing) {
+            if (notifier.isPlaying) {
               notifier.pause();
             } else {
               notifier.play();

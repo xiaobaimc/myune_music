@@ -54,6 +54,7 @@ class SongListDetailPage extends StatelessWidget {
                   tooltip: '返回',
                   onPressed: () => Navigator.of(context).pop(),
                 ),
+                const SizedBox(width: 8),
                 // 标题
                 Expanded(
                   child: Text(

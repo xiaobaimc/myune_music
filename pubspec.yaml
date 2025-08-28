@@ -37,7 +37,6 @@ dependencies:
   uuid: ^4.5.1
   path: ^1.9.1
   audio_metadata_reader: ^1.4.1
-  audioplayers: ^6.4.0
   flutter_colorpicker: ^1.1.0
   system_fonts: ^1.0.1
   colorgram: ^2.0.0
@@ -46,6 +45,9 @@ dependencies:
   window_manager: ^0.5.1
   scrollable_positioned_list: ^0.3.8
   url_launcher: ^6.3.1
+  media_kit: ^1.2.0 
+  media_kit_libs_audio: ^1.0.5
+  media_kit_libs_windows_audio: ^1.0.9
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

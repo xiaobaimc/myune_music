@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../page/playlist/playlist_content_notifier.dart';
@@ -63,14 +63,13 @@ class _PlaybarState extends State<Playbar> {
         context,
         listen: false,
       );
-      final AudioPlayer player = playlistNotifier.audioPlayer;
+      final Player player = playlistNotifier.mediaPlayer;
 
       // 如果用户正在拖动滑块，则暂停自动更新，避免UI跳动
       if (!_isDraggingSlider) {
         // 获取当前播放位置和总时长
-        final currentPosition =
-            await player.getCurrentPosition() ?? Duration.zero;
-        final totalDuration = await player.getDuration() ?? Duration.zero;
+        final currentPosition = player.state.position;
+        final totalDuration = player.state.duration;
 
         setState(() {
           // 根据当前位置和总时长计算滑块的值
@@ -96,7 +95,7 @@ class _PlaybarState extends State<Playbar> {
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
-        final AudioPlayer player = playlistNotifier.audioPlayer;
+        final Player player = playlistNotifier.mediaPlayer;
 
         return Container(
           height: 70,
@@ -257,8 +256,7 @@ class _PlaybarState extends State<Playbar> {
                           _isDraggingSlider = false; // 结束拖动
 
                           // 获取当前总时长，用于计算seek位置
-                          final totalDuration =
-                              await player.getDuration() ?? Duration.zero;
+                          final totalDuration = player.state.duration;
 
                           final seekPosition = Duration(
                             milliseconds:
@@ -298,13 +296,12 @@ class _PlaybarState extends State<Playbar> {
                               : null,
                         ),
                         // 播放/暂停按钮 (根据播放器状态动态更新)
-                        StreamBuilder<PlayerState>(
-                          stream: player.onPlayerStateChanged,
-                          initialData: playlistNotifier
-                              .playerState, // 使用 Notifier 中的同步状态
+                        StreamBuilder<bool>(
+                          stream: player.stream.playing,
+                          initialData: playlistNotifier.isPlaying,
                           builder: (context, snapshot) {
-                            final playerState = snapshot.data;
-                            if (playerState == PlayerState.playing) {
+                            final isPlaying = snapshot.data ?? false;
+                            if (isPlaying) {
                               return IconButton(
                                 icon: Icon(
                                   Icons.pause,
@@ -357,14 +354,14 @@ class _PlaybarState extends State<Playbar> {
                   children: <Widget>[
                     // 播放时间显示 (当前时间 / 总时长)
                     StreamBuilder<Duration?>(
-                      stream: player.onPositionChanged, // 监听当前位置
+                      stream: player.stream.position, // 监听当前位置
                       initialData: playlistNotifier
                           .currentPosition, // 使用 Notifier 中的同步数据
                       builder: (context, positionSnapshot) {
                         final currentPosition =
                             positionSnapshot.data ?? Duration.zero;
                         return StreamBuilder<Duration?>(
-                          stream: player.onDurationChanged, // 监听总时长
+                          stream: player.stream.duration, // 监听总时长
                           initialData: playlistNotifier
                               .totalDuration, // 使用 Notifier 中的同步数据
                           builder: (context, totalDurationSnapshot) {
@@ -413,7 +410,7 @@ class _PlaybarState extends State<Playbar> {
                       ),
                       // 音量控制
                       VolumeControl(player: player, iconColor: onBarColor),
-                      // 平衡速率控制
+                      // // 平衡速率控制
                       BalanceRateControl(player: player, iconColor: onBarColor),
                       // 播放列表
                       IconButton(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../page/playlist/playlist_content_notifier.dart';
@@ -57,14 +57,13 @@ class _PlaybarState extends State<Playbar> {
         context,
         listen: false,
       );
-      final AudioPlayer player = playlistNotifier.audioPlayer;
+      final Player player = playlistNotifier.mediaPlayer;
 
       // 如果用户正在拖动滑块，则暂停自动更新，避免UI跳动
       if (!_isDraggingSlider) {
         // 获取当前播放位置和总时长
-        final currentPosition =
-            await player.getCurrentPosition() ?? Duration.zero;
-        final totalDuration = await player.getDuration() ?? Duration.zero;
+        final currentPosition = player.state.position;
+        final totalDuration = player.state.duration;
 
         setState(() {
           // 根据当前位置和总时长计算滑块的值
@@ -85,20 +84,20 @@ class _PlaybarState extends State<Playbar> {
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
-        final AudioPlayer player = playlistNotifier.audioPlayer;
+        final Player player = playlistNotifier.mediaPlayer;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // 播放时间显示
             StreamBuilder<Duration?>(
-              stream: player.onPositionChanged, // 监听当前位置
+              stream: player.stream.position, // 监听当前位置
               initialData:
                   playlistNotifier.currentPosition, // 使用 Notifier 中的同步数据
               builder: (context, positionSnapshot) {
                 final currentPosition = positionSnapshot.data ?? Duration.zero;
                 return StreamBuilder<Duration?>(
-                  stream: player.onDurationChanged, // 监听总时长
+                  stream: player.stream.duration, // 监听总时长
                   initialData:
                       playlistNotifier.totalDuration, // 使用 Notifier 中的同步数据
                   builder: (context, totalDurationSnapshot) {
@@ -143,8 +142,7 @@ class _PlaybarState extends State<Playbar> {
                 },
                 onChangeEnd: (double endValue) async {
                   _isDraggingSlider = false; // 结束拖动
-                  final totalDuration =
-                      await player.getDuration() ?? Duration.zero;
+                  final totalDuration = player.state.duration;
                   final seekPosition = Duration(
                     milliseconds: (totalDuration.inMilliseconds * endValue)
                         .round(),
@@ -185,20 +183,18 @@ class _PlaybarState extends State<Playbar> {
                           : null,
                     ),
                     // 播放/暂停按钮
-                    StreamBuilder<PlayerState>(
-                      stream: player.onPlayerStateChanged,
-                      initialData: playlistNotifier.playerState,
+                    StreamBuilder<bool>(
+                      stream: player.stream.playing,
+                      initialData: playlistNotifier.isPlaying,
                       builder: (context, snapshot) {
-                        final playerState = snapshot.data;
+                        final isPlaying = snapshot.data ?? false;
                         return IconButton(
                           icon: Icon(
-                            playerState == PlayerState.playing
-                                ? Icons.pause
-                                : Icons.play_arrow,
+                            isPlaying ? Icons.pause : Icons.play_arrow,
                             color: accentColor,
                             size: 36,
                           ),
-                          onPressed: playerState == PlayerState.playing
+                          onPressed: isPlaying
                               ? playlistNotifier.pause
                               : playlistNotifier.play,
                         );
@@ -246,7 +242,7 @@ class _PlaybarState extends State<Playbar> {
                     ),
                     // 音量控制
                     VolumeControl(player: player, iconColor: onBarColor),
-                    // 声道平衡、倍速控制
+                    // // 声道平衡、倍速控制
                     BalanceRateControl(player: player, iconColor: onBarColor),
                     // 播放列表
                     IconButton(
@@ -313,14 +309,13 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
         context,
         listen: false,
       );
-      final AudioPlayer player = playlistNotifier.audioPlayer;
+      final Player player = playlistNotifier.mediaPlayer;
 
       // 如果用户正在拖动滑块，则暂停自动更新，避免UI跳动
       if (!_isDraggingSlider) {
         // 获取当前播放位置和总时长
-        final currentPosition =
-            await player.getCurrentPosition() ?? Duration.zero;
-        final totalDuration = await player.getDuration() ?? Duration.zero;
+        final currentPosition = player.state.position;
+        final totalDuration = player.state.duration;
 
         setState(() {
           // 根据当前位置和总时长计算滑块的值
@@ -341,7 +336,7 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
-        final AudioPlayer player = playlistNotifier.audioPlayer;
+        final Player player = playlistNotifier.mediaPlayer;
 
         return Padding(
           padding: const EdgeInsetsGeometry.fromLTRB(24, 0, 24, 12),
@@ -350,14 +345,14 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
             children: [
               // 播放时间显示
               StreamBuilder<Duration?>(
-                stream: player.onPositionChanged, // 监听当前位置
+                stream: player.stream.position, // 监听当前位置
                 initialData:
                     playlistNotifier.currentPosition, // 使用 Notifier 中的同步数据
                 builder: (contextEntertainment, positionSnapshot) {
                   final currentPosition =
                       positionSnapshot.data ?? Duration.zero;
                   return StreamBuilder<Duration?>(
-                    stream: player.onDurationChanged, // 监听总时长
+                    stream: player.stream.duration, // 监听总时长
                     initialData:
                         playlistNotifier.totalDuration, // 使用 Notifier 中的同步数据
                     builder: (context, totalDurationSnapshot) {
@@ -402,8 +397,7 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                   },
                   onChangeEnd: (double endValue) async {
                     _isDraggingSlider = false; // 结束拖动
-                    final totalDuration =
-                        await player.getDuration() ?? Duration.zero;
+                    final totalDuration = player.state.duration;
                     final seekPosition = Duration(
                       milliseconds: (totalDuration.inMilliseconds * endValue)
                           .round(),
@@ -439,20 +433,18 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                   ),
                   const SizedBox(width: 16),
                   // 播放/暂停
-                  StreamBuilder<PlayerState>(
-                    stream: player.onPlayerStateChanged,
-                    initialData: playlistNotifier.playerState,
+                  StreamBuilder<bool>(
+                    stream: player.stream.playing,
+                    initialData: playlistNotifier.isPlaying,
                     builder: (context, snapshot) {
-                      final playerState = snapshot.data;
+                      final isPlaying = snapshot.data ?? false;
                       return IconButton(
                         icon: Icon(
-                          playerState == PlayerState.playing
-                              ? Icons.pause
-                              : Icons.play_arrow,
+                          isPlaying ? Icons.pause : Icons.play_arrow,
                           color: accentColor,
                           size: 36,
                         ),
-                        onPressed: playerState == PlayerState.playing
+                        onPressed: isPlaying
                             ? playlistNotifier.pause
                             : playlistNotifier.play,
                       );

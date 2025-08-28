@@ -52,12 +52,16 @@ class _MainViewState extends State<MainView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isWideScreen = constraints.maxWidth >= 1000;
+        final aspectRatio = MediaQuery.of(context).size.aspectRatio;
+        final bool isPortrait = aspectRatio <= 1.0; // 竖屏判断
 
         final bool actualExtended;
         if (_hasUserToggled) {
-          actualExtended = _isManuallyExpanded;
+          // 即使手动点击过折叠按钮，在竖屏状态下也要保持折叠
+          actualExtended = isPortrait ? false : _isManuallyExpanded;
         } else {
-          actualExtended = isWideScreen;
+          // 在竖屏状态下始终折叠，否则根据屏幕宽度决定
+          actualExtended = isPortrait ? false : isWideScreen;
         }
         return Row(
           children: [
@@ -83,65 +87,107 @@ class _MainViewState extends State<MainView> {
                 },
                 destinations: [
                   NavigationRailDestination(
-                    icon: const Icon(Icons.playlist_play),
-                    selectedIcon: const Icon(Icons.playlist_play_outlined),
+                    icon: Icon(
+                      Icons.playlist_play,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    selectedIcon: Icon(
+                      Icons.playlist_play_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     label: Text('歌单', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.queue_music),
-                    selectedIcon: const Icon(Icons.queue_music_outlined),
+                    icon: Icon(
+                      Icons.queue_music,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    selectedIcon: Icon(
+                      Icons.queue_music_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     label: Text('全部歌曲', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.person_outlined),
-                    selectedIcon: const Icon(Icons.person),
+                    icon: Icon(
+                      Icons.person_outlined,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    selectedIcon: Icon(
+                      Icons.person,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     label: Text('歌手', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.album_outlined),
-                    selectedIcon: const Icon(Icons.album),
+                    icon: Icon(
+                      Icons.album_outlined,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    selectedIcon: Icon(
+                      Icons.album,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     label: Text('专辑', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.library_music_outlined),
-                    selectedIcon: const Icon(Icons.library_music),
+                    icon: Icon(
+                      Icons.library_music_outlined,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    selectedIcon: Icon(
+                      Icons.library_music,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     label: Text('歌曲详情信息', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: const Icon(Icons.settings_outlined),
-                    selectedIcon: const Icon(Icons.settings),
+                    icon: Icon(
+                      Icons.settings_outlined,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    selectedIcon: Icon(
+                      Icons.settings,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     label: Text('设置', style: _mainViewTextStyle),
                   ),
                 ],
-                trailing: Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8, bottom: 16),
-                        child: CircleAvatar(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.1),
-                          child: IconButton(
-                            icon: Icon(
-                              actualExtended
-                                  ? Icons.arrow_back_ios_new
-                                  : Icons.arrow_forward_ios,
+                // 在竖屏状态下隐藏折叠按钮
+                trailing: isPortrait
+                    ? null
+                    : Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 8,
+                                bottom: 16,
+                              ),
+                              child: CircleAvatar(
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.1),
+                                child: IconButton(
+                                  icon: Icon(
+                                    actualExtended
+                                        ? Icons.arrow_back_ios_new
+                                        : Icons.arrow_forward_ios,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isManuallyExpanded = !actualExtended;
+                                      _hasUserToggled = true;
+                                    });
+                                  },
+                                ),
+                              ),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _isManuallyExpanded = !actualExtended;
-                                _hasUserToggled = true;
-                              });
-                            },
-                          ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
               ),
             ),
             Expanded(

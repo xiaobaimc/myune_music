@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:path/path.dart' as p;
-import 'package:audioplayers/audioplayers.dart';
+import 'package:media_kit/media_kit.dart' hide Playlist;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:colorgram/colorgram.dart';
@@ -49,11 +49,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
   List<Song> get allSongs => _allSongs;
 
   // --- 播放器相关 ---
-  final AudioPlayer _audioPlayer = AudioPlayer(); // 音频播放器实例
-  AudioPlayer get audioPlayer => _audioPlayer;
+  final Player _mediaPlayer = Player(
+    configuration: const PlayerConfiguration(
+      pitch: true, // 启用音调控制功能
+    ),
+  ); // Media-Kit 播放器实例
+  Player get mediaPlayer => _mediaPlayer;
 
-  PlayerState _playerState = PlayerState.stopped; // 播放器状态
-  PlayerState get playerState => _playerState;
+  bool _isPlaying = false; // 播放器状态
+  bool get isPlaying => _isPlaying;
 
   int _currentSongIndex = -1; // 当前播放歌曲的索引（在当前歌单中）
   Song? _currentSong; // 当前播放的歌曲
@@ -73,11 +77,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Duration get currentPosition => _currentPosition;
   Duration get totalDuration => _totalDuration;
 
-  // --- 平衡与倍速 ---
-  double _currentBalance = 0.0; // 声道平衡
+  // --- 音调与倍速 ---
+  double _currentPitch = 1.0; // 音调大小
   double _currentPlaybackRate = 1.0; // 播放速度
 
-  double get currentBalance => _currentBalance;
+  double get currentPitch => _currentPitch;
   double get currentPlaybackRate => _currentPlaybackRate;
 
   // --- 歌词相关 --
@@ -135,20 +139,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Stream<String> get infoStream => _infoStreamController.stream;
 
   PlaylistContentNotifier(this._settingsProvider, this._themeProvider) {
-    _setupAudioPlayerListeners(); // 设置 audioplayers 的监听器
+    _setupMediaPlayerListeners(); // 设置 media-kit 的监听器
     _loadAllData(); // 使用一个统一的方法来加载所有数据
-    _audioPlayer.setBalance(_currentBalance);
-    _audioPlayer.setPlaybackRate(_currentPlaybackRate);
     _smtcManager = SmtcManager(
       onPlay: play,
       onPause: pause,
       onNext: playNext,
       onPrevious: playPrevious,
       onSeek: (position) async {
-        await _audioPlayer.seek(position);
+        await _mediaPlayer.seek(position);
       },
       onSetPosition: (trackId, position) async {
-        await _audioPlayer.seek(position);
+        await _mediaPlayer.seek(position);
       },
     );
   }
@@ -169,24 +171,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
   void dispose() {
     _lyricLineIndexController.close();
     _errorStreamController.close();
-    _audioPlayer.dispose(); // 释放播放器资源
+    _mediaPlayer.dispose(); // 释放播放器资源
     _cleanupSmtc();
     super.dispose();
   }
 
-  void _setupAudioPlayerListeners() {
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      _playerState = state; // 更新内部状态
+  void _setupMediaPlayerListeners() {
+    _mediaPlayer.stream.playing.listen((playing) {
+      _isPlaying = playing; // 更新内部状态
       notifyListeners();
     });
 
-    _audioPlayer.onPlayerComplete.listen((event) async {
-      _playerState = PlayerState.completed; // 更新内部状态
-      notifyListeners();
-      await _playNextLogic();
+    _mediaPlayer.stream.completed.listen((completed) async {
+      if (completed) {
+        _isPlaying = false; // 更新内部状态
+        notifyListeners();
+        await _playNextLogic();
+      }
     });
 
-    _audioPlayer.onPositionChanged.listen((position) {
+    _mediaPlayer.stream.position.listen((position) {
       _currentPosition = position; // 更新当前位置
       updateLyricLine(position);
       _smtcManager?.updateTimeline(
@@ -196,13 +200,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // notifyListeners();
     });
 
-    _audioPlayer.onDurationChanged.listen((duration) {
+    _mediaPlayer.stream.duration.listen((duration) {
       _totalDuration = duration; // 更新总时长
       _smtcManager?.updateTimeline(
         position: _currentPosition,
         duration: duration,
       );
       // notifyListeners();
+
+      _mediaPlayer.stream.error.listen((error) {
+        if (_currentSong != null) {
+          _errorStreamController.add(
+            '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏',
+          );
+        } else {
+          _errorStreamController.add('播放出错: $error');
+        }
+
+        // 尝试播放下一首歌曲
+        playNext();
+      });
     });
   }
 
@@ -323,14 +340,101 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        'mp3',
-        'wav',
+        'aa',
         'aac',
+        'aax',
+        'ac3',
+        'ace',
+        'acm',
+        'act',
+        'adp',
+        'ads',
+        'adx',
+        'aea',
+        'afc',
+        'aiff',
+        'aix',
+        'amr',
+        'apc',
+        'ape',
+        'apm',
+        'ast',
+        'au',
+        'binka',
+        'bit',
+        'boa',
+        'brstm',
+        'caf',
+        'daud',
+        'dsf',
+        'dss',
+        'dts',
+        'dtshd',
+        'eac3',
+        'epaf',
         'flac',
+        'fsb',
+        'fwse',
+        'g723_1',
+        'g729',
+        'genh',
+        'gsm',
+        'hca',
+        'hcom',
+        'ilbc',
+        'ircam',
+        'iss',
+        'kvag',
+        'laf',
+        'loas',
         'm4a',
-        '3g2',
-        '3gp',
-        'adts',
+        'mca',
+        'mlp',
+        'mmf',
+        'mods',
+        'mp3',
+        'mpc',
+        'mpc8',
+        'msf',
+        'mtaf',
+        'musx',
+        'nsp',
+        'ogg',
+        'oma',
+        'pvf',
+        'qcp',
+        'rka',
+        'rsd',
+        'rso',
+        'scd',
+        'sdns',
+        'sds',
+        'sdx',
+        'shn',
+        'sln',
+        'sol',
+        'sox',
+        'svag',
+        'tak',
+        'truehd',
+        'tta',
+        'vag',
+        'voc',
+        'vpk',
+        'vqf',
+        'w64',
+        'wady',
+        'wav',
+        'wavarc',
+        'wsaud',
+        'wsd',
+        'wv',
+        'wve',
+        'xa',
+        'xmd',
+        'xvag',
+        'xwma',
+        'pcm',
       ],
       allowMultiple: true,
     );
@@ -536,31 +640,28 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // --- 播放控制 ---
   Future<void> play() async {
-    if (_playerState == PlayerState.stopped ||
-        _playerState == PlayerState.completed) {
-      await _audioPlayer.setSource(DeviceFileSource(_currentSong!.filePath));
-      await _audioPlayer.resume(); // 从头播放或从上次停止的位置开始
-    } else if (_playerState == PlayerState.paused) {
-      await _audioPlayer.resume(); // 从暂停处恢复
-    } else {}
+    if (!_isPlaying) {
+      await _mediaPlayer.play(); // 开始播放
+    }
     await _smtcManager?.updateState(true);
     notifyListeners();
   }
 
   Future<void> pause() async {
-    await _audioPlayer.pause();
+    await _mediaPlayer.pause();
     await _smtcManager?.updateState(false);
     notifyListeners();
   }
 
   Future<void> stop() async {
-    await _audioPlayer.stop();
+    await _mediaPlayer.stop();
     _currentSong = null;
     _currentSongIndex = -1;
     _currentLyrics = [];
     _currentLyricLineIndex = -1;
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
+    _isPlaying = false;
     await _smtcManager?.updateState(false);
     await _smtcManager?.updateTimeline(
       position: Duration.zero,
@@ -568,17 +669,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
     );
   }
 
-  Future<void> setBalance(double balance) async {
-    if (balance < -1.0 || balance > 1.0) return;
-    _currentBalance = balance;
-    await _audioPlayer.setBalance(balance);
+  Future<void> setPitch(double pitch) async {
+    if (pitch < 0.5 || pitch > 1.5) return;
+    _currentPitch = pitch;
+    await _mediaPlayer.setPitch(pitch);
     notifyListeners(); // 通知 UI 更新
   }
 
   Future<void> setPlaybackRate(double rate) async {
     if (rate < 0.5 || rate > 2.0) return;
     _currentPlaybackRate = rate;
-    await _audioPlayer.setPlaybackRate(rate);
+    await _mediaPlayer.setRate(rate);
     notifyListeners(); // 通知 UI 更新
   }
 
@@ -756,11 +857,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentSong = songToPlay;
 
     try {
-      // 尝试执行播放操作
-      await _audioPlayer.stop();
+      await _mediaPlayer.stop();
       _currentLyrics = [];
       _currentLyricLineIndex = -1;
-      await _audioPlayer.setSource(DeviceFileSource(songFilePath));
+
+      await _mediaPlayer.open(Media(songFilePath));
+
       _loadLyricsForSong(songFilePath);
 
       // 在 resume 之前更新SMTC元数据
@@ -775,12 +877,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // 提取并应用动态主题色
       _extractAndApplyDynamicColor(songToPlay.albumArt);
 
-      await _audioPlayer.resume(); // 最后执行播放
+      await _mediaPlayer.play(); // 最后执行播放
 
       notifyListeners();
     } catch (e) {
       // 捕获所有播放相关的异常
-      _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
+      // _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
 
       await playNext();
     }

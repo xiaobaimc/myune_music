@@ -132,7 +132,7 @@ class SongDetailPage extends StatelessWidget {
                                         onTapLine: (index) {
                                           final seekTime =
                                               currentLyrics[index].timestamp;
-                                          playlistNotifier.audioPlayer.seek(
+                                          playlistNotifier.mediaPlayer.seek(
                                             seekTime,
                                           );
                                         },
@@ -325,7 +325,7 @@ class SongDetailPage extends StatelessWidget {
                                         onTapLine: (index) {
                                           final seekTime =
                                               currentLyrics[index].timestamp;
-                                          playlistNotifier.audioPlayer.seek(
+                                          playlistNotifier.mediaPlayer.seek(
                                             seekTime,
                                           );
                                         },

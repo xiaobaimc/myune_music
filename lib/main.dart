@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -12,6 +13,8 @@ import 'src/rust/frb_generated.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  MediaKit.ensureInitialized();
 
   await RustLib.init();
 

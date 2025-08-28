@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:audioplayers/audioplayers.dart';
 
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
@@ -570,11 +569,8 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       final bool isThisContext =
           n.playingPlaylist!.id == widget.contextPlaylist.id;
 
-      // 必须同时满足歌曲匹配和上下文匹配，并且播放器处于活动状态
-      return isThisSong &&
-          isThisContext &&
-          (n.playerState == PlayerState.playing ||
-              n.playerState == PlayerState.paused);
+      // 必须同时满足歌曲匹配和上下文匹配
+      return isThisSong && isThisContext;
     });
 
     return Material(
