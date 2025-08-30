@@ -5,6 +5,8 @@ import 'dart:async';
 import '../../page/playlist/playlist_content_notifier.dart';
 import '../volume_control_state.dart';
 import '../balance_rate_control.dart';
+import '../play_pause_button.dart';
+import '../play_mode_button.dart';
 
 // 格式化时间函数
 String _formatDuration(Duration duration) {
@@ -188,12 +190,9 @@ class _PlaybarState extends State<Playbar> {
                       initialData: playlistNotifier.isPlaying,
                       builder: (context, snapshot) {
                         final isPlaying = snapshot.data ?? false;
-                        return IconButton(
-                          icon: Icon(
-                            isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: accentColor,
-                            size: 36,
-                          ),
+                        return PlayPauseButton(
+                          isPlaying: isPlaying,
+                          color: accentColor,
                           onPressed: isPlaying
                               ? playlistNotifier.pause
                               : playlistNotifier.play,
@@ -218,25 +217,13 @@ class _PlaybarState extends State<Playbar> {
                     // 随机播放按钮 (现在放在右侧功能键组)
                     Consumer<PlaylistContentNotifier>(
                       builder: (context, notifier, _) {
-                        IconData icon;
-                        String tooltip;
-                        Color iconColor = onBarColor.withValues(alpha: 0.7);
-                        if (notifier.playMode == PlayMode.shuffle) {
-                          icon = Icons.shuffle;
-                          tooltip = '随机播放';
-                          iconColor = accentColor;
-                        } else if (notifier.playMode == PlayMode.repeatOne) {
-                          icon = Icons.repeat_one;
-                          tooltip = '单曲循环';
-                          iconColor = accentColor;
-                        } else {
-                          icon = Icons.repeat;
-                          tooltip = '列表循环';
-                        }
-                        return IconButton(
-                          tooltip: tooltip,
-                          icon: Icon(icon, color: iconColor, size: 24),
-                          onPressed: () => notifier.togglePlayMode(),
+                        return PlayModeButton(
+                          playMode: notifier.playMode,
+                          color: onBarColor.withValues(alpha: 0.7),
+                          activeColor: accentColor,
+                          onPressed: () {
+                            notifier.togglePlayMode();
+                          },
                         );
                       },
                     ),
@@ -438,12 +425,9 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                     initialData: playlistNotifier.isPlaying,
                     builder: (context, snapshot) {
                       final isPlaying = snapshot.data ?? false;
-                      return IconButton(
-                        icon: Icon(
-                          isPlaying ? Icons.pause : Icons.play_arrow,
-                          color: accentColor,
-                          size: 36,
-                        ),
+                      return PlayPauseButton(
+                        isPlaying: isPlaying,
+                        color: accentColor,
                         onPressed: isPlaying
                             ? playlistNotifier.pause
                             : playlistNotifier.play,

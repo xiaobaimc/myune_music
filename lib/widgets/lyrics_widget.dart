@@ -51,6 +51,15 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     if (widget.currentIndex != oldWidget.currentIndex) {
       _scrollToCurrentLine();
     }
+    // 当歌词列表发生变化时（如切换歌曲），滚动到顶部
+    else if (widget.lyrics != oldWidget.lyrics) {
+      // 使用微延迟确保在新歌词加载后执行滚动
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (widget.currentIndex == 0 && _itemScrollController.isAttached) {
+          _itemScrollController.jumpTo(index: 0, alignment: 0.0);
+        }
+      });
+    }
   }
 
   // 滚动方法
@@ -64,7 +73,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     }
 
     if (instant) {
-      _itemScrollController.jumpTo(index: widget.currentIndex, alignment: 0.5);
+      _itemScrollController.jumpTo(index: widget.currentIndex, alignment: 0.0);
     } else {
       _itemScrollController.scrollTo(
         index: widget.currentIndex,

@@ -22,6 +22,8 @@ class _MainViewState extends State<MainView> {
   bool _isManuallyExpanded = false;
   bool _hasUserToggled = false;
 
+  final int _tappedIndex = -1;
+
   Widget _buildPage(int index) {
     switch (index) {
       case 0:
@@ -87,68 +89,128 @@ class _MainViewState extends State<MainView> {
                 },
                 destinations: [
                   NavigationRailDestination(
-                    icon: Icon(
-                      Icons.playlist_play,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 0 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.playlist_play,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    selectedIcon: Icon(
-                      Icons.playlist_play_outlined,
-                      color: Theme.of(context).colorScheme.primary,
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 0 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.playlist_play_outlined,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     label: Text('歌单', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: Icon(
-                      Icons.queue_music,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 1 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.queue_music,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    selectedIcon: Icon(
-                      Icons.queue_music_outlined,
-                      color: Theme.of(context).colorScheme.primary,
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 1 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.queue_music_outlined,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     label: Text('全部歌曲', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: Icon(
-                      Icons.person_outlined,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 2 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.person_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    selectedIcon: Icon(
-                      Icons.person,
-                      color: Theme.of(context).colorScheme.primary,
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 2 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.person,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     label: Text('歌手', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: Icon(
-                      Icons.album_outlined,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 3 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.album_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    selectedIcon: Icon(
-                      Icons.album,
-                      color: Theme.of(context).colorScheme.primary,
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 3 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.album,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     label: Text('专辑', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: Icon(
-                      Icons.library_music_outlined,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 4 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.library_music_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    selectedIcon: Icon(
-                      Icons.library_music,
-                      color: Theme.of(context).colorScheme.primary,
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 4 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.library_music,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     label: Text('歌曲详情信息', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
-                    icon: Icon(
-                      Icons.settings_outlined,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 5 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.settings_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    selectedIcon: Icon(
-                      Icons.settings,
-                      color: Theme.of(context).colorScheme.primary,
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 5 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.settings,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     label: Text('设置', style: _mainViewTextStyle),
                   ),

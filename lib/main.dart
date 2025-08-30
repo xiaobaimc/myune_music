@@ -28,7 +28,7 @@ void main() async {
     center: true,
     title: "MyuneMusic",
     titleBarStyle: TitleBarStyle.hidden,
-    backgroundColor: Colors.transparent, // 让原生窗口背景透明
+    // backgroundColor: Colors.transparent, // 让原生窗口背景透明
   );
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.setAsFrameless();

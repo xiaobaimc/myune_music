@@ -6,6 +6,8 @@ import '../page/playlist/playlist_content_notifier.dart';
 import 'volume_control_state.dart';
 import '../page/song_detail_page.dart';
 import 'balance_rate_control.dart';
+import 'play_pause_button.dart';
+import 'play_mode_button.dart';
 
 // 格式化时间函数
 String _formatDuration(Duration duration) {
@@ -301,26 +303,13 @@ class _PlaybarState extends State<Playbar> {
                           initialData: playlistNotifier.isPlaying,
                           builder: (context, snapshot) {
                             final isPlaying = snapshot.data ?? false;
-                            if (isPlaying) {
-                              return IconButton(
-                                icon: Icon(
-                                  Icons.pause,
-                                  color: accentColor,
-                                  size: 36,
-                                ),
-                                onPressed: playlistNotifier.pause,
-                              );
-                            } else {
-                              // 当 playerState 不是 playing 时，统一显示播放按钮
-                              return IconButton(
-                                icon: Icon(
-                                  Icons.play_arrow,
-                                  color: accentColor,
-                                  size: 36,
-                                ),
-                                onPressed: playlistNotifier.play,
-                              );
-                            }
+                            return PlayPauseButton(
+                              isPlaying: isPlaying,
+                              color: accentColor,
+                              onPressed: isPlaying
+                                  ? playlistNotifier.pause
+                                  : playlistNotifier.play,
+                            );
                           },
                         ),
                         // 下一首按钮
@@ -384,24 +373,10 @@ class _PlaybarState extends State<Playbar> {
                       // 播放模式
                       Consumer<PlaylistContentNotifier>(
                         builder: (context, notifier, _) {
-                          IconData icon;
-                          String tooltip;
-                          Color iconColor = onBarColor.withValues(alpha: 0.7);
-                          if (notifier.playMode == PlayMode.shuffle) {
-                            icon = Icons.shuffle;
-                            tooltip = '随机播放';
-                            iconColor = accentColor;
-                          } else if (notifier.playMode == PlayMode.repeatOne) {
-                            icon = Icons.repeat_one;
-                            tooltip = '单曲循环';
-                            iconColor = accentColor;
-                          } else {
-                            icon = Icons.repeat;
-                            tooltip = '列表循环';
-                          }
-                          return IconButton(
-                            tooltip: tooltip,
-                            icon: Icon(icon, color: iconColor),
+                          return PlayModeButton(
+                            playMode: notifier.playMode,
+                            color: onBarColor.withValues(alpha: 0.7),
+                            activeColor: accentColor,
                             onPressed: () {
                               notifier.togglePlayMode();
                             },
