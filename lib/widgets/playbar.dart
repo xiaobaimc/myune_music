@@ -239,11 +239,22 @@ class _PlaybarState extends State<Playbar> {
                         activeTrackColor: accentColor,
                         inactiveTrackColor: onBarColor.withValues(alpha: 0.7),
                         thumbColor: accentColor,
+                        showValueIndicator: ShowValueIndicator.always,
                       ),
                       child: Slider(
                         value: _currentSliderValue,
                         min: 0.0,
                         max: 1.0,
+                        label: _isDraggingSlider
+                            ? _formatDuration(
+                                Duration(
+                                  milliseconds:
+                                      (player.state.duration.inMilliseconds *
+                                              _currentSliderValue)
+                                          .round(),
+                                ),
+                              )
+                            : null,
                         onChanged: (double newValue) {
                           // 用户拖动时，只更新内部状态
                           setState(() {
