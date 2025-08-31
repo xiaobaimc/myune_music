@@ -139,6 +139,16 @@ class _SettingPageState extends State<SettingPage> {
           value: settings.useDynamicColor, // 使用 settings
           onChanged: (value) {
             context.read<SettingsProvider>().setUseDynamicColor(value);
+            // 当启用动态颜色时，立即提取当前播放歌曲的封面颜色
+            if (value) {
+              final playlistNotifier = context.read<PlaylistContentNotifier>();
+              final currentSong = playlistNotifier.currentSong;
+              if (currentSong != null) {
+                playlistNotifier.extractAndApplyDynamicColor(
+                  currentSong.albumArt,
+                );
+              }
+            }
             // 当关闭动态颜色时，恢复默认颜色
             if (!value) {
               context.read<ThemeProvider>().setSeedColor(Colors.blue);

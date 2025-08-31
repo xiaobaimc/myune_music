@@ -9,12 +9,15 @@ class SettingsProvider with ChangeNotifier {
   static const _useDynamicColorKey = 'useDynamicColor'; // 动态颜色设置的 key
 
   static const _enableOnlineLyricsKey = 'enableOnlineLyrics';
+  static const _lyricVerticalSpacingKey =
+      'lyricVerticalSpacing'; // 歌词垂直间距设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
   TextAlign _lyricAlignment = TextAlign.center; // 默认居中对齐
   bool _useBlurBackground = true; // 默认启用模糊背景
   bool _useDynamicColor = true; // 默认启用动态颜色
+  double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
 
@@ -23,6 +26,7 @@ class SettingsProvider with ChangeNotifier {
   TextAlign get lyricAlignment => _lyricAlignment;
   bool get useBlurBackground => _useBlurBackground; // 获取模糊背景设置
   bool get useDynamicColor => _useDynamicColor; // 获取动态颜色设置
+  double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
 
@@ -37,6 +41,8 @@ class SettingsProvider with ChangeNotifier {
     _useBlurBackground = prefs.getBool(_useBlurBackgroundKey) ?? true;
     _useDynamicColor = prefs.getBool(_useDynamicColorKey) ?? true; // 加载动态颜色设置
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
+    _lyricVerticalSpacing =
+        prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
 
     final alignmentString = prefs.getString(_lyricAlignmentKey);
     _lyricAlignment = alignmentString != null
@@ -90,5 +96,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableOnlineLyricsKey, value);
+  }
+
+  void setLyricVerticalSpacing(double value) async {
+    _lyricVerticalSpacing = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_lyricVerticalSpacingKey, value);
   }
 }

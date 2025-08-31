@@ -27,12 +27,12 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
       ItemPositionsListener.create();
-  int? _hoveredIndex;
 
   double? _lastEstimatedMaxWidth;
   double? _lastFontSize;
   TextAlign? _lastAlignment;
   int? _lastMaxLinesPerLyric;
+  double? _lastLyricVerticalSpacing;
 
   @override
   void initState() {
@@ -95,6 +95,9 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     final fontSize = context.select<SettingsProvider, double>(
       (s) => s.fontSize,
     );
+    final lyricVerticalSpacing = context.select<SettingsProvider, double>(
+      (s) => s.lyricVerticalSpacing,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -105,7 +108,8 @@ class _LyricsWidgetState extends State<LyricsWidget> {
             _lastEstimatedMaxWidth != maxWidth ||
             _lastFontSize != fontSize ||
             _lastAlignment != lyricAlignment ||
-            _lastMaxLinesPerLyric != widget.maxLinesPerLyric;
+            _lastMaxLinesPerLyric != widget.maxLinesPerLyric ||
+            _lastLyricVerticalSpacing != lyricVerticalSpacing;
 
         if (settingsChanged) {
           // 更新记录的值
@@ -113,6 +117,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
           _lastFontSize = fontSize;
           _lastAlignment = lyricAlignment;
           _lastMaxLinesPerLyric = widget.maxLinesPerLyric;
+          _lastLyricVerticalSpacing = lyricVerticalSpacing;
 
           // 使用 Future.delayed 将滚动任务推迟到下一事件循环
           // 增加延迟用于确保布局完全稳定
@@ -150,30 +155,57 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                   ),
               ];
 
-              return MouseRegion(
-                onEnter: (_) => setState(() => _hoveredIndex = index),
-                onExit: (_) => setState(() => _hoveredIndex = null),
-                child: GestureDetector(
-                  onTap: () {
-                    widget.onTapLine?.call(index);
-                  },
-                  child: Align(
-                    alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                    child: Container(
-                      width: maxWidth, // 使用固定宽度，减去padding
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _hoveredIndex == index
-                            ? Colors.grey.withValues(alpha: 0.2)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(15),
+              return Padding(
+                padding: EdgeInsets.symmetric(
+                  vertical: lyricVerticalSpacing,
+                  horizontal: 4,
+                ),
+                child: Align(
+                  alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                  child: SizedBox(
+                    width: maxWidth,
+                    child: TextButton(
+                      onPressed: () {
+                        widget.onTapLine?.call(index);
+                        // 如果当前处于暂停状态，则开始播放
+                        final playlistNotifier =
+                            Provider.of<PlaylistContentNotifier>(
+                              context,
+                              listen: false,
+                            );
+                        if (!playlistNotifier.isPlaying) {
+                          playlistNotifier.play();
+                        }
+                      },
+                      style: ButtonStyle(
+                        padding: WidgetStateProperty.all<EdgeInsets>(
+                          const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                        ),
+                        shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                          (Set<WidgetState> states) {
+                            if (states.contains(WidgetState.hovered)) {
+                              return Colors.grey.withValues(alpha: 0.2);
+                            }
+                            return Colors.transparent;
+                          },
+                        ),
+                        overlayColor: WidgetStateProperty.resolveWith<Color>((
+                          Set<WidgetState> states,
+                        ) {
+                          if (states.contains(WidgetState.pressed)) {
+                            return Colors.grey.withValues(alpha: 0.3);
+                          }
+                          return Colors.transparent;
+                        }),
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
                       ),
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.stretch, // 拉伸以填充容器宽度
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: columnChildren,
                       ),
                     ),

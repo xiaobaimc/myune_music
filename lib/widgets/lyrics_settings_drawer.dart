@@ -68,6 +68,26 @@ class LyricsSettingsDrawer extends StatelessWidget {
               ),
               const Divider(),
 
+              // 歌词垂直间距设置
+              Text('歌词垂直间距', style: Theme.of(context).textTheme.titleMedium),
+              Slider(
+                value: settings.lyricVerticalSpacing,
+                min: 0.0,
+                max: 20.0,
+                divisions: 20,
+                label: settings.lyricVerticalSpacing.toStringAsFixed(1),
+                onChanged: (value) {
+                  context.read<SettingsProvider>().setLyricVerticalSpacing(
+                    value,
+                  );
+                },
+              ),
+              Text(
+                '当前间距: ${settings.lyricVerticalSpacing.toStringAsFixed(1)}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const Divider(),
+
               // 歌词对齐方式设置
               Text('歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),

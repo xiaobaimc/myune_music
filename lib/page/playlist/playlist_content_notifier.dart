@@ -642,13 +642,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> play() async {
     if (!_isPlaying) {
       await _mediaPlayer.play(); // 开始播放
+      _isPlaying = true; // 立即更新状态
     }
     await _smtcManager?.updateState(true);
     notifyListeners();
   }
 
   Future<void> pause() async {
-    await _mediaPlayer.pause();
+    if (_isPlaying) {
+      await _mediaPlayer.pause();
+      _isPlaying = false; // 立即更新状态
+    }
     await _smtcManager?.updateState(false);
     notifyListeners();
   }
@@ -875,7 +879,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _smtcManager?.updateState(true); // 播放状态
 
       // 提取并应用动态主题色
-      _extractAndApplyDynamicColor(songToPlay.albumArt);
+      extractAndApplyDynamicColor(songToPlay.albumArt);
 
       await _mediaPlayer.play(); // 最后执行播放
 
@@ -890,7 +894,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // -- 主题管理 --
   // 提取并应用动态主题色
-  Future<void> _extractAndApplyDynamicColor(Uint8List? albumArt) async {
+  Future<void> extractAndApplyDynamicColor(Uint8List? albumArt) async {
     // 检查设置是否启用了动态颜色
     if (!_settingsProvider.useDynamicColor || albumArt == null) {
       return;
@@ -1326,6 +1330,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
         right = mid - 1;
       }
     }
+
+    // // 如果当前是暂停状态，则开始播放
+    // if (!_isPlaying) {
+    //   _mediaPlayer.play();
+    // }
 
     if (newIndex != _currentLyricLineIndex) {
       _currentLyricLineIndex = newIndex;
