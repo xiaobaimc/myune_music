@@ -213,6 +213,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           _errorStreamController.add(
             '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏',
           );
+          // debugPrint('播放出错: $error');
         } else {
           _errorStreamController.add('播放出错: $error');
         }
@@ -865,6 +866,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentLyrics = [];
       _currentLyricLineIndex = -1;
 
+      // media-kit 默认会读取同名字幕文件，包括.lrc
+      // 然后不知道为什么又会在错误流抛出读取失败，导致无法播放带有同名 .lrc 的音频文件
+
+      // 这里直接调用底层 mpv 的属性设置
+      if (_mediaPlayer.platform is NativePlayer) {
+        await (_mediaPlayer.platform as dynamic).setProperty('sub-auto', 'no');
+      }
+
       await _mediaPlayer.open(Media(songFilePath));
 
       _loadLyricsForSong(songFilePath);
@@ -887,8 +896,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     } catch (e) {
       // 捕获所有播放相关的异常
       // _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
-
-      await playNext();
     }
   }
 
