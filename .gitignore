@@ -12,6 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 list_data/
+output_setup/
 
 # IntelliJ related
 *.iml

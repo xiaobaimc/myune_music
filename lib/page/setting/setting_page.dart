@@ -9,7 +9,7 @@ import '../../widgets/font_selector_row.dart';
 import 'update_checker.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.6.2';
+const String appVersion = '0.6.3';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
