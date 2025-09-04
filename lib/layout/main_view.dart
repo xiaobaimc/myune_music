@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../page/pages/play_list.dart';
 import '../page/pages/setting.dart';
@@ -21,6 +22,7 @@ class _MainViewState extends State<MainView> {
   int _currentIndex = 0;
   bool _isManuallyExpanded = false;
   bool _hasUserToggled = false;
+  bool _isExpanded = true;
 
   final int _tappedIndex = -1;
 
@@ -48,12 +50,36 @@ class _MainViewState extends State<MainView> {
     fontWeight: FontWeight.w400,
   );
 
+  // 加载保存的展开状态
+  Future<void> _loadExpandedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isExpanded = prefs.getBool('isNavigationRailExpanded') ?? true;
+      // 如果从未手动切换过，则使用保存的状态
+      if (!_hasUserToggled) {
+        _isManuallyExpanded = _isExpanded;
+      }
+    });
+  }
+
+  // 保存展开状态
+  Future<void> _saveExpandedState(bool isExpanded) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isNavigationRailExpanded', isExpanded);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExpandedState();
+  }
+
   @override
   Widget build(BuildContext context) {
     final playlistNotifier = context.read<PlaylistContentNotifier>();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bool isWideScreen = constraints.maxWidth >= 1000;
+        // final bool isWideScreen = constraints.maxWidth >= 1000;
         final aspectRatio = MediaQuery.of(context).size.aspectRatio;
         final bool isPortrait = aspectRatio <= 1.0; // 竖屏判断
 
@@ -62,8 +88,8 @@ class _MainViewState extends State<MainView> {
           // 即使手动点击过折叠按钮，在竖屏状态下也要保持折叠
           actualExtended = isPortrait ? false : _isManuallyExpanded;
         } else {
-          // 在竖屏状态下始终折叠，否则根据屏幕宽度决定
-          actualExtended = isPortrait ? false : isWideScreen;
+          // 在竖屏状态下始终折叠，否则根据保存的状态决定
+          actualExtended = isPortrait ? false : _isExpanded;
         }
         return Row(
           children: [
@@ -239,10 +265,13 @@ class _MainViewState extends State<MainView> {
                                         : Icons.arrow_forward_ios,
                                   ),
                                   onPressed: () {
+                                    final newState = !actualExtended;
                                     setState(() {
-                                      _isManuallyExpanded = !actualExtended;
+                                      _isManuallyExpanded = newState;
                                       _hasUserToggled = true;
                                     });
+                                    // 保存状态
+                                    _saveExpandedState(newState);
                                   },
                                 ),
                               ),
