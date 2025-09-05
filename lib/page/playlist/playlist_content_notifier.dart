@@ -1125,8 +1125,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _currentLyrics = []; // 清空歌词
       notifyListeners();
 
-      // 后台异步加载网络歌词
-      _loadOnlineLyrics(currentSong!.title);
+      // 根据设置选择主选歌词源
+      if (_settingsProvider.primaryLyricSource == 'primary') {
+        // 后台异步加载网络歌词
+        _loadOnlineLyrics(currentSong!.title);
+      } else {
+        // 后台异步加载备选歌词
+        _loadKugouLyrics(currentSong!.title);
+      }
     } else {
       _currentLyrics = []; // 确保在不执行网络请求时清空歌词
       notifyListeners();
@@ -1253,6 +1259,116 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 解析歌词
       _currentLyrics = _parseLrcContent(mergedLyrics);
+    } catch (e) {
+      _currentLyrics = [];
+    }
+    notifyListeners();
+  }
+
+  // 备选平台音乐歌词获取方法
+  Future<void> _loadKugouLyrics(String songTitle) async {
+    try {
+      // 检查 artist 是否为默认值，如果是则设置为空字符串
+      final rawArtist = _currentSong?.artist ?? '';
+      final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
+          ? ''
+          : rawArtist;
+
+      // 组合搜索关键词（有歌手时：歌名 + 歌手；否则只用歌名）
+      final searchKeyword = artist.isEmpty
+          ? songTitle.trim()
+          : '${songTitle.trim()} ${artist.trim()}';
+
+      // 对搜索关键词进行 url 编码
+      final encodedSearchKeyword = Uri.encodeComponent(searchKeyword);
+
+      // 第一步：搜索歌曲获取歌曲hash
+      final searchUrl =
+          'http://mobilecdnbj.kugou.com/api/v3/search/song?keyword=$encodedSearchKeyword&page=1&pagesize=1';
+      final searchUri = Uri.parse(searchUrl);
+
+      final searchResponse = await http.get(searchUri);
+
+      // 如果状态码不为200，清空并返回
+      if (searchResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 解析搜索结果
+      final searchResult = json.decode(searchResponse.body);
+
+      // 如果没有找到歌曲，同样清空歌词
+      if (searchResult['data'] == null ||
+          searchResult['data']['info'] == null ||
+          searchResult['data']['info'].isEmpty) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 取第一首匹配歌曲的hash
+      final songHash = searchResult['data']['info'][0]['hash'].toString();
+
+      // 第二步：获取歌词候选列表
+      final candidatesUrl =
+          'https://krcs.kugou.com/search?man=yes&hash=$songHash';
+      final candidatesUri = Uri.parse(candidatesUrl);
+
+      final candidatesResponse = await http.get(candidatesUri);
+
+      // 如果状态码不为200，清空并返回
+      if (candidatesResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      final candidatesResult = json.decode(candidatesResponse.body);
+
+      // 检查是否有候选歌词
+      if (candidatesResult['candidates'] == null ||
+          candidatesResult['candidates'].isEmpty) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 获取第一个候选歌词的id和accesskey
+      final lyricId = candidatesResult['candidates'][0]['id'].toString();
+      final accessKey = candidatesResult['candidates'][0]['accesskey']
+          .toString();
+
+      // 第三步：获取加密的歌词内容
+      final lyricUrl =
+          'https://lyrics.kugou.com/download?ver=1&id=$lyricId&accesskey=$accessKey&fmt=lrc';
+      final lyricUri = Uri.parse(lyricUrl);
+
+      final lyricResponse = await http.get(lyricUri);
+
+      // 如果状态码不为200，清空并返回
+      if (lyricResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      final lyricResult = json.decode(lyricResponse.body);
+
+      // 检查是否有歌词内容
+      if (lyricResult['content'] == null) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 第四步：解码base64歌词
+      final base64Lyric = lyricResult['content'].toString();
+      final decodedLyric = utf8.decode(base64Decode(base64Lyric));
+
+      // 解析歌词
+      _currentLyrics = _parseLrcContent([decodedLyric]);
     } catch (e) {
       _currentLyrics = [];
     }

@@ -199,6 +199,50 @@ class _SettingPageState extends State<SettingPage> {
             context.read<SettingsProvider>().setEnableOnlineLyrics(value);
           },
         ),
+        // 歌词源选择
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '网络歌词源选择',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(width: 4),
+                  const IconButton(
+                    icon: Icon(Icons.info_outline, size: 20),
+                    tooltip:
+                        '主选来源为某易云音乐，备选来源为某狗音乐\n其中备选只有原文没有翻译，但歌词匹配可能会更精确\n当未启用从网络获取歌词时，该选项不会生效',
+                    onPressed: null,
+                  ),
+                ],
+              ),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'primary', label: Text('主选')),
+                  ButtonSegment(value: 'secondary', label: Text('备选')),
+                ],
+                selected: {settings.primaryLyricSource},
+                onSelectionChanged: (newSelection) {
+                  if (newSelection.isNotEmpty) {
+                    final selected = newSelection.first;
+                    final secondary = selected == 'primary'
+                        ? 'secondary'
+                        : 'primary';
+                    final settingsProvider = context.read<SettingsProvider>();
+
+                    settingsProvider.setPrimaryLyricSource(selected);
+                    settingsProvider.setSecondaryLyricSource(secondary);
+                  }
+                },
+                showSelectedIcon: false,
+              ),
+            ],
+          ),
+        ),
         // 详情页同时间戳最大显示歌词行数
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

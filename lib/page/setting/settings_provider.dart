@@ -11,6 +11,9 @@ class SettingsProvider with ChangeNotifier {
   static const _enableOnlineLyricsKey = 'enableOnlineLyrics';
   static const _lyricVerticalSpacingKey =
       'lyricVerticalSpacing'; // 歌词垂直间距设置的 key
+  static const _primaryLyricSourceKey = 'primaryLyricSource'; // 主要歌词源设置的 key
+  static const _secondaryLyricSourceKey =
+      'secondaryLyricSource'; // 备用歌词源设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -20,6 +23,8 @@ class SettingsProvider with ChangeNotifier {
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
+  String _primaryLyricSource = 'primary'; // 默认主要歌词源为某易云音乐
+  String _secondaryLyricSource = 'secondary'; // 默认备用歌词源为某狗音乐
 
   int get maxLinesPerLyric => _maxLinesPerLyric;
   double get fontSize => _fontSize;
@@ -29,6 +34,8 @@ class SettingsProvider with ChangeNotifier {
   double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
+  String get primaryLyricSource => _primaryLyricSource; // 获取主要歌词源
+  String get secondaryLyricSource => _secondaryLyricSource; // 获取备用歌词源
 
   SettingsProvider() {
     _loadFromPrefs();
@@ -43,7 +50,10 @@ class SettingsProvider with ChangeNotifier {
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
     _lyricVerticalSpacing =
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
-
+    _primaryLyricSource =
+        prefs.getString(_primaryLyricSourceKey) ?? 'primary'; // 加载主要歌词源设置
+    _secondaryLyricSource =
+        prefs.getString(_secondaryLyricSourceKey) ?? 'secondary'; // 加载备用歌词源设置
     final alignmentString = prefs.getString(_lyricAlignmentKey);
     _lyricAlignment = alignmentString != null
         ? TextAlign.values.firstWhere(
@@ -103,5 +113,19 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_lyricVerticalSpacingKey, value);
+  }
+
+  void setPrimaryLyricSource(String value) async {
+    _primaryLyricSource = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_primaryLyricSourceKey, value);
+  }
+
+  void setSecondaryLyricSource(String value) async {
+    _secondaryLyricSource = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_secondaryLyricSourceKey, value);
   }
 }
