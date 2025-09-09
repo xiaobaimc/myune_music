@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../page/playlist/playlist_models.dart';
 import '../page/playlist/playlist_content_notifier.dart';
+import '../page/setting/settings_provider.dart';
 
 class SingleLineLyricWidget extends StatelessWidget {
   final List<LyricLine> lyrics;
@@ -99,6 +100,8 @@ class SingleLineLyricView extends StatelessWidget {
       listen: true,
     );
 
+    final settings = Provider.of<SettingsProvider>(context, listen: true);
+
     return StreamBuilder<int>(
       stream: playlistNotifier.lyricLineIndexStream, // 监听歌词行索引流
       initialData: playlistNotifier.currentLyricLineIndex, // 初始索引
@@ -109,7 +112,9 @@ class SingleLineLyricView extends StatelessWidget {
         return SingleLineLyricWidget(
           lyrics: currentLyrics,
           currentIndex: currentLyricLineIndex,
-          maxLinesPerLyric: maxLinesPerLyric,
+          maxLinesPerLyric: settings.forceSingleLineLyric
+              ? 1
+              : maxLinesPerLyric,
           fontSize: fontSize,
           textAlign: textAlign,
           alignment: alignment,

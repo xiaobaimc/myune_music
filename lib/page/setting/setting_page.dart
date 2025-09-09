@@ -212,6 +212,17 @@ class _SettingPageState extends State<SettingPage> {
             context.read<SettingsProvider>().setUseBlurBackground(value);
           },
         ),
+        // 始终保持单行歌词显示
+        SwitchListTile(
+          title: Text(
+            '顶部歌词始终单行显示',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          value: settings.forceSingleLineLyric,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setForceSingleLineLyric(value);
+          },
+        ),
         // 是否启用从网络获取歌词
         SwitchListTile(
           title: const Text('从网络获取歌词'),

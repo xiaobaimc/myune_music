@@ -8,6 +8,8 @@ class SettingsProvider with ChangeNotifier {
   static const _useBlurBackgroundKey = 'useBlurBackground'; // 模糊背景设置的 key
   static const _useDynamicColorKey = 'useDynamicColor'; // 动态颜色设置的 key
   static const _allowAnyFormatKey = 'allowAnyFormat'; // 允许任何格式设置的 key
+  static const _forceSingleLineLyricKey =
+      'forceSingleLineLyric'; // 强制单行歌词设置的 key
 
   static const _enableOnlineLyricsKey = 'enableOnlineLyrics';
   static const _lyricVerticalSpacingKey =
@@ -22,6 +24,7 @@ class SettingsProvider with ChangeNotifier {
   bool _useBlurBackground = true; // 默认启用模糊背景
   bool _useDynamicColor = true; // 默认启用动态颜色
   bool _allowAnyFormat = false; // 默认不允许任何格式
+  bool _forceSingleLineLyric = false; // 默认不强制单行显示歌词
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
@@ -34,6 +37,7 @@ class SettingsProvider with ChangeNotifier {
   bool get useBlurBackground => _useBlurBackground; // 获取模糊背景设置
   bool get useDynamicColor => _useDynamicColor; // 获取动态颜色设置
   bool get allowAnyFormat => _allowAnyFormat; // 获取允许任何格式设置
+  bool get forceSingleLineLyric => _forceSingleLineLyric; // 获取强制单行歌词设置
   double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
@@ -51,6 +55,8 @@ class SettingsProvider with ChangeNotifier {
     _useBlurBackground = prefs.getBool(_useBlurBackgroundKey) ?? true;
     _useDynamicColor = prefs.getBool(_useDynamicColorKey) ?? true; // 加载动态颜色设置
     _allowAnyFormat = prefs.getBool(_allowAnyFormatKey) ?? false; // 加载允许任何格式设置
+    _forceSingleLineLyric =
+        prefs.getBool(_forceSingleLineLyricKey) ?? false; // 加载强制单行歌词设置
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
     _lyricVerticalSpacing =
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
@@ -138,5 +144,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_allowAnyFormatKey, value);
+  }
+
+  void setForceSingleLineLyric(bool value) async {
+    _forceSingleLineLyric = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_forceSingleLineLyricKey, value);
   }
 }
