@@ -143,48 +143,36 @@ class _PlaybarState extends State<Playbar> {
                             ), // 去除内边距
                             shape: WidgetStateProperty.all(
                               RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                             ),
-                            elevation: WidgetStateProperty.all(0),
+                            elevation: WidgetStateProperty.all(4),
                           ),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child:
-                                  (currentSong?.albumArt != null &&
-                                      currentSong!.albumArt!.isNotEmpty)
-                                  ? Image.memory(
-                                      currentSong.albumArt!,
-                                      fit: BoxFit.cover,
-                                      width: 50,
-                                      height: 50,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Icon(
-                                              Icons.music_note,
-                                              color: onBarColor.withValues(
-                                                alpha: 0.7,
-                                              ),
-                                              size: 30,
-                                            );
-                                          },
-                                    )
-                                  : Icon(
-                                      Icons.music_note,
-                                      color: onBarColor.withValues(alpha: 0.7),
-                                      size: 30,
-                                    ),
-                            ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child:
+                                (currentSong?.albumArt != null &&
+                                    currentSong!.albumArt!.isNotEmpty)
+                                ? Image.memory(
+                                    currentSong.albumArt!,
+                                    fit: BoxFit.cover,
+                                    width: 50,
+                                    height: 50,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        Icons.music_note,
+                                        color: onBarColor.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                        size: 30,
+                                      );
+                                    },
+                                  )
+                                : Icon(
+                                    Icons.music_note,
+                                    color: onBarColor.withValues(alpha: 0.7),
+                                    size: 30,
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 8),

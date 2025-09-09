@@ -22,7 +22,7 @@ class ThemeSelectionScreen extends StatelessWidget {
     final themeProvider = context.watch<ThemeProvider>();
     final Color currentSeedColor = themeProvider.currentSeedColor;
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
           return SizedBox(

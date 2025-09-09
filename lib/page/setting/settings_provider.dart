@@ -7,6 +7,7 @@ class SettingsProvider with ChangeNotifier {
   static const _lyricAlignmentKey = 'lyricAlignment';
   static const _useBlurBackgroundKey = 'useBlurBackground'; // 模糊背景设置的 key
   static const _useDynamicColorKey = 'useDynamicColor'; // 动态颜色设置的 key
+  static const _allowAnyFormatKey = 'allowAnyFormat'; // 允许任何格式设置的 key
 
   static const _enableOnlineLyricsKey = 'enableOnlineLyrics';
   static const _lyricVerticalSpacingKey =
@@ -20,6 +21,7 @@ class SettingsProvider with ChangeNotifier {
   TextAlign _lyricAlignment = TextAlign.center; // 默认居中对齐
   bool _useBlurBackground = true; // 默认启用模糊背景
   bool _useDynamicColor = true; // 默认启用动态颜色
+  bool _allowAnyFormat = false; // 默认不允许任何格式
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
@@ -31,6 +33,7 @@ class SettingsProvider with ChangeNotifier {
   TextAlign get lyricAlignment => _lyricAlignment;
   bool get useBlurBackground => _useBlurBackground; // 获取模糊背景设置
   bool get useDynamicColor => _useDynamicColor; // 获取动态颜色设置
+  bool get allowAnyFormat => _allowAnyFormat; // 获取允许任何格式设置
   double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
@@ -47,6 +50,7 @@ class SettingsProvider with ChangeNotifier {
     _fontSize = prefs.getDouble(_fontSizeKey) ?? 20.0;
     _useBlurBackground = prefs.getBool(_useBlurBackgroundKey) ?? true;
     _useDynamicColor = prefs.getBool(_useDynamicColorKey) ?? true; // 加载动态颜色设置
+    _allowAnyFormat = prefs.getBool(_allowAnyFormatKey) ?? false; // 加载允许任何格式设置
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
     _lyricVerticalSpacing =
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
@@ -127,5 +131,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_secondaryLyricSourceKey, value);
+  }
+
+  void setAllowAnyFormat(bool value) async {
+    _allowAnyFormat = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_allowAnyFormatKey, value);
   }
 }

@@ -96,7 +96,7 @@ class _SettingPageState extends State<SettingPage> {
         const ThemeSelectionScreen(),
         // 检查更新按钮
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -130,6 +130,27 @@ class _SettingPageState extends State<SettingPage> {
               ),
             ),
           ),
+        // 允许添加任何格式的文件
+        SwitchListTile(
+          title: const Row(
+            children: [
+              Text('允许添加任何格式的文件'),
+              SizedBox(width: 4),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+                icon: Icon(Icons.info_outline, size: 20),
+                tooltip:
+                    '启用后可以选择任何格式的文件添加到歌单中\n底层使用 mpv，依赖 FFmpeg 解码，理论上支持播放所有音频格式\n除非确认兼容性，否则请谨慎启用该选项',
+                onPressed: null,
+              ),
+            ],
+          ),
+          value: settings.allowAnyFormat,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setAllowAnyFormat(value);
+          },
+        ),
         // 启用动态获取颜色
         SwitchListTile(
           title: Text(
@@ -214,6 +235,8 @@ class _SettingPageState extends State<SettingPage> {
                   const SizedBox(width: 4),
                   const IconButton(
                     icon: Icon(Icons.info_outline, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(),
                     tooltip:
                         '主选来源为某易云音乐，备选来源为某狗音乐\n其中备选只有原文没有翻译，但歌词匹配可能会更精确\n当未启用从网络获取歌词时，该选项不会生效',
                     onPressed: null,
@@ -221,6 +244,11 @@ class _SettingPageState extends State<SettingPage> {
                 ],
               ),
               SegmentedButton<String>(
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(EdgeInsets.zero),
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: WidgetStateProperty.all(const Size(0, 0)),
+                ),
                 segments: const [
                   ButtonSegment(value: 'primary', label: Text('主选')),
                   ButtonSegment(value: 'secondary', label: Text('备选')),
@@ -251,6 +279,11 @@ class _SettingPageState extends State<SettingPage> {
             children: [
               Text('同时间戳歌词行数', style: Theme.of(context).textTheme.titleMedium),
               SegmentedButton<int>(
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(EdgeInsets.zero),
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: WidgetStateProperty.all(const Size(0, 0)),
+                ),
                 segments: List.generate(5, (index) {
                   final value = index + 1;
                   return ButtonSegment(value: value, label: Text('$value'));
@@ -267,7 +300,7 @@ class _SettingPageState extends State<SettingPage> {
         ),
         // 详情页歌词字体大小
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -296,6 +329,11 @@ class _SettingPageState extends State<SettingPage> {
             children: [
               Text('详情页歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
               SegmentedButton<TextAlign>(
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(EdgeInsets.zero),
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: WidgetStateProperty.all(const Size(0, 0)),
+                ),
                 segments: const [
                   ButtonSegment(value: TextAlign.left, label: Text('居左')),
                   ButtonSegment(value: TextAlign.center, label: Text('居中')),

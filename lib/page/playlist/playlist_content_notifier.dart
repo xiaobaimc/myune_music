@@ -207,20 +207,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
         duration: duration,
       );
       // notifyListeners();
+    });
 
-      _mediaPlayer.stream.error.listen((error) {
-        if (_currentSong != null) {
-          _errorStreamController.add(
-            '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏',
-          );
-          // debugPrint('播放出错: $error');
-        } else {
-          _errorStreamController.add('播放出错: $error');
-        }
+    _mediaPlayer.stream.error.listen((error) {
+      if (_currentSong != null) {
+        _errorStreamController.add(
+          '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏',
+        );
+        debugPrint('播放出错: $error');
+      } else {
+        _errorStreamController.add('播放出错: $error');
+      }
 
-        // 尝试播放下一首歌曲
-        playNext();
-      });
+      // 尝试播放下一首歌曲
+      // playNext();
     });
   }
 
@@ -338,107 +338,36 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return false;
     }
 
-    final FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        'aa',
-        'aac',
-        'aax',
-        'ac3',
-        'ace',
-        'acm',
-        'act',
-        'adp',
-        'ads',
-        'adx',
-        'aea',
-        'afc',
-        'aiff',
-        'aix',
-        'amr',
-        'apc',
-        'ape',
-        'apm',
-        'ast',
-        'au',
-        'binka',
-        'bit',
-        'boa',
-        'brstm',
-        'caf',
-        'daud',
-        'dsf',
-        'dss',
-        'dts',
-        'dtshd',
-        'eac3',
-        'epaf',
-        'flac',
-        'fsb',
-        'fwse',
-        'g723_1',
-        'g729',
-        'genh',
-        'gsm',
-        'hca',
-        'hcom',
-        'ilbc',
-        'ircam',
-        'iss',
-        'kvag',
-        'laf',
-        'loas',
-        'm4a',
-        'mca',
-        'mlp',
-        'mmf',
-        'mods',
-        'mp3',
-        'mpc',
-        'mpc8',
-        'msf',
-        'mtaf',
-        'musx',
-        'nsp',
-        'ogg',
-        'oma',
-        'pvf',
-        'qcp',
-        'rka',
-        'rsd',
-        'rso',
-        'scd',
-        'sdns',
-        'sds',
-        'sdx',
-        'shn',
-        'sln',
-        'sol',
-        'sox',
-        'svag',
-        'tak',
-        'truehd',
-        'tta',
-        'vag',
-        'voc',
-        'vpk',
-        'vqf',
-        'w64',
-        'wady',
-        'wav',
-        'wavarc',
-        'wsaud',
-        'wsd',
-        'wv',
-        'wve',
-        'xa',
-        'xmd',
-        'xvag',
-        'xwma',
-        'pcm',
-      ],
-      allowMultiple: true,
-    );
+    final bool allowAnyFormat = _settingsProvider.allowAnyFormat;
+
+    FilePickerResult? result;
+    if (allowAnyFormat) {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
+      );
+    } else {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: [
+          'wav',
+          'wady',
+          'wavarc',
+          'flac',
+          'alac',
+          'ape',
+          'mp3',
+          'aac',
+          'm4a',
+          'ogg',
+          'opus',
+          'wma',
+          'aiff',
+          'pcm',
+        ],
+        allowMultiple: true,
+      );
+    }
 
     if (result == null) {
       return false; // 用户取消
