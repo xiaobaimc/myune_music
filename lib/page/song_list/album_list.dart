@@ -13,6 +13,7 @@ class AlbumList extends StatefulWidget {
 class _AlbumListState extends State<AlbumList> {
   bool _isSearching = false;
   String _searchKeyword = '';
+  bool _hideSingleSongAlbums = false;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +56,22 @@ class _AlbumListState extends State<AlbumList> {
                       ),
                       const Spacer(),
                       IconButton(
+                        icon: Icon(
+                          _hideSingleSongAlbums
+                              ? Icons.filter_alt_off_outlined
+                              : Icons.filter_alt_outlined,
+                          color: _hideSingleSongAlbums
+                              ? Theme.of(context).colorScheme.primary
+                              : null,
+                        ),
+                        tooltip: _hideSingleSongAlbums
+                            ? '显示所有专辑'
+                            : '隐藏只有单首歌曲的专辑',
+                        onPressed: () => setState(() {
+                          _hideSingleSongAlbums = !_hideSingleSongAlbums;
+                        }),
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.search),
                         tooltip: '搜索专辑',
                         onPressed: () => setState(() => _isSearching = true),
@@ -80,6 +97,13 @@ class _AlbumListState extends State<AlbumList> {
                       return name.toLowerCase().contains(
                         _searchKeyword.toLowerCase(),
                       );
+                    }).toList();
+                  }
+
+                  // 应用单曲专辑过滤逻辑
+                  if (_hideSingleSongAlbums) {
+                    albumNames = albumNames.where((name) {
+                      return albums[name]!.length > 1;
                     }).toList();
                   }
 
@@ -155,7 +179,7 @@ class _AlbumListState extends State<AlbumList> {
                                   horizontal: 8.0,
                                 ),
                                 child: Text(
-                                  songs.first.artist,
+                                  '共 ${songs.length} 首歌曲',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.bodySmall,

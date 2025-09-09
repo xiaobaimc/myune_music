@@ -55,12 +55,21 @@ class SongListDetailPage extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
                 const SizedBox(width: 8),
-                // 标题
+                // 标题和歌曲数量
                 Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge,
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        '共 ${notifier.activeSongList.length} 首',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
                   ),
                 ),
                 // 排序按钮
@@ -99,10 +108,7 @@ class SongListDetailWidget extends StatelessWidget {
       children: [
         if (isSearching)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
               autofocus: true,
               decoration: InputDecoration(

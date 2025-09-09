@@ -13,6 +13,7 @@ class ArtistList extends StatefulWidget {
 class _ArtistListState extends State<ArtistList> {
   bool _isSearching = false;
   String _searchKeyword = '';
+  bool _hideSingleSongArtists = false;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +56,22 @@ class _ArtistListState extends State<ArtistList> {
                       ),
                       const Spacer(),
                       IconButton(
+                        icon: Icon(
+                          _hideSingleSongArtists
+                              ? Icons.filter_alt_off_outlined
+                              : Icons.filter_alt_outlined,
+                          color: _hideSingleSongArtists
+                              ? Theme.of(context).colorScheme.primary
+                              : null,
+                        ),
+                        tooltip: _hideSingleSongArtists
+                            ? '显示所有歌手'
+                            : '隐藏只有单首歌曲的歌手',
+                        onPressed: () => setState(() {
+                          _hideSingleSongArtists = !_hideSingleSongArtists;
+                        }),
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.search),
                         tooltip: '搜索歌手',
                         onPressed: () => setState(() => _isSearching = true),
@@ -81,6 +98,14 @@ class _ArtistListState extends State<ArtistList> {
                       );
                     }).toList();
                   }
+
+                  // 应用单曲歌手过滤逻辑
+                  if (_hideSingleSongArtists) {
+                    artistNames = artistNames.where((name) {
+                      return artists[name]!.length > 1;
+                    }).toList();
+                  }
+
                   // 简化为固定的字母排序
                   artistNames.sort(
                     (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
@@ -114,7 +139,7 @@ class _ArtistListState extends State<ArtistList> {
                               : null,
                         ),
                         title: Text(artistName),
-                        subtitle: Text('${songs.length} 首歌曲'),
+                        subtitle: Text('共 ${songs.length} 首歌曲'),
                         onTap: () {
                           notifier.setActiveArtistView(artistName);
                           Navigator.of(context).push(
