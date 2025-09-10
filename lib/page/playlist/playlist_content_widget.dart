@@ -588,6 +588,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                 _showSongContextMenu(details.globalPosition, notifier);
               }
             },
+            borderRadius: BorderRadius.circular(8),
 
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
