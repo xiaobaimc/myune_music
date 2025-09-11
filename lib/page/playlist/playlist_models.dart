@@ -41,6 +41,11 @@ class Playlist {
   // 保存当前歌单播放歌曲的索引
   int? currentPlayingIndex;
 
+  // 标识是否为文件夹播放列表
+  bool isFolderBased;
+  // 存储相关文件夹路径
+  List<String> folderPaths;
+
   Playlist({
     String? id,
     required this.name,
@@ -48,8 +53,11 @@ class Playlist {
     List<String>? songFilePaths,
     this.currentPlayingIndex,
     this.songs,
+    this.isFolderBased = false,
+    List<String>? folderPaths,
   }) : id = id ?? const Uuid().v4(),
-       songFilePaths = songFilePaths ?? [];
+       songFilePaths = songFilePaths ?? [],
+       folderPaths = folderPaths ?? [];
 
   Map<String, dynamic> toJson() {
     return {
@@ -57,6 +65,8 @@ class Playlist {
       'name': name,
       'isDefault': isDefault,
       'currentPlayingIndex': currentPlayingIndex,
+      'isFolderBased': isFolderBased,
+      'folderPaths': folderPaths,
     };
   }
 
@@ -66,6 +76,10 @@ class Playlist {
       name: json['name'],
       isDefault: json['isDefault'] ?? false,
       currentPlayingIndex: json['currentPlayingIndex'],
+      isFolderBased: json['isFolderBased'] ?? false,
+      folderPaths: json['folderPaths'] != null
+          ? List<String>.from(json['folderPaths'])
+          : [],
     );
   }
 }

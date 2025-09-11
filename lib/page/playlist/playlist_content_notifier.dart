@@ -111,6 +111,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
   List<Song> get currentPlaylistSongs => _currentPlaylistSongs;
   bool get isLoadingSongs => _isLoadingSongs;
 
+  // 支持的音频文件扩展名
+  final List<String> _supportedAudioExtensions = [
+    '.mp3',
+    '.flac',
+    '.wav',
+    '.aac',
+    '.m4a',
+    '.ogg',
+    '.wma',
+    '.ape',
+    '.alac',
+    '.opus',
+  ];
+
   // --- SMTC ---
   SmtcManager? _smtcManager;
   SmtcManager? get smtcManager => _smtcManager;
@@ -214,7 +228,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _errorStreamController.add(
           '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏',
         );
-        debugPrint('播放出错: $error');
+        // debugPrint('播放出错: $error');
       } else {
         _errorStreamController.add('播放出错: $error');
       }
@@ -406,7 +420,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
-  bool addPlaylist(String name) {
+  bool addPlaylist(String name, {List<String>? folderPaths}) {
     final trimmedName = name.trim();
 
     if (trimmedName.isEmpty) {
@@ -419,15 +433,111 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return false; // 失败
     }
 
-    _playlists.add(Playlist(name: trimmedName));
+    // 如果提供了folderPaths，则创建基于文件夹的播放列表
+    final playlist = folderPaths != null && folderPaths.isNotEmpty
+        ? Playlist(
+            name: trimmedName,
+            isFolderBased: true,
+            folderPaths: folderPaths,
+          )
+        : Playlist(name: trimmedName);
+
+    _playlists.add(playlist);
     _selectedIndex = _playlists.length - 1;
+
+    // 如果是基于文件夹的播放列表，则扫描文件夹中的歌曲
+    if (folderPaths != null && folderPaths.isNotEmpty) {
+      _scanFoldersAndAddSongs(folderPaths);
+    }
+
     _savePlaylists();
+    _loadCurrentPlaylistSongs(); // 加载当前播放列表歌曲
+    _updateAllSongsList(); // 更新所有歌曲列表
     _infoStreamController.add('已成功创建歌单 “$trimmedName”');
 
     notifyListeners();
-    _loadCurrentPlaylistSongs();
-
     return true; // 成功
+  }
+
+  // 扫描文件夹并添加歌曲
+  Future<void> _scanFoldersAndAddSongs(List<String> folderPaths) async {
+    if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) return;
+
+    final playlist = _playlists[_selectedIndex];
+    if (!playlist.isFolderBased) return;
+
+    _isLoadingSongs = true;
+    notifyListeners();
+
+    try {
+      final Set<String> songPaths = <String>{};
+
+      // 遍历所有文件夹路径
+      for (final folderPath in folderPaths) {
+        final directory = Directory(folderPath);
+        if (await directory.exists()) {
+          await for (final file in directory.list(
+            recursive: true,
+            followLinks: false,
+          )) {
+            if (file is File) {
+              final extension = p.extension(file.path).toLowerCase();
+              // 检查是否为支持的音频文件格式
+              if (_supportedAudioExtensions.contains(extension)) {
+                songPaths.add(file.path);
+              }
+            }
+          }
+        }
+      }
+
+      // 更新播放列表的歌曲路径
+      playlist.songFilePaths = songPaths.toList();
+
+      // 解析歌曲元数据
+      final List<Song> songs = [];
+      for (final path in playlist.songFilePaths) {
+        final song = await _parseSongMetadata(path);
+        songs.add(song);
+      }
+
+      playlist.songs = songs;
+      _savePlaylists();
+
+      // 如果当前选中的就是这个播放列表，则更新当前播放列表歌曲
+      if (_selectedIndex == _playlists.indexOf(playlist)) {
+        _currentPlaylistSongs = List.from(songs);
+      }
+
+      // 更新所有歌曲列表
+      await _updateAllSongsList();
+    } catch (e) {
+      _errorStreamController.add('扫描文件夹时出错: $e');
+    } finally {
+      _isLoadingSongs = false;
+      notifyListeners();
+    }
+  }
+
+  // 刷新基于文件夹的播放列表
+  Future<void> refreshFolderPlaylist() async {
+    if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) return;
+
+    final playlist = _playlists[_selectedIndex];
+    if (!playlist.isFolderBased) return;
+
+    _isLoadingSongs = true;
+    notifyListeners();
+
+    try {
+      await _scanFoldersAndAddSongs(playlist.folderPaths);
+      _infoStreamController.add('已刷新文件夹内容');
+    } catch (e) {
+      _errorStreamController.add('刷新文件夹内容时出错: $e');
+    } finally {
+      _isLoadingSongs = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> deletePlaylist(int index) async {

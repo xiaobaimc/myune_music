@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
 import '../../widgets/sort_dialog.dart';
 import 'sort_options.dart';
+
+enum ManagementMode { manual, folder }
 
 class PlaylistContentWidget extends StatelessWidget {
   const PlaylistContentWidget({super.key});
@@ -49,30 +52,137 @@ class PlaylistListWidget extends StatelessWidget {
       context: context,
       builder: (context) {
         final controller = TextEditingController();
-        return AlertDialog(
-          title: const Text('添加新歌单'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: '输入歌单名称'),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final notifier = context.read<PlaylistContentNotifier>();
+        final List<String> selectedFolders = [];
+        ManagementMode selectedMode = ManagementMode.manual; // 默认为手动管理
 
-                if (notifier.addPlaylist(controller.text)) {
-                  // 仅在操作成功时关闭对话框
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('添加'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('添加新歌单'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(hintText: '输入歌单名称'),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('选择管理模式：'),
+                    // 手动管理模式单选按钮
+                    RadioListTile<ManagementMode>(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('手动管理歌单歌曲'),
+                      value: ManagementMode.manual,
+                      groupValue: selectedMode,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedMode = value!;
+                        });
+                      },
+                    ),
+                    // 文件夹管理模式单选按钮
+                    RadioListTile<ManagementMode>(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('使用文件夹管理歌单'),
+                      value: ManagementMode.folder,
+                      groupValue: selectedMode,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedMode = value!;
+                        });
+                      },
+                    ),
+                    if (selectedMode == ManagementMode.folder) ...[
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final folder = await FilePicker.platform
+                              .getDirectoryPath(dialogTitle: '请选择文件夹');
+                          if (folder != null) {
+                            setState(() {
+                              if (!selectedFolders.contains(folder)) {
+                                selectedFolders.add(folder);
+                              }
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('添加文件夹'),
+                      ),
+                      if (selectedFolders.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 100,
+                          child: Scrollbar(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: List.generate(
+                                  selectedFolders.length,
+                                  (index) => ListTile(
+                                    title: Text(
+                                      selectedFolders[index],
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    dense: true,
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.delete, size: 18),
+                                      onPressed: () {
+                                        setState(() {
+                                          selectedFolders.removeAt(index);
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final notifier = context.read<PlaylistContentNotifier>();
+
+                    if (selectedMode == ManagementMode.folder &&
+                        selectedFolders.isEmpty) {
+                      // 选择了文件夹管理模式但未选择文件夹
+                      notifier.postInfo('请选择至少一个文件夹');
+                      return;
+                    }
+
+                    if (selectedMode == ManagementMode.folder) {
+                      // 创建基于文件夹的播放列表
+                      if (notifier.addPlaylist(
+                        controller.text,
+                        folderPaths: selectedFolders,
+                      )) {
+                        Navigator.of(context).pop();
+                      }
+                    } else {
+                      // 创建普通播放列表（手动管理）
+                      if (notifier.addPlaylist(controller.text)) {
+                        Navigator.of(context).pop();
+                      }
+                    }
+                  },
+                  child: const Text('添加'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -208,6 +318,7 @@ class PlaylistListWidget extends StatelessWidget {
                     name: playlist.name,
                     isDefault: playlist.isDefault,
                     isSelected: selectedIndex == index,
+                    isFolderBased: playlist.isFolderBased,
                     onSecondaryTap: (position) {
                       _showContextMenu(position, index, context);
                     },
@@ -228,6 +339,7 @@ class PlaylistTileWidget extends StatefulWidget {
   final bool isDefault;
   final bool isSelected;
   final void Function(Offset position) onSecondaryTap;
+  final bool isFolderBased;
 
   const PlaylistTileWidget({
     super.key,
@@ -236,6 +348,7 @@ class PlaylistTileWidget extends StatefulWidget {
     required this.isDefault,
     required this.isSelected,
     required this.onSecondaryTap,
+    this.isFolderBased = false,
   });
 
   @override
@@ -266,7 +379,15 @@ class _PlaylistTileWidgetState extends State<PlaylistTileWidget> {
             widget.onSecondaryTap(details.globalPosition);
           },
           child: ListTile(
-            title: Text(widget.name, overflow: TextOverflow.ellipsis),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(widget.name, overflow: TextOverflow.ellipsis),
+                ),
+                if (widget.isFolderBased)
+                  const Icon(Icons.folder, size: 16, color: Colors.grey),
+              ],
+            ),
             selected: widget.isSelected,
           ),
         ),
@@ -356,7 +477,10 @@ class HeadSongListWidget extends StatelessWidget {
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           const Spacer(),
-                          if (isPlaylistSelected)
+                          if (isPlaylistSelected &&
+                              !notifier
+                                  .playlists[notifier.selectedIndex]
+                                  .isFolderBased)
                             ElevatedButton.icon(
                               onPressed: () => context
                                   .read<PlaylistContentNotifier>()
@@ -378,6 +502,16 @@ class HeadSongListWidget extends StatelessWidget {
                               icon: const Icon(Icons.search),
                               tooltip: '搜索歌曲',
                               onPressed: notifier.startSearch, // 点击触发搜索
+                            ),
+                          // 为基于文件夹的播放列表添加刷新按钮
+                          if (isPlaylistSelected &&
+                              notifier
+                                  .playlists[notifier.selectedIndex]
+                                  .isFolderBased)
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              tooltip: '刷新文件夹内容',
+                              onPressed: () => notifier.refreshFolderPlaylist(),
                             ),
                         ],
                       );
@@ -506,6 +640,10 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     final RenderBox overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
 
+    // 检查是否是基于文件夹的播放列表
+    final isFolderBasedPlaylist =
+        notifier.playlists[notifier.selectedIndex].isFolderBased;
+
     final result = await showMenu(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -516,7 +654,9 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       ),
       items: <PopupMenuItem<String>>[
         const PopupMenuItem<String>(value: 'moveToTop', child: Text('置于顶部')),
-        const PopupMenuItem<String>(value: 'deleteSong', child: Text('删除歌曲')),
+        // 只有非基于文件夹的播放列表才允许删除歌曲
+        if (!isFolderBasedPlaylist)
+          const PopupMenuItem<String>(value: 'deleteSong', child: Text('删除歌曲')),
       ],
     );
 
