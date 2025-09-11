@@ -119,9 +119,12 @@ class _MainViewState extends State<MainView> {
                       scale: _tappedIndex == 0 ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeInOut,
-                      child: Icon(
-                        Icons.playlist_play,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      child: Tooltip(
+                        message: '歌单',
+                        child: Icon(
+                          Icons.playlist_play,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     selectedIcon: AnimatedScale(
@@ -140,9 +143,12 @@ class _MainViewState extends State<MainView> {
                       scale: _tappedIndex == 1 ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeInOut,
-                      child: Icon(
-                        Icons.queue_music,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      child: Tooltip(
+                        message: '全部歌曲',
+                        child: Icon(
+                          Icons.queue_music,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     selectedIcon: AnimatedScale(
@@ -161,9 +167,12 @@ class _MainViewState extends State<MainView> {
                       scale: _tappedIndex == 2 ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeInOut,
-                      child: Icon(
-                        Icons.person_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      child: Tooltip(
+                        message: '歌手',
+                        child: Icon(
+                          Icons.person_outlined,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     selectedIcon: AnimatedScale(
@@ -182,9 +191,12 @@ class _MainViewState extends State<MainView> {
                       scale: _tappedIndex == 3 ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeInOut,
-                      child: Icon(
-                        Icons.album_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      child: Tooltip(
+                        message: '专辑',
+                        child: Icon(
+                          Icons.album_outlined,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     selectedIcon: AnimatedScale(
@@ -203,9 +215,12 @@ class _MainViewState extends State<MainView> {
                       scale: _tappedIndex == 4 ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeInOut,
-                      child: Icon(
-                        Icons.library_music_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      child: Tooltip(
+                        message: '歌曲详情信息',
+                        child: Icon(
+                          Icons.library_music_outlined,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     selectedIcon: AnimatedScale(
@@ -224,9 +239,12 @@ class _MainViewState extends State<MainView> {
                       scale: _tappedIndex == 5 ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeInOut,
-                      child: Icon(
-                        Icons.settings_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      child: Tooltip(
+                        message: '设置',
+                        child: Icon(
+                          Icons.settings_outlined,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     selectedIcon: AnimatedScale(
