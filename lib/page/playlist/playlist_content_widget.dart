@@ -215,6 +215,15 @@ class PlaylistListWidget extends StatelessWidget {
           const PopupMenuItem<String>(value: 'delete', child: Text('删除歌单')),
         );
       }
+      // 如果是基于文件夹的播放列表，添加编辑文件夹选项
+      if (playlistNotifier.playlists[index].isFolderBased) {
+        menuItems.add(
+          const PopupMenuItem<String>(
+            value: 'editFolders',
+            child: Text('编辑文件夹'),
+          ),
+        );
+      }
     }
 
     final result = await showMenu(
@@ -242,6 +251,10 @@ class PlaylistListWidget extends StatelessWidget {
     } else if (result == 'edit' && index != null) {
       if (context.mounted) {
         _showEditPlaylistDialog(context, index, playlistNotifier);
+      }
+    } else if (result == 'editFolders' && index != null) {
+      if (context.mounted) {
+        _showEditFoldersDialog(context, index, playlistNotifier);
       }
     }
   }
@@ -329,6 +342,98 @@ class PlaylistListWidget extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _showEditFoldersDialog(
+    BuildContext context,
+    int index,
+    PlaylistContentNotifier notifier,
+  ) {
+    final playlist = notifier.playlists[index];
+    // 创建一个副本以避免直接修改原始列表
+    final List<String> selectedFolders = List<String>.from(
+      playlist.folderPaths,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('编辑文件夹'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final folder = await FilePicker.platform
+                            .getDirectoryPath(dialogTitle: '请选择文件夹');
+                        if (folder != null) {
+                          setState(() {
+                            if (!selectedFolders.contains(folder)) {
+                              selectedFolders.add(folder);
+                            }
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('添加文件夹'),
+                    ),
+                    if (selectedFolders.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 150,
+                        child: Scrollbar(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: List.generate(
+                                selectedFolders.length,
+                                (index) => ListTile(
+                                  title: Text(
+                                    selectedFolders[index],
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  dense: true,
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete, size: 18),
+                                    onPressed: () {
+                                      setState(() {
+                                        selectedFolders.removeAt(index);
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // 更新播放列表的文件夹路径
+                    notifier.updatePlaylistFolders(index, selectedFolders);
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

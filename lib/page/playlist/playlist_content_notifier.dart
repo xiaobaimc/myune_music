@@ -429,7 +429,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     if (_playlists.any((playlist) => playlist.name == trimmedName)) {
-      _infoStreamController.add('歌单名称 "$trimmedName" 已存在');
+      _infoStreamController.add('歌单名称 $trimmedName 已存在');
       return false; // 失败
     }
 
@@ -453,7 +453,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _savePlaylists();
     _loadCurrentPlaylistSongs(); // 加载当前播放列表歌曲
     _updateAllSongsList(); // 更新所有歌曲列表
-    _infoStreamController.add('已成功创建歌单 “$trimmedName”');
+    _infoStreamController.add('已成功创建歌单 $trimmedName');
 
     notifyListeners();
     return true; // 成功
@@ -491,32 +491,89 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
       }
 
-      // 更新播放列表的歌曲路径
-      playlist.songFilePaths = songPaths.toList();
+      // 比较新旧歌曲路径集合，只添加或删除变化的部分
+      final oldSongPaths = playlist.songFilePaths.toSet();
+      final newSongPaths = songPaths;
 
-      // 解析歌曲元数据
-      final List<Song> songs = [];
-      for (final path in playlist.songFilePaths) {
+      // 找出新增的歌曲路径
+      final addedSongPaths = newSongPaths.difference(oldSongPaths);
+      // 找出删除的歌曲路径
+      final removedSongPaths = oldSongPaths.difference(newSongPaths);
+
+      // 从现有列表中移除已删除的歌曲
+      playlist.songFilePaths.removeWhere(
+        (path) => removedSongPaths.contains(path),
+      );
+
+      // 添加新增的歌曲到末尾
+      playlist.songFilePaths.addAll(addedSongPaths);
+
+      // 解析新增歌曲的元数据
+      final List<Song> newSongs = [];
+      for (final path in addedSongPaths) {
         final song = await _parseSongMetadata(path);
-        songs.add(song);
+        newSongs.add(song);
       }
 
-      playlist.songs = songs;
+      // 更新播放列表的歌曲对象列表
+      if (playlist.songs != null) {
+        // 移除已删除的歌曲对象
+        playlist.songs!.removeWhere(
+          (song) => removedSongPaths.contains(song.filePath),
+        );
+        // 添加新增的歌曲对象
+        playlist.songs!.addAll(newSongs);
+      } else {
+        // 如果之前没有解析过歌曲，则全部重新解析
+        final List<Song> songs = [];
+        for (final path in playlist.songFilePaths) {
+          final song = await _parseSongMetadata(path);
+          songs.add(song);
+        }
+        playlist.songs = songs;
+      }
+
       _savePlaylists();
 
       // 如果当前选中的就是这个播放列表，则更新当前播放列表歌曲
       if (_selectedIndex == _playlists.indexOf(playlist)) {
-        _currentPlaylistSongs = List.from(songs);
+        _currentPlaylistSongs = List.from(playlist.songs ?? []);
       }
 
       // 更新所有歌曲列表
       await _updateAllSongsList();
+
+      // 显示操作结果信息
+      if (addedSongPaths.isNotEmpty || removedSongPaths.isNotEmpty) {
+        _infoStreamController.add(
+          '刷新完成：新增 ${addedSongPaths.length} 首歌曲，移除 ${removedSongPaths.length} 首歌曲',
+        );
+      } else {
+        _infoStreamController.add('刷新完成：没有发现变化');
+      }
     } catch (e) {
       _errorStreamController.add('扫描文件夹时出错: $e');
     } finally {
       _isLoadingSongs = false;
       notifyListeners();
     }
+  }
+
+  // 更新播放列表的文件夹路径
+  void updatePlaylistFolders(int index, List<String> folderPaths) {
+    if (index < 0 || index >= _playlists.length) return;
+
+    final playlist = _playlists[index];
+    if (!playlist.isFolderBased) return;
+
+    playlist.folderPaths = List<String>.from(folderPaths);
+    _savePlaylists();
+
+    // 重新扫描文件夹内容
+    _scanFoldersAndAddSongs(playlist.folderPaths);
+
+    _infoStreamController.add('已更新 ${playlist.name}');
+    notifyListeners();
   }
 
   // 刷新基于文件夹的播放列表
@@ -531,9 +588,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     try {
       await _scanFoldersAndAddSongs(playlist.folderPaths);
-      _infoStreamController.add('已刷新文件夹内容');
+      // _infoStreamController.add('已刷新文件夹内容');
     } catch (e) {
-      _errorStreamController.add('刷新文件夹内容时出错: $e');
+      // _errorStreamController.add('刷新文件夹内容时出错: $e');
     } finally {
       _isLoadingSongs = false;
       notifyListeners();
