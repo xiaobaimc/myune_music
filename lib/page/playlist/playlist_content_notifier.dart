@@ -104,6 +104,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
   bool get isSearching => _isSearching;
   List<Song> get filteredSongs => _filteredSongs;
 
+  // --- 多选相关 ---
+  bool _isMultiSelectMode = false; // 是否处于多选模式
+  final Set<String> _selectedSongPaths = <String>{}; // 选中的歌曲路径集合
+
+  bool get isMultiSelectMode => _isMultiSelectMode;
+  Set<String> get selectedSongPaths => _selectedSongPaths;
+  List<Song> get selectedSongs => _currentPlaylistSongs
+      .where((song) => _selectedSongPaths.contains(song.filePath))
+      .toList();
+
   // --- 当前歌单的歌曲 ---
   List<Song> _currentPlaylistSongs = []; // 当前选中歌单下的所有歌曲
   bool _isLoadingSongs = false; // 是否正在加载歌曲
@@ -286,9 +296,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentPlaylistSongs = currentPlaylist.songs!;
 
     _isLoadingSongs = false;
-    // if (_isSearching) {
-    //   _updateFilteredSongs(searchInAllSongs: false); // 如果正在搜索，同步更新结果
-    // }
+    if (_isSearching) {
+      _updateFilteredSongs(); // 如果正在搜索，同步更新结果
+    }
     notifyListeners();
   }
 
@@ -1472,6 +1482,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 解析歌词
+  // FIXME: 歌词会缺少最后一行的最后一个字，暂时不知道什么原因
   List<LyricLine> _parseLrcContent(List<String> lines) {
     final Map<Duration, List<String>> groupedLyrics = {};
     final RegExp timeStampRegExp = RegExp(
@@ -1645,6 +1656,97 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- 多选相关 ---
+
+  // 进入多选模式
+  void enterMultiSelectMode() {
+    if (_isMultiSelectMode) return;
+    _isMultiSelectMode = true;
+    _selectedSongPaths.clear();
+    notifyListeners();
+  }
+
+  // 退出多选模式
+  void exitMultiSelectMode() {
+    if (!_isMultiSelectMode) return;
+    _isMultiSelectMode = false;
+    _selectedSongPaths.clear();
+    notifyListeners();
+  }
+
+  // 切换歌曲的选中状态
+  void toggleSongSelection(Song song) {
+    if (!_isMultiSelectMode) return;
+
+    if (_selectedSongPaths.contains(song.filePath)) {
+      _selectedSongPaths.remove(song.filePath);
+    } else {
+      _selectedSongPaths.add(song.filePath);
+    }
+    notifyListeners();
+  }
+
+  // 删除选中的歌曲
+  Future<void> removeSelectedSongs() async {
+    if (!_isMultiSelectMode) return;
+    if (_selectedSongPaths.isEmpty) return;
+    if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) return;
+
+    final currentPlaylist = _playlists[_selectedIndex];
+
+    // // 检查是否是基于文件夹的播放列表
+    // if (currentPlaylist.isFolderBased) {
+    //   _infoStreamController.add('基于文件夹歌单不支持删除歌曲');
+    //   return;
+    // }
+
+    final selectedSongs = _currentPlaylistSongs
+        .where((song) => _selectedSongPaths.contains(song.filePath))
+        .toList();
+
+    // 从当前播放列表中移除选中的歌曲
+    for (final song in selectedSongs) {
+      currentPlaylist.songFilePaths.remove(song.filePath);
+
+      // 如果删除的是正在播放的歌曲
+      if (_currentSong?.filePath == song.filePath &&
+          _playingPlaylist?.id == currentPlaylist.id) {
+        await stop(); // 直接停止
+      }
+    }
+
+    _infoStreamController.add('已删除 ${selectedSongs.length} 首歌曲');
+
+    // 清空选中状态
+    _selectedSongPaths.clear();
+    _isMultiSelectMode = false;
+
+    // 重新加载当前播放列表
+    await _loadCurrentPlaylistSongs();
+    await _updateAllSongsList();
+
+    await _savePlaylists();
+  }
+
+  // 全选所有歌曲
+  void selectAllSongs() {
+    if (!_isMultiSelectMode) return;
+
+    _selectedSongPaths.clear();
+    for (final song in _currentPlaylistSongs) {
+      _selectedSongPaths.add(song.filePath);
+    }
+    notifyListeners();
+  }
+
+  // 取消选择所有歌曲
+  void deselectAllSongs() {
+    if (!_isMultiSelectMode) return;
+
+    _selectedSongPaths.clear();
+    notifyListeners();
+  }
+
   // -------
 
   // 这个方法是专门给歌曲详情页用的
@@ -1811,6 +1913,41 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  // 清理无效的排序数据（指向不存在歌曲的路径）
+  void _cleanupInvalidSortingData() {
+    final validPaths = _allSongs.map((song) => song.filePath).toSet();
+
+    // 清理专辑排序数据
+    final albumsToRemove = <String>[];
+    _albumSortOrders.forEach((albumName, paths) {
+      paths.removeWhere((path) => !validPaths.contains(path));
+      // 如果排序列表为空，则移除该专辑的排序数据
+      if (paths.isEmpty) {
+        albumsToRemove.add(albumName);
+      }
+    });
+    for (final albumName in albumsToRemove) {
+      _albumSortOrders.remove(albumName);
+    }
+
+    // 清理歌手排序数据
+    final artistsToRemove = <String>[];
+    _artistSortOrders.forEach((artistName, paths) {
+      paths.removeWhere((path) => !validPaths.contains(path));
+      // 如果排序列表为空，则移除该歌手的排序数据
+      if (paths.isEmpty) {
+        artistsToRemove.add(artistName);
+      }
+    });
+    for (final artistName in artistsToRemove) {
+      _artistSortOrders.remove(artistName);
+    }
+
+    // 保存清理后的排序数据
+    _playlistManager.saveAlbumSortOrders(_albumSortOrders);
+    _playlistManager.saveArtistSortOrders(_artistSortOrders);
   }
 
   Future<void> playFromDynamicList(List<Song> songs, int startIndex) async {
@@ -1986,6 +2123,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // if (_isSearching) {
     //   _updateFilteredSongs(searchInAllSongs: true); // 如果正在搜索，同步更新结果
     // }
+    // 清理无效的排序数据
+    _cleanupInvalidSortingData();
   }
 
   Future<void> reorderAllSongs(int oldIndex, int newIndex) async {
