@@ -84,6 +84,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
   double get currentPitch => _currentPitch;
   double get currentPlaybackRate => _currentPlaybackRate;
 
+  // --- 音量控制 ---
+  double _volume = 100.0; // 当前音量
+  double _lastVolumeBeforeMute = 100.0; // 静音前的音量
+
+  double get volume => _volume;
+  double get lastVolumeBeforeMute => _lastVolumeBeforeMute;
+
   // --- 歌词相关 --
   List<LyricLine> _currentLyrics = []; // 当前歌曲歌词列表
   int _currentLyricLineIndex = -1; // 当前歌词行索引
@@ -184,10 +191,37 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _loadPlaylists();
     // 加载播放模式
     await loadPlayMode();
+    // 加载音量设置
+    await _loadVolumeSetting();
 
     // 加载歌手和专辑的排序
     _artistSortOrders = await _playlistManager.loadArtistSortOrders();
     _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
+  }
+
+  Future<void> _loadVolumeSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    _volume = prefs.getDouble('player_volume') ?? 100.0;
+    _lastVolumeBeforeMute = _volume;
+    await _mediaPlayer.setVolume(_volume);
+  }
+
+  Future<void> setVolume(double newVolume) async {
+    _volume = newVolume.clamp(0.0, 100.0);
+    if (_volume > 1.0) _lastVolumeBeforeMute = _volume;
+
+    await _mediaPlayer.setVolume(_volume);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('player_volume', _volume);
+
+    notifyListeners();
+  }
+
+  void toggleMute() {
+    final isMuted = _volume < 1.0;
+    final newVolume = isMuted ? _lastVolumeBeforeMute : 0.0;
+    setVolume(newVolume);
   }
 
   @override
