@@ -223,6 +223,29 @@ class _SettingPageState extends State<SettingPage> {
             context.read<SettingsProvider>().setForceSingleLineLyric(value);
           },
         ),
+        // 独占模式设置
+        Consumer<PlaylistContentNotifier>(
+          builder: (context, playlistNotifier, child) {
+            return SwitchListTile(
+              title: const Row(
+                children: [
+                  Text('启用独占模式'),
+                  SizedBox(width: 4),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(),
+                    icon: Icon(Icons.info_outline, size: 20),
+                    tooltip:
+                        '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这可能会导致其他应用无法播放音频\n仅在播放器处于活跃状态时可用',
+                    onPressed: null,
+                  ),
+                ],
+              ),
+              value: playlistNotifier.isExclusiveModeEnabled,
+              onChanged: playlistNotifier.toggleExclusiveMode,
+            );
+          },
+        ),
         // 是否启用从网络获取歌词
         SwitchListTile(
           title: const Text('从网络获取歌词'),

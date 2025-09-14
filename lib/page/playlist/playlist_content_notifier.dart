@@ -111,6 +111,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
   bool get isSearching => _isSearching;
   List<Song> get filteredSongs => _filteredSongs;
 
+  // --- 日志相关 ---
+  File? _logFile;
+  File? get logFile => _logFile;
+
+  // --- 独占模式相关 ---
+  bool _isExclusiveModeEnabled = false;
+  bool _isExclusiveModeAvailable = false;
+
+  bool get isExclusiveModeEnabled => _isExclusiveModeEnabled;
+  bool get isExclusiveModeAvailable => _isExclusiveModeAvailable;
+
   // --- 多选相关 ---
   bool _isMultiSelectMode = false; // 是否处于多选模式
   final Set<String> _selectedSongPaths = <String>{}; // 选中的歌曲路径集合
@@ -171,7 +182,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   PlaylistContentNotifier(this._settingsProvider, this._themeProvider) {
     _setupMediaPlayerListeners(); // 设置 media-kit 的监听器
+    _initLogFile();
     _loadAllData(); // 使用一个统一的方法来加载所有数据
+    _listenToPlayingState();
     _smtcManager = SmtcManager(
       onPlay: play,
       onPause: pause,
@@ -184,6 +197,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
         await _mediaPlayer.seek(position);
       },
     );
+  }
+
+  Future<void> _initLogFile() async {
+    try {
+      final logDir = Directory('logs');
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      _logFile = File('${logDir.path}/errors.log');
+    } catch (e) {
+      // 如果无法创建日志文件，继续运行但不记录日志
+    }
+  }
+
+  Future<void> _writeErrorToLog(String message, Object error) async {
+    if (_logFile == null) return;
+
+    try {
+      final timestamp = DateTime.now().toString();
+      final errorInfo = '[$timestamp] $message\nError details: $error\n\n';
+      await _logFile!.writeAsString(errorInfo, mode: FileMode.writeOnlyAppend);
+    } catch (e) {
+      //
+    }
   }
 
   Future<void> _loadAllData() async {
@@ -269,12 +306,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _mediaPlayer.stream.error.listen((error) {
       if (_currentSong != null) {
-        _errorStreamController.add(
-          '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏',
-        );
-        // debugPrint('播放出错: $error');
+        final errorMessage =
+            '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏';
+        _errorStreamController.add(errorMessage);
+        // 记录详细错误信息到日志文件
+        _writeErrorToLog(errorMessage, error);
+        debugPrint('播放出错: $error');
       } else {
-        _errorStreamController.add('播放出错: $error');
+        final errorMessage = '播放出错: $error';
+        _errorStreamController.add(errorMessage);
+        // 记录详细错误信息到日志文件
+        _writeErrorToLog(errorMessage, error);
       }
 
       // 尝试播放下一首歌曲
@@ -308,6 +350,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   void setSelectedIndex(int index) {
     if (_selectedIndex == index) return;
     _selectedIndex = index;
+    // 切换歌单时退出多选模式
+    if (_isMultiSelectMode) {
+      _isMultiSelectMode = false;
+      _selectedSongPaths.clear();
+    }
     notifyListeners();
     _loadCurrentPlaylistSongs(); // 选中索引变化时加载歌曲到 UI 和播放器
   }
@@ -1011,7 +1058,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 这里直接调用底层 mpv 的属性设置
       if (_mediaPlayer.platform is NativePlayer) {
-        await (_mediaPlayer.platform as dynamic).setProperty('sub-auto', 'no');
+        try {
+          await (_mediaPlayer.platform as dynamic).setProperty(
+            'sub-auto',
+            'no',
+          );
+
+          // 先不设置独占模式，使用默认音频
+          await (_mediaPlayer.platform as dynamic).setProperty('ao', 'wasapi');
+
+          // 监听播放状态，在开始播放后再启用独占模式
+          if (_isExclusiveModeEnabled) {
+            _enableExclusive();
+          }
+        } catch (e) {
+          //
+        }
       }
 
       await _mediaPlayer.open(Media(songFilePath));
@@ -1037,6 +1099,80 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // 捕获所有播放相关的异常
       // _errorStreamController.add('无法播放${p.basename(songFilePath)}，可能文件已经损坏');
     }
+  }
+
+  // 启用独占模式
+  void _enableExclusive() {
+    _mediaPlayer.stream.playing.listen((isPlaying) async {
+      if (isPlaying) {
+        // 播放开始后，尝试切换到独占模式
+        await Future.delayed(const Duration(milliseconds: 500)); // 等待音频稳定
+
+        try {
+          await (_mediaPlayer.platform as dynamic).setProperty(
+            'audio-exclusive',
+            'yes',
+          );
+        } catch (e) {
+          //
+        }
+      }
+    });
+  }
+
+  void toggleExclusiveMode(bool? value) {
+    if (value == null) return;
+
+    // 只有在播放器处于活跃状态时才能启用
+    if (value && !_mediaPlayer.state.playing) {
+      _infoStreamController.add('请先开始播放以启用独占模式');
+      notifyListeners();
+      return;
+    }
+
+    _isExclusiveModeEnabled = value;
+    _isExclusiveModeAvailable = _mediaPlayer.state.playing;
+
+    if (value && _isExclusiveModeAvailable) {
+      // 立即启用独占模式
+      _enableExclusiveNow();
+    } else if (!value) {
+      // 禁用独占模式
+      _disableExclusiveMode();
+    }
+
+    notifyListeners();
+  }
+
+  void _enableExclusiveNow() {
+    try {
+      (_mediaPlayer.platform as dynamic).setProperty('audio-exclusive', 'yes');
+    } catch (e) {
+      _errorStreamController.add('启用独占模式失败: $e');
+    }
+  }
+
+  void _disableExclusiveMode() {
+    try {
+      (_mediaPlayer.platform as dynamic).setProperty('audio-exclusive', 'no');
+    } catch (e) {
+      _errorStreamController.add('禁用独占模式失败: $e');
+    }
+  }
+
+  // 监听播放状态变化，更新独占模式可用性
+  void _listenToPlayingState() {
+    _mediaPlayer.stream.playing.listen((isPlaying) async {
+      _isExclusiveModeAvailable = isPlaying;
+
+      // 如果启用了独占模式且现在开始播放，则启用独占模式
+      if (_isExclusiveModeEnabled && isPlaying) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        _enableExclusiveNow();
+      }
+
+      notifyListeners();
+    });
   }
 
   // -- 主题管理 --
@@ -1516,7 +1652,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 解析歌词
-  // FIXME: 歌词会缺少最后一行的最后一个字，暂时不知道什么原因
+  // FIXME: 部分歌词会缺少最后一行的最后一个字，暂时不知道什么原因
   List<LyricLine> _parseLrcContent(List<String> lines) {
     final Map<Duration, List<String>> groupedLyrics = {};
     final RegExp timeStampRegExp = RegExp(
