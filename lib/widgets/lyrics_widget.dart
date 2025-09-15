@@ -33,6 +33,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   TextAlign? _lastAlignment;
   int? _lastMaxLinesPerLyric;
   double? _lastLyricVerticalSpacing;
+  bool? _lastAddLyricPadding;
 
   @override
   void initState() {
@@ -72,11 +73,19 @@ class _LyricsWidgetState extends State<LyricsWidget> {
       return;
     }
 
+    // 获取设置
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final addLyricPadding = settings.addLyricPadding;
+    // 计算实际滚动到的索引（考虑填充项偏移）
+    final int actualIndex = addLyricPadding
+        ? widget.currentIndex + 1
+        : widget.currentIndex;
+
     if (instant) {
-      _itemScrollController.jumpTo(index: widget.currentIndex, alignment: 0.0);
+      _itemScrollController.jumpTo(index: actualIndex, alignment: 0.0);
     } else {
       _itemScrollController.scrollTo(
-        index: widget.currentIndex,
+        index: actualIndex,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
         alignment: 0.4, // 0.4 看起来更顺眼一点
@@ -98,6 +107,9 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     final lyricVerticalSpacing = context.select<SettingsProvider, double>(
       (s) => s.lyricVerticalSpacing,
     );
+    final addLyricPadding = context.select<SettingsProvider, bool>(
+      (s) => s.addLyricPadding,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -109,7 +121,8 @@ class _LyricsWidgetState extends State<LyricsWidget> {
             _lastFontSize != fontSize ||
             _lastAlignment != lyricAlignment ||
             _lastMaxLinesPerLyric != widget.maxLinesPerLyric ||
-            _lastLyricVerticalSpacing != lyricVerticalSpacing;
+            _lastLyricVerticalSpacing != lyricVerticalSpacing ||
+            _lastAddLyricPadding != addLyricPadding;
 
         if (settingsChanged) {
           // 更新记录的值
@@ -118,6 +131,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
           _lastAlignment = lyricAlignment;
           _lastMaxLinesPerLyric = widget.maxLinesPerLyric;
           _lastLyricVerticalSpacing = lyricVerticalSpacing;
+          _lastAddLyricPadding = addLyricPadding;
 
           // 使用 Future.delayed 将滚动任务推迟到下一事件循环
           // 增加延迟用于确保布局完全稳定
@@ -128,15 +142,42 @@ class _LyricsWidgetState extends State<LyricsWidget> {
           });
         }
 
+        // 计算填充项数量，如果启用补位则添加1个填充项，否则不添加
+        final int paddingItemCount = addLyricPadding ? 1 : 0;
+        // 实际的歌词行数
+        final int actualLyricsCount = widget.lyrics.length;
+        // 总的项数（包括填充项）
+        final int totalItemCount = actualLyricsCount + 2 * paddingItemCount;
+
         return ScrollConfiguration(
           behavior: const ScrollBehavior().copyWith(scrollbars: false),
           child: ScrollablePositionedList.builder(
             itemScrollController: _itemScrollController,
             itemPositionsListener: _itemPositionsListener,
-            itemCount: widget.lyrics.length,
+            itemCount: totalItemCount,
             itemBuilder: (context, index) {
-              final line = widget.lyrics[index];
-              final isCurrent = index == widget.currentIndex;
+              // 处理顶部填充项
+              if (index < paddingItemCount) {
+                return SizedBox(
+                  height:
+                      MediaQuery.of(context).size.height *
+                      0.3, // 使用屏幕高度的30%作为空白区域
+                );
+              }
+
+              // 处理底部填充项
+              if (index >= actualLyricsCount + paddingItemCount) {
+                return SizedBox(
+                  height:
+                      MediaQuery.of(context).size.height *
+                      0.3, // 使用屏幕高度的30%作为空白区域
+                );
+              }
+
+              // 处理实际歌词项
+              final int lyricIndex = index - paddingItemCount;
+              final line = widget.lyrics[lyricIndex];
+              final isCurrent = lyricIndex == widget.currentIndex;
               final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
 
               final List<Widget> columnChildren = [
@@ -166,7 +207,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                     width: maxWidth,
                     child: TextButton(
                       onPressed: () {
-                        widget.onTapLine?.call(index);
+                        widget.onTapLine?.call(lyricIndex);
                         // 如果当前处于暂停状态，则开始播放
                         final playlistNotifier =
                             Provider.of<PlaylistContentNotifier>(

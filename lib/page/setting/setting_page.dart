@@ -278,6 +278,14 @@ class _SettingPageState extends State<SettingPage> {
             context.read<SettingsProvider>().setForceSingleLineLyric(value);
           },
         ),
+        // 歌词上下补位设置
+        SwitchListTile(
+          title: const Text('强制播放页高亮歌词垂直居中显示'),
+          value: settings.addLyricPadding,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setAddLyricPadding(value);
+          },
+        ),
         // 是否启用从网络获取歌词
         SwitchListTile(
           title: const Text('从网络获取歌词'),
