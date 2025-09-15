@@ -56,6 +56,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
   ); // Media-Kit 播放器实例
   Player get mediaPlayer => _mediaPlayer;
 
+  StreamSubscription<bool>? _exclusiveModeSubscription; // 用于管理独占模式的流订阅
+
   bool _isPlaying = false; // 播放器状态
   bool get isPlaying => _isPlaying;
 
@@ -157,6 +159,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
   SmtcManager? _smtcManager;
   SmtcManager? get smtcManager => _smtcManager;
 
+  // --- 音频设备相关 ---
+  List<AudioDevice> _availableAudioDevices = [];
+  AudioDevice? _selectedAudioDevice;
+
+  List<AudioDevice> get availableAudioDevices => _availableAudioDevices;
+  AudioDevice? get selectedAudioDevice => _selectedAudioDevice;
+
   // --- 视图上下文管理 ---
   DetailViewContext _currentDetailViewContext = DetailViewContext.playlist;
   String _activeDetailTitle = ''; // 当前详情页的标题
@@ -185,6 +194,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _initLogFile();
     _loadAllData(); // 使用一个统一的方法来加载所有数据
     _listenToPlayingState();
+    _loadAudioDevices(); // 加载音频设备
     _smtcManager = SmtcManager(
       onPlay: play,
       onPause: pause,
@@ -266,6 +276,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   void dispose() {
     _lyricLineIndexController.close();
     _errorStreamController.close();
+    _exclusiveModeSubscription?.cancel(); // 取消独占模式订阅
     _mediaPlayer.dispose(); // 释放播放器资源
     _cleanupSmtc();
     super.dispose();
@@ -1103,8 +1114,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 启用独占模式
   void _enableExclusive() {
-    _mediaPlayer.stream.playing.listen((isPlaying) async {
-      if (isPlaying) {
+    // 取消之前的订阅（如果有的话）
+    _exclusiveModeSubscription?.cancel();
+
+    // 添加新的订阅
+    _exclusiveModeSubscription = _mediaPlayer.stream.playing.listen((
+      isPlaying,
+    ) async {
+      if (isPlaying && _isExclusiveModeEnabled) {
         // 播放开始后，尝试切换到独占模式
         await Future.delayed(const Duration(milliseconds: 500)); // 等待音频稳定
 
@@ -1173,6 +1190,47 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       notifyListeners();
     });
+  }
+
+  // 加载可用的音频设备
+  Future<void> _loadAudioDevices() async {
+    try {
+      // 监听音频设备变化
+      _mediaPlayer.stream.audioDevices.listen((devices) {
+        _availableAudioDevices = devices;
+        notifyListeners();
+      });
+
+      // 获取当前选择的音频设备
+      _mediaPlayer.stream.audioDevice.listen((device) {
+        _selectedAudioDevice = device;
+        notifyListeners();
+      });
+    } catch (e) {
+      _errorStreamController.add('加载音频设备时出错: $e');
+    }
+  }
+
+  // 选择音频设备
+  Future<void> selectAudioDevice(AudioDevice device) async {
+    try {
+      await _mediaPlayer.setAudioDevice(device);
+      _selectedAudioDevice = device;
+      notifyListeners();
+    } catch (e) {
+      _errorStreamController.add('设置音频设备失败: $e');
+    }
+  }
+
+  // 使用自动选择音频设备
+  Future<void> useAutoAudioDevice() async {
+    try {
+      await _mediaPlayer.setAudioDevice(AudioDevice.auto());
+      _selectedAudioDevice = AudioDevice.auto();
+      notifyListeners();
+    } catch (e) {
+      _errorStreamController.add('设置自动音频设备失败: $e');
+    }
   }
 
   // -- 主题管理 --

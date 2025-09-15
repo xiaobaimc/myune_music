@@ -3,16 +3,20 @@
 一个基于 **Flutter (Dart)** 实现的简易本地音乐播放器。
 
 ## ✨ 特性
-* 支持**windows**/**linux**双端 (linux可能会有点小问题)
+* 支持 **windows**/**linux** 双端 (linux可能会有点小问题)
 * 使用歌单管理歌曲
-* 根据**歌手**和**专辑**自动分类歌曲
+* 支持添加文件夹管理歌曲
+* 根据 **歌手** 和 **专辑** 自动分类歌曲
 * 使用 [**Material 3**](https://m3.material.io/) 配色
-* 支持导入多种**本地音频格式**，自动读取**音频元数据**
-* 支持**歌词显示**，兼容本地 `.lrc` 文件及音频文件中的**内嵌歌词**，支持从网络获取歌词
-* 提供**音调控制**与**倍速播放**功能
-* 支持读取多种**音频文件信息**
-* 可自定义**主题配色**与**字体**
+* 支持导入多种 **本地音频格式**，自动读取 **音频元数据**
+* 支持 **歌词显示**，兼容本地 `.lrc` 文件及音频文件中的 **内嵌歌词**，支持从网络获取歌词
+* 提供 **音调控制** 与 **倍速播放** 功能
+* 支持读取多种 **音频文件信息**
+* 可自定义 **主题配色**与**字体**
 * 支持 **SMTC（系统媒体传输控制）**
+* 支持 Linux 下的 **MPRIS**
+* 支持 **音频独占** 播放 （仅Winsows）
+* 支持 **手动选择音频输出设备**
 
 ## 🌐 关于网络歌词获取
 
@@ -67,7 +71,7 @@ flutter run
 ## 📦 使用的插件与致谢
 
 * [**audio\_metadata\_reader**](https://pub.dev/packages/audio_metadata_reader)：读取音频元信息
-* [**media_kit**](https://pub.dev/packages/media_kit)：音频播放支持
+* [**media_kit**](https://pub.dev/packages/media_kit)：音频播放支持（太好用了）
 * [**anni\_mpris\_service**](https://pub.dev/packages/anni_mpris_service): D-Bus MPRIS 控件
 * 更多依赖请查看 [pubspec.yaml](pubspec.yaml)
 

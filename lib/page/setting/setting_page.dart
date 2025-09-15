@@ -1,15 +1,21 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../playlist/playlist_content_notifier.dart';
 import './theme_selection_screen.dart';
 import '../../theme/theme_provider.dart';
 import './settings_provider.dart';
 import '../../widgets/font_selector_row.dart';
 import 'update_checker.dart';
+import 'audio_device_selector.dart';
 
 // 定义应用版本号常量
 const String appVersion = '0.6.3';
+
+bool get isLinux => Platform.isLinux;
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -130,6 +136,55 @@ class _SettingPageState extends State<SettingPage> {
               ),
             ),
           ),
+        // 音频设备选择
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '手动指定音频输出设备',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return const AudioDeviceSelector();
+                    },
+                  );
+                },
+                icon: const Icon(Icons.headphones, size: 20),
+                label: const Text('选择设备'),
+              ),
+            ],
+          ),
+        ),
+        // 独占模式设置
+        if (!isLinux) // 仅在非Linux平台显示
+          Consumer<PlaylistContentNotifier>(
+            builder: (context, playlistNotifier, child) {
+              return SwitchListTile(
+                title: const Row(
+                  children: [
+                    Text('启用独占模式'),
+                    SizedBox(width: 4),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      icon: Icon(Icons.info_outline, size: 20),
+                      tooltip:
+                          '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这可能会导致其他应用无法播放音频\n仅在播放器处于活跃状态时可用',
+                      onPressed: null,
+                    ),
+                  ],
+                ),
+                value: playlistNotifier.isExclusiveModeEnabled,
+                onChanged: playlistNotifier.toggleExclusiveMode,
+              );
+            },
+          ),
         // 允许添加任何格式的文件
         SwitchListTile(
           title: const Row(
@@ -221,29 +276,6 @@ class _SettingPageState extends State<SettingPage> {
           value: settings.forceSingleLineLyric,
           onChanged: (value) {
             context.read<SettingsProvider>().setForceSingleLineLyric(value);
-          },
-        ),
-        // 独占模式设置
-        Consumer<PlaylistContentNotifier>(
-          builder: (context, playlistNotifier, child) {
-            return SwitchListTile(
-              title: const Row(
-                children: [
-                  Text('启用独占模式'),
-                  SizedBox(width: 4),
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(),
-                    icon: Icon(Icons.info_outline, size: 20),
-                    tooltip:
-                        '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这可能会导致其他应用无法播放音频\n仅在播放器处于活跃状态时可用',
-                    onPressed: null,
-                  ),
-                ],
-              ),
-              value: playlistNotifier.isExclusiveModeEnabled,
-              onChanged: playlistNotifier.toggleExclusiveMode,
-            );
           },
         ),
         // 是否启用从网络获取歌词
