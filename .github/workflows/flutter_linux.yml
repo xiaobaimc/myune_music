@@ -1,0 +1,40 @@
+name: Flutter Linux Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 拉取代码
+      - uses: actions/checkout@v3
+
+      # 安装 Flutter
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.2'
+
+      # 安装 Rust
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # 拉依赖
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 构建 Linux 桌面版
+      - name: Build Linux
+        run: flutter build linux --release
+
+      # 上传打包产物
+      - name: Upload Linux Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-linux-build
+          path: build/linux/x64/release/bundle
