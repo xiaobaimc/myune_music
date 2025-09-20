@@ -13,7 +13,7 @@ import 'update_checker.dart';
 import 'audio_device_selector.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.6.4';
+const String appVersion = '0.6.5';
 
 bool get isLinux => Platform.isLinux;
 
@@ -259,7 +259,7 @@ class _SettingPageState extends State<SettingPage> {
         // 启用模糊背景
         SwitchListTile(
           title: Text(
-            '启用详情页模糊背景',
+            '启用播放页模糊背景',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           value: settings.useBlurBackground, // 使用 settings
@@ -345,7 +345,7 @@ class _SettingPageState extends State<SettingPage> {
             ],
           ),
         ),
-        // 详情页同时间戳最大显示歌词行数
+        // 播放页同时间戳最大显示歌词行数
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -372,13 +372,13 @@ class _SettingPageState extends State<SettingPage> {
             ],
           ),
         ),
-        // 详情页歌词字体大小
+        // 播放页歌词字体大小
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('详情页歌词字体大小', style: Theme.of(context).textTheme.titleMedium),
+              Text('播放页歌词字体大小', style: Theme.of(context).textTheme.titleMedium),
               SizedBox(
                 width: 320, // 固定宽度
                 child: Slider(
@@ -401,7 +401,7 @@ class _SettingPageState extends State<SettingPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('详情页歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
+              Text('播放页歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
               SegmentedButton<TextAlign>(
                 style: ButtonStyle(
                   padding: WidgetStateProperty.all(EdgeInsets.zero),

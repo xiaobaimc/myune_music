@@ -90,21 +90,32 @@ class VolumeControlState extends State<VolumeControl> {
                     overlayRadius: 12,
                   ),
                 ),
-                child: Slider(
-                  value: playlistNotifier.volume,
-                  min: 0,
-                  max: 100,
-                  onChanged: (value) {
-                    playlistNotifier.setVolume(value);
+                child: Consumer<PlaylistContentNotifier>(
+                  builder: (context, notifier, child) {
+                    return Slider(
+                      value: notifier.volume,
+                      min: 0,
+                      max: 100,
+                      onChanged: (value) {
+                        notifier.setVolume(value);
+                      },
+                    );
                   },
                 ),
               ),
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            '${(playlistNotifier.volume).round()}',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          Consumer<PlaylistContentNotifier>(
+            builder: (context, notifier, child) {
+              return Text(
+                '${(notifier.volume).round()}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              );
+            },
           ),
         ],
       ),

@@ -171,34 +171,30 @@ class SongDetailPage extends StatelessWidget {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const SizedBox(height: 70),
+                                          const SizedBox(height: 50),
                                           // 歌曲标题
                                           Text(
-                                            (currentSong?.title ?? '未知歌曲')
-                                                        .length >
-                                                    15
-                                                ? '${(currentSong?.title ?? '未知歌曲').substring(0, 15)}...'
-                                                : (currentSong?.title ??
-                                                      '未知歌曲'),
+                                            currentSong?.title ?? '未知歌曲',
                                             style: const TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w600,
                                             ),
                                             textAlign: TextAlign.center,
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                            softWrap: false,
                                           ),
                                           // 艺术家
                                           Text(
-                                            (currentSong?.artist ?? '未知艺术家')
-                                                        .length >
-                                                    15
-                                                ? '${(currentSong?.artist ?? '未知艺术家').substring(0, 15)}...'
-                                                : (currentSong?.artist ??
-                                                      '未知艺术家'),
+                                            currentSong?.artist ?? '未知歌曲',
                                             style: const TextStyle(
                                               fontSize: 14,
                                               color: Colors.grey,
                                             ),
                                             textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.clip,
+                                            softWrap: false,
                                           ),
                                           const SizedBox(height: 8),
                                           // 专辑封面

@@ -180,25 +180,34 @@ class _LyricsWidgetState extends State<LyricsWidget> {
               final isCurrent = lyricIndex == widget.currentIndex;
               final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
 
-              final List<Widget> columnChildren = [
-                for (final text in visibleTexts)
+              final List<Widget> columnChildren = [];
+
+              for (int i = 0; i < visibleTexts.length; i++) {
+                columnChildren.add(
                   Text(
-                    text,
+                    visibleTexts.elementAt(i),
                     textAlign: lyricAlignment,
                     style: TextStyle(
                       fontSize: fontSize, // 动态字体大小
-                      height: 1.6,
+                      height: 1.2,
                       color: isCurrent
                           ? colorScheme.primary
                           : colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                       fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
-              ];
+                );
+
+                // 在每行歌词之间添加间距（除了最后一行）
+                if (i < visibleTexts.length - 1) {
+                  columnChildren.add(const SizedBox(height: 10));
+                }
+              }
 
               return Padding(
                 padding: EdgeInsets.symmetric(
-                  vertical: lyricVerticalSpacing,
+                  vertical:
+                      lyricVerticalSpacing + 0.4 * (fontSize / 2), // 补偿行高减少的部分
                   horizontal: 4,
                 ),
                 child: Align(

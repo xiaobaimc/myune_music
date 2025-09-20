@@ -1710,11 +1710,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 解析歌词
-  // FIXME: 部分歌词会缺少最后一行的最后一个字，暂时不知道什么原因
   List<LyricLine> _parseLrcContent(List<String> lines) {
     final Map<Duration, List<String>> groupedLyrics = {};
+    // 兼容不带毫秒的时间戳格式（到底是谁在用这种）
     final RegExp timeStampRegExp = RegExp(
-      r'\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)',
+      r'\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\](.*)',
     );
 
     for (final line in lines) {
@@ -1727,7 +1727,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
         try {
           final int minutes = int.parse(match.group(1)!);
           final int seconds = int.parse(match.group(2)!);
-          final int milliseconds = int.parse(match.group(3)!.padRight(3, '0'));
+          // 处理可选的毫秒部分
+          final int milliseconds = match.group(3) != null
+              ? int.parse(match.group(3)!.padRight(3, '0'))
+              : 0;
           final Duration timestamp = Duration(
             minutes: minutes,
             seconds: seconds,
@@ -1826,6 +1829,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _loadCurrentPlaylistSongs();
 
     await _updateAllSongsList();
+
+    await _savePlaylists();
   }
 
   // 同上,适用于全部歌曲页面
