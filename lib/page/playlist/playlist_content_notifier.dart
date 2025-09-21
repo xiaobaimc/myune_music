@@ -1075,8 +1075,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
             'no',
           );
 
-          // 先不设置独占模式，使用默认音频
-          await (_mediaPlayer.platform as dynamic).setProperty('ao', 'wasapi');
+          // // 先不设置独占模式，使用默认音频
+          // await (_mediaPlayer.platform as dynamic).setProperty('ao', 'wasapi');
 
           // 监听播放状态，在开始播放后再启用独占模式
           if (_isExclusiveModeEnabled) {
