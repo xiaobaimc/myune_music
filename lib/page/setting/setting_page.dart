@@ -14,7 +14,7 @@ import 'audio_device_selector.dart';
 import 'artist_separator.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.6.5';
+const String appVersion = '0.6.6';
 
 bool get isLinux => Platform.isLinux;
 
