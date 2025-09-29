@@ -3,20 +3,139 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'playlist_models.dart';
 
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 class PlaylistManager {
   static const String _playlistMetadataFileName = 'playlists_metadata.json';
   static const String _songsSubdirectory = 'playlist_songs';
   static const String _allSongsOrderFileName = 'all_songs_order.json';
   static const String _artistSortOrderFileName = 'artist_sort_order.json';
   static const String _albumSortOrderFileName = 'album_sort_order.json';
+  static const String _migrationFlagKey = 'data_migrated_to_app_support';
 
   Future<String> _getLocalPath() async {
-    // 当前目录 + list_data 子目录
-    final directory = Directory('list_data');
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
+    // 文档目录
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final appDir = Directory(
+      p.join(appDocDir.path, 'myune_music', 'list_data'),
+    );
+
+    // 检查是否需要迁移旧数据
+    await _migrateOldDataIfNeeded(appDir.path);
+
+    // 确保目录存在
+    if (!await appDir.exists()) {
+      await appDir.create(recursive: true);
     }
-    return directory.path;
+
+    return appDir.path;
+  }
+
+  // 检查并迁移旧数据
+  Future<void> _migrateOldDataIfNeeded(String newPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isMigrated = prefs.getBool(_migrationFlagKey) ?? false;
+
+    // 如果已经迁移过，则直接返回
+    if (isMigrated) {
+      return;
+    }
+
+    // 检查旧目录是否存在
+    final oldDir = Directory('list_data');
+    final newDir = Directory(newPath);
+
+    // 如果旧目录不存在，则无需迁移
+    if (!await oldDir.exists()) {
+      // 标记为已迁移并返回
+      await prefs.setBool(_migrationFlagKey, true);
+      return;
+    }
+
+    // 检查新目录是否已存在且包含文件
+    bool newDirHasFiles = false;
+    if (await newDir.exists()) {
+      final entities = await newDir.list().toList();
+      newDirHasFiles = entities.isNotEmpty;
+    }
+
+    // 只有当新目录为空或不存在且旧目录存在时才进行迁移
+    if (!newDirHasFiles) {
+      // 确保新目录存在
+      if (!await newDir.exists()) {
+        await newDir.create(recursive: true);
+      }
+      await _performMigration(oldDir, newDir);
+    }
+
+    // 标记为已迁移
+    await prefs.setBool(_migrationFlagKey, true);
+  }
+
+  // 执行实际的数据迁移操作
+  Future<void> _performMigration(Directory oldDir, Directory newDir) async {
+    // 迁移元数据文件
+    final oldMetadataFile = File(
+      p.join(oldDir.path, _playlistMetadataFileName),
+    );
+    if (await oldMetadataFile.exists()) {
+      final newMetadataFile = File(
+        p.join(newDir.path, _playlistMetadataFileName),
+      );
+      await oldMetadataFile.copy(newMetadataFile.path);
+    }
+
+    // 迁移所有歌曲排序文件
+    final oldAllSongsOrderFile = File(
+      p.join(oldDir.path, _allSongsOrderFileName),
+    );
+    if (await oldAllSongsOrderFile.exists()) {
+      final newAllSongsOrderFile = File(
+        p.join(newDir.path, _allSongsOrderFileName),
+      );
+      await oldAllSongsOrderFile.copy(newAllSongsOrderFile.path);
+    }
+
+    // 迁移艺术家排序文件
+    final oldArtistSortOrderFile = File(
+      p.join(oldDir.path, _artistSortOrderFileName),
+    );
+    if (await oldArtistSortOrderFile.exists()) {
+      final newArtistSortOrderFile = File(
+        p.join(newDir.path, _artistSortOrderFileName),
+      );
+      await oldArtistSortOrderFile.copy(newArtistSortOrderFile.path);
+    }
+
+    // 迁移专辑排序文件
+    final oldAlbumSortOrderFile = File(
+      p.join(oldDir.path, _albumSortOrderFileName),
+    );
+    if (await oldAlbumSortOrderFile.exists()) {
+      final newAlbumSortOrderFile = File(
+        p.join(newDir.path, _albumSortOrderFileName),
+      );
+      await oldAlbumSortOrderFile.copy(newAlbumSortOrderFile.path);
+    }
+
+    // 迁移歌单歌曲目录及其中的所有文件
+    final oldSongsDir = Directory(p.join(oldDir.path, _songsSubdirectory));
+    if (await oldSongsDir.exists()) {
+      final newSongsDir = Directory(p.join(newDir.path, _songsSubdirectory));
+      if (!await newSongsDir.exists()) {
+        await newSongsDir.create(recursive: true);
+      }
+
+      // 复制所有歌单文件
+      await for (final entity in oldSongsDir.list()) {
+        if (entity is File) {
+          final fileName = p.basename(entity.path);
+          final newFile = File(p.join(newSongsDir.path, fileName));
+          await entity.copy(newFile.path);
+        }
+      }
+    }
   }
 
   // 获取歌单元数据文件的路径

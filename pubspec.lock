@@ -38,7 +38,7 @@ packages:
     description:
       path: "."
       ref: main
-      resolved-ref: e555ab8d7a95845a7388ed08bd9aa9de24b600e0
+      resolved-ref: "6c0f7cf578f7c86e7ca5a49cd425c3efaba8bda0"
       url: "https://github.com/xiaobaimc/audio_metadata_reader.git"
     source: git
     version: "1.4.2"
@@ -861,5 +861,5 @@ packages:
     source: hosted
     version: "6.5.0"
 sdks:
-  dart: ">=3.8.0 <4.0.0"
+  dart: ">=3.9.0 <4.0.0"
   flutter: ">=3.29.0"

@@ -1,3 +1,9 @@
+// TODO：迁移到RadioGroup （release: 3.35）
+// 似乎该组件有点问题,等更新后迁移
+// Error:RadioGroupPolicy can't be used for a radio group that allows multiple selection
+// 参阅：
+// https://github.com/flutter/flutter/issues/175258
+// https://github.com/flutter/flutter/pull/175654
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:media_kit/media_kit.dart';
@@ -28,7 +34,9 @@ class AudioDeviceSelector extends StatelessWidget {
                     title: const Text('自动选择'),
                     leading: Radio<AudioDevice?>(
                       value: AudioDevice.auto(),
+                      // ignore: deprecated_member_use
                       groupValue: selectedDevice,
+                      // ignore: deprecated_member_use
                       onChanged: (device) {
                         playlistNotifier.useAutoAudioDevice();
                       },
@@ -61,7 +69,9 @@ class AudioDeviceSelector extends StatelessWidget {
                       subtitle: subtitleWidget,
                       leading: Radio<AudioDevice?>(
                         value: device,
+                        // ignore: deprecated_member_use
                         groupValue: selectedDevice,
+                        // ignore: deprecated_member_use
                         onChanged: (selected) {
                           if (selected != null) {
                             playlistNotifier.selectAudioDevice(selected);

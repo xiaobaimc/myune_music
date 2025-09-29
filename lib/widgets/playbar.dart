@@ -227,7 +227,7 @@ class _PlaybarState extends State<Playbar> {
                         activeTrackColor: accentColor,
                         inactiveTrackColor: onBarColor.withValues(alpha: 0.7),
                         thumbColor: accentColor,
-                        showValueIndicator: ShowValueIndicator.always,
+                        showValueIndicator: ShowValueIndicator.onDrag,
                       ),
                       child: Slider(
                         value: _currentSliderValue,

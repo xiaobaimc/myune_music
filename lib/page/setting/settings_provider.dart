@@ -18,6 +18,7 @@ class SettingsProvider with ChangeNotifier {
   static const _secondaryLyricSourceKey =
       'secondaryLyricSource'; // 备用歌词源设置的 key
   static const _addLyricPaddingKey = 'addLyricPadding'; // 歌词上下补位设置的 key
+  static const _artistSeparatorsKey = 'artistSeparators'; // 艺术家分隔符设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -33,6 +34,9 @@ class SettingsProvider with ChangeNotifier {
   String _primaryLyricSource = 'primary'; // 默认主要歌词源为某易云音乐
   String _secondaryLyricSource = 'secondary'; // 默认备用歌词源为某狗音乐
 
+  // 默认艺术家分隔符
+  List<String> _artistSeparators = [';', '、', '；', '，', ','];
+
   int get maxLinesPerLyric => _maxLinesPerLyric;
   double get fontSize => _fontSize;
   TextAlign get lyricAlignment => _lyricAlignment;
@@ -46,6 +50,8 @@ class SettingsProvider with ChangeNotifier {
   bool get enableOnlineLyrics => _enableOnlineLyrics;
   String get primaryLyricSource => _primaryLyricSource; // 获取主要歌词源
   String get secondaryLyricSource => _secondaryLyricSource; // 获取备用歌词源
+
+  List<String> get artistSeparators => _artistSeparators; // 获取艺术家分隔符
 
   SettingsProvider() {
     _loadFromPrefs();
@@ -69,6 +75,13 @@ class SettingsProvider with ChangeNotifier {
         prefs.getString(_primaryLyricSourceKey) ?? 'primary'; // 加载主要歌词源设置
     _secondaryLyricSource =
         prefs.getString(_secondaryLyricSourceKey) ?? 'secondary'; // 加载备用歌词源设置
+
+    // 加载艺术家分隔符设置
+    final separatorsList = prefs.getStringList(_artistSeparatorsKey);
+    if (separatorsList != null && separatorsList.isNotEmpty) {
+      _artistSeparators = separatorsList;
+    }
+
     final alignmentString = prefs.getString(_lyricAlignmentKey);
     _lyricAlignment = alignmentString != null
         ? TextAlign.values.firstWhere(
@@ -163,5 +176,13 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_addLyricPaddingKey, value);
+  }
+
+  void setArtistSeparators(List<String> separators) async {
+    _artistSeparators = separators;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    // 使用字符串列表而不是用逗号连接的字符串，避免与分隔符冲突
+    await prefs.setStringList(_artistSeparatorsKey, separators);
   }
 }

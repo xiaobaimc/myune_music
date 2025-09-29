@@ -184,16 +184,26 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
               for (int i = 0; i < visibleTexts.length; i++) {
                 columnChildren.add(
-                  Text(
-                    visibleTexts.elementAt(i),
-                    textAlign: lyricAlignment,
-                    style: TextStyle(
-                      fontSize: fontSize, // 动态字体大小
-                      height: 1.2,
-                      color: isCurrent
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                  AnimatedScale(
+                    alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeInOutSine,
+                    scale: isCurrent ? 1.02 : 1,
+                    child: Text(
+                      visibleTexts.elementAt(i),
+                      textAlign: lyricAlignment,
+                      style: TextStyle(
+                        fontSize: fontSize, // 动态字体大小
+                        height: 1.2,
+                        color: isCurrent
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.7,
+                              ),
+                        fontWeight: isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
                     ),
                   ),
                 );

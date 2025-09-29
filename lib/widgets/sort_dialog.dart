@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../page/playlist/sort_options.dart';
+import '../page/playlist/playlist_content_notifier.dart';
 
 class SortDialog extends StatefulWidget {
   const SortDialog({super.key});
@@ -20,29 +20,31 @@ class _SortDialogState extends State<SortDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // 排序标准单选按钮
-          RadioListTile<SortCriterion>(
-            title: const Text('按歌曲名'),
-            value: SortCriterion.title,
+          RadioGroup<SortCriterion>(
             groupValue: _selectedCriterion,
-            onChanged: (value) => setState(() => _selectedCriterion = value!),
-          ),
-          RadioListTile<SortCriterion>(
-            title: const Text('按歌手名'),
-            value: SortCriterion.artist,
-            groupValue: _selectedCriterion,
-            onChanged: (value) => setState(() => _selectedCriterion = value!),
-          ),
-          RadioListTile<SortCriterion>(
-            title: const Text('按修改日期'),
-            value: SortCriterion.dateModified,
-            groupValue: _selectedCriterion,
-            onChanged: (value) => setState(() => _selectedCriterion = value!),
-          ),
-          RadioListTile<SortCriterion>(
-            title: const Text('随机排序'),
-            value: SortCriterion.random,
-            groupValue: _selectedCriterion,
-            onChanged: (value) => setState(() => _selectedCriterion = value!),
+            onChanged: (value) => setState(
+              () => _selectedCriterion = value ?? _selectedCriterion,
+            ),
+            child: const Column(
+              children: [
+                RadioListTile<SortCriterion>(
+                  title: Text('按歌曲名'),
+                  value: SortCriterion.title,
+                ),
+                RadioListTile<SortCriterion>(
+                  title: Text('按歌手名'),
+                  value: SortCriterion.artist,
+                ),
+                RadioListTile<SortCriterion>(
+                  title: Text('按修改日期'),
+                  value: SortCriterion.dateModified,
+                ),
+                RadioListTile<SortCriterion>(
+                  title: Text('随机排序'),
+                  value: SortCriterion.random,
+                ),
+              ],
+            ),
           ),
           const Divider(),
           // 倒序复选框

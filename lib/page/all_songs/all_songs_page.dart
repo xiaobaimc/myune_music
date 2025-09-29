@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../playlist/playlist_content_notifier.dart';
-import '../playlist/sort_options.dart';
 import '../../widgets/sort_dialog.dart';
 import '../playlist/playlist_models.dart';
 

@@ -111,7 +111,7 @@ sudo apt install libmpv-dev mpv
 ### 环境要求
 
 * 安装 **Rust** 环境
-* 安装 **Flutter SDK**，版本需 ≥ 3.8.0
+* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.9.0，**Flutter** 版本需 ≥ 3.35.0
 
 ### 安装依赖
 
@@ -130,7 +130,7 @@ flutter run
 * [**audio\_metadata\_reader**](https://pub.dev/packages/audio_metadata_reader)：读取音频元信息
 * [**media_kit**](https://pub.dev/packages/media_kit)：音频播放支持（太好用了）
 * [**anni\_mpris\_service**](https://pub.dev/packages/anni_mpris_service): D-Bus MPRIS 控件
-* 更多依赖请查看 [pubspec.yaml](pubspec.yaml)
+* 更多依赖请查看 **[pubspec.yaml](pubspec.yaml)**
 
 感谢以下项目和开发者的无私分享：
 

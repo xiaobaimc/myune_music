@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
 import '../../widgets/sort_dialog.dart';
-import 'sort_options.dart';
 
 enum ManagementMode { manual, folder }
 
@@ -71,29 +70,29 @@ class PlaylistListWidget extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     const Text('选择管理模式：'),
-                    // 手动管理模式单选按钮
-                    RadioListTile<ManagementMode>(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('手动管理歌单歌曲'),
-                      value: ManagementMode.manual,
+                    RadioGroup<ManagementMode>(
                       groupValue: selectedMode,
                       onChanged: (value) {
                         setState(() {
                           selectedMode = value!;
                         });
                       },
-                    ),
-                    // 文件夹管理模式单选按钮
-                    RadioListTile<ManagementMode>(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('使用文件夹管理歌单'),
-                      value: ManagementMode.folder,
-                      groupValue: selectedMode,
-                      onChanged: (value) {
-                        setState(() {
-                          selectedMode = value!;
-                        });
-                      },
+                      child: const Column(
+                        children: [
+                          // 手动管理模式单选按钮
+                          RadioListTile<ManagementMode>(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('手动管理歌单歌曲'),
+                            value: ManagementMode.manual,
+                          ),
+                          // 文件夹管理模式单选按钮
+                          RadioListTile<ManagementMode>(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('使用文件夹管理歌单'),
+                            value: ManagementMode.folder,
+                          ),
+                        ],
+                      ),
                     ),
                     if (selectedMode == ManagementMode.folder) ...[
                       const SizedBox(height: 8),
@@ -487,7 +486,18 @@ class _PlaylistTileWidgetState extends State<PlaylistTileWidget> {
             title: Row(
               children: [
                 Expanded(
-                  child: Text(widget.name, overflow: TextOverflow.ellipsis),
+                  child: AnimatedScale(
+                    duration: const Duration(milliseconds: 200),
+                    scale: widget.isSelected ? 1.05 : 1.0,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      widget.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: widget.isSelected ? colorScheme.primary : null,
+                      ),
+                    ),
+                  ),
                 ),
                 if (widget.isFolderBased)
                   const Icon(Icons.folder, size: 16, color: Colors.grey),

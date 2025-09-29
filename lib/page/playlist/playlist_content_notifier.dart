@@ -15,10 +15,11 @@ import 'package:colorgram/colorgram.dart';
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
-import 'sort_options.dart';
 import '../../media_service/smtc_manager.dart';
 import '../setting/settings_provider.dart';
 import '../../theme/theme_provider.dart';
+
+enum SortCriterion { title, artist, dateModified, random }
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -1748,7 +1749,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
           if (cleanedText.isEmpty) continue;
           groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
-          if (text.isEmpty) continue;
         } catch (e) {
           _errorStreamController.add('无法解析当前歌词');
         }
@@ -2228,36 +2228,54 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Map<String, List<Song>> get songsByArtist {
     final Map<String, List<Song>> grouped = {};
 
-    // 匹配可能大概的分隔符
-    final RegExp separators = RegExp(r'[;、；，,]');
+    // 使用自定义的分隔符
+    final separators = _settingsProvider.artistSeparators;
+    // 增强验证，过滤掉无效分隔符
+    final validSeparators = separators
+        .where(
+          (separator) => separator.isNotEmpty && separator.trim().isNotEmpty,
+        )
+        .toList();
 
-    // 遍历所有歌曲
-    for (final song in _allSongs) {
-      // 1. 使用正则表达式拆分 artist 字符串
-      final individualArtists = song.artist
-          .split(separators)
-          // 2. 对拆分后的每个名字进行处理，去除首尾的空格
-          .map((artist) => artist.trim())
-          // 3. 过滤掉因连续分隔符而产生的空字符串
-          .where((artist) => artist.isNotEmpty)
-          .toList();
+    if (validSeparators.isNotEmpty) {
+      final pattern = validSeparators.map((s) => RegExp.escape(s)).join('|');
+      final RegExp separatorRegExp = RegExp('[$pattern]');
 
-      // 如果拆分后没有有效的歌手名 则直接使用原始字段作为唯一的歌手名
-      if (individualArtists.isEmpty) {
-        if (song.artist.isNotEmpty) {
-          individualArtists.add(song.artist);
-        } else {
-          // 如果字段为空 则归类到未知歌手
-          individualArtists.add('未知歌手');
+      // 遍历所有歌曲
+      for (final song in _allSongs) {
+        // 1. 使用正则表达式拆分 artist 字符串
+        final individualArtists = song.artist
+            .split(separatorRegExp)
+            // 2. 对拆分后的每个名字进行处理，去除首尾的空格
+            .map((artist) => artist.trim())
+            // 3. 过滤掉因连续分隔符而产生的空字符串
+            .where((artist) => artist.isNotEmpty)
+            .toList();
+
+        // 如果拆分后没有有效的歌手名 则直接使用原始字段作为唯一的歌手名
+        if (individualArtists.isEmpty) {
+          if (song.artist.isNotEmpty) {
+            individualArtists.add(song.artist);
+          } else {
+            // 如果字段为空 则归类到未知歌手
+            individualArtists.add('未知歌手');
+          }
+        }
+
+        // 遍历拆分出的每一个独立歌手名
+        for (final artistName in individualArtists) {
+          // 将当前歌曲添加到这位歌手的列表中
+          grouped.putIfAbsent(artistName, () => []).add(song);
         }
       }
-
-      // 遍历拆分出的每一个独立歌手名
-      for (final artistName in individualArtists) {
-        // 将当前歌曲添加到这位歌手的列表中
+    } else {
+      // 如果没有有效的分隔符，则不进行拆分
+      for (final song in _allSongs) {
+        final artistName = song.artist.isNotEmpty ? song.artist : '未知歌手';
         grouped.putIfAbsent(artistName, () => []).add(song);
       }
     }
+
     return grouped;
   }
 
