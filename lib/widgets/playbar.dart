@@ -291,10 +291,7 @@ class _PlaybarState extends State<Playbar> {
                             color: onBarColor,
                             size: 28,
                           ),
-                          // 只有当歌单有歌曲且不是第一首时才启用按钮
-                          onPressed: playlistNotifier.playingPlaylist != null
-                              ? () => playlistNotifier.playPrevious()
-                              : null,
+                          onPressed: () => playlistNotifier.playPrevious(),
                         ),
                         // 播放/暂停按钮 (根据播放器状态动态更新)
                         StreamBuilder<bool>(
@@ -318,16 +315,7 @@ class _PlaybarState extends State<Playbar> {
                             color: onBarColor,
                             size: 28,
                           ),
-                          onPressed:
-                              playlistNotifier
-                                      .currentPlaylistSongs
-                                      .isNotEmpty &&
-                                  !playlistNotifier
-                                      .isLoadingSongs // 正在加载歌曲时禁用
-                              ? () async {
-                                  await playlistNotifier.playNext();
-                                }
-                              : null, // 如果禁用，则传入 null
+                          onPressed: () => playlistNotifier.playNext(),
                         ),
                       ],
                     ),
