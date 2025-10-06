@@ -40,6 +40,19 @@
 ***
 
 以上两种方式都可以根据 **歌手** 和 **专辑** 进行自动分类
+
+## 🎶 关于桌面歌词
+由于我使用的框架 [Flutetr](https://flutter.dev/) 暂时不支持多窗口，所以软件内没有提供桌面歌词功能
+
+可以使用其他软件进行替代
+例如：
+- [Lyricify Lite](https://apps.microsoft.com/detail/9nltpsv395k2)
+- [BetterLyrics](https://apps.microsoft.com/detail/9p1wcd1p597r)
+
+只需在播放器内播放音乐，软件即可自动显示歌词
+
+> 上述软件非本人开发，请支持原作者！
+
 ## 📦 内嵌元数据支持
 
 | 音频格式     | 元数据格式               | 支持 |
