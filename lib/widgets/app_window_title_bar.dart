@@ -54,12 +54,6 @@ class AppWindowTitleBar extends StatelessWidget {
               children: [
                 _WindowButton(
                   icon: Icons.remove,
-                  onPressed: () => windowManager.minimize(),
-                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                ),
-                const SizedBox(width: 2),
-                _WindowButton(
-                  icon: Icons.close,
                   onPressed: () {
                     final settings = Provider.of<SettingsProvider>(
                       context,
@@ -68,9 +62,15 @@ class AppWindowTitleBar extends StatelessWidget {
                     if (settings.minimizeToTray) {
                       windowManager.hide();
                     } else {
-                      windowManager.close();
+                      windowManager.minimize();
                     }
                   },
+                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                ),
+                const SizedBox(width: 2),
+                _WindowButton(
+                  icon: Icons.close,
+                  onPressed: () => windowManager.close(),
                   hoverColor: const Color.fromRGBO(239, 154, 154, 1),
                 ),
               ],

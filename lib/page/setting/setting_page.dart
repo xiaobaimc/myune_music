@@ -14,7 +14,7 @@ import 'audio_device_selector.dart';
 import 'artist_separator.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.6.7';
+const String appVersion = '0.6.8';
 
 bool get isLinux => Platform.isLinux;
 
@@ -663,7 +663,7 @@ class _SettingPageState extends State<SettingPage>
                           padding: EdgeInsets.zero,
                           constraints: BoxConstraints(),
                           icon: Icon(Icons.info_outline, size: 20),
-                          tooltip: '启用后点击关闭按钮将最小化到系统托盘而不是退出程序',
+                          tooltip: '启用后点击最小化按钮将最小化到系统托盘',
                           onPressed: null,
                         ),
                       ],
