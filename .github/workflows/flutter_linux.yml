@@ -45,9 +45,15 @@ jobs:
       - name: Build Linux
         run: flutter build linux --release
 
+      # 打包成 .tar.xz
+      - name: Package build as tar.xz
+        run: |
+          cd build/linux/x64/release
+          tar -cJf flutter-linux-build.tar.xz bundle
+
       # 上传打包产物
       - name: Upload Linux Build
         uses: actions/upload-artifact@v4
         with:
           name: flutter-linux-build
-          path: build/linux/x64/release/bundle
+          path: build/linux/x64/release/flutter-linux-build.tar.xz
