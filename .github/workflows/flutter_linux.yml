@@ -34,7 +34,8 @@ jobs:
             ninja-build \
             pkg-config \
             libgtk-3-dev \
-            liblzma-dev
+            liblzma-dev \
+            libayatana-appindicator3-dev
 
       # 拉依赖
       - name: Install dependencies
