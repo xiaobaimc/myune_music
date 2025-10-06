@@ -19,6 +19,7 @@ class SettingsProvider with ChangeNotifier {
       'secondaryLyricSource'; // 备用歌词源设置的 key
   static const _addLyricPaddingKey = 'addLyricPadding'; // 歌词上下补位设置的 key
   static const _artistSeparatorsKey = 'artistSeparators'; // 艺术家分隔符设置的 key
+  static const _minimizeToTrayKey = 'minimizeToTray'; // 最小化到托盘设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -29,6 +30,7 @@ class SettingsProvider with ChangeNotifier {
   bool _forceSingleLineLyric = false; // 默认不强制单行显示歌词
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
   bool _addLyricPadding = false; // 默认不启用歌词上下补位
+  bool _minimizeToTray = false; // 默认不启用最小化到托盘
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
   String _primaryLyricSource = 'primary'; // 默认主要歌词源为某易云音乐
@@ -46,6 +48,7 @@ class SettingsProvider with ChangeNotifier {
   bool get forceSingleLineLyric => _forceSingleLineLyric; // 获取强制单行歌词设置
   double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
   bool get addLyricPadding => _addLyricPadding; // 获取歌词上下补位设置
+  bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
   String get primaryLyricSource => _primaryLyricSource; // 获取主要歌词源
@@ -71,6 +74,7 @@ class SettingsProvider with ChangeNotifier {
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
     _addLyricPadding =
         prefs.getBool(_addLyricPaddingKey) ?? false; // 加载歌词上下补位设置
+    _minimizeToTray = prefs.getBool(_minimizeToTrayKey) ?? false; // 加载最小化到托盘设置
     _primaryLyricSource =
         prefs.getString(_primaryLyricSourceKey) ?? 'primary'; // 加载主要歌词源设置
     _secondaryLyricSource =
@@ -184,5 +188,12 @@ class SettingsProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     // 使用字符串列表而不是用逗号连接的字符串，避免与分隔符冲突
     await prefs.setStringList(_artistSeparatorsKey, separators);
+  }
+
+  void setMinimizeToTray(bool value) async {
+    _minimizeToTray = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_minimizeToTrayKey, value);
   }
 }

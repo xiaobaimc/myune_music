@@ -4,6 +4,7 @@ import 'package:system_fonts/system_fonts.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tray_manager/tray_manager.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -18,6 +19,19 @@ void main() async {
   MediaKit.ensureInitialized();
 
   await RustLib.init();
+
+  // 初始化系统托盘
+  await trayManager.setIcon('assets/images/icon/tray_icon.ico');
+  await trayManager.setToolTip('MyuneMusic');
+
+  final Menu menu = Menu(
+    items: [
+      MenuItem(key: 'show_window', label: '显示窗口'),
+      MenuItem.separator(),
+      MenuItem(key: 'exit_app', label: '退出'),
+    ],
+  );
+  await trayManager.setContextMenu(menu);
 
   // 初始化window_manager
   await windowManager.ensureInitialized();
@@ -71,8 +85,47 @@ void main() async {
   await themeProvider.loadCurrentFont(systemFonts);
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with TrayListener {
+  @override
+  void initState() {
+    trayManager.addListener(this);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    trayManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onTrayIconMouseDown() {
+    // 点击托盘图标时显示窗口
+    windowManager.show();
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    // 右键点击托盘图标时弹出菜单
+    trayManager.popUpContextMenu();
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    if (menuItem.key == 'show_window') {
+      windowManager.show();
+    } else if (menuItem.key == 'exit_app') {
+      trayManager.destroy();
+      windowManager.destroy();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:provider/provider.dart';
+
+import '../page/setting/settings_provider.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
   const AppWindowTitleBar({super.key});
@@ -57,7 +60,17 @@ class AppWindowTitleBar extends StatelessWidget {
                 const SizedBox(width: 2),
                 _WindowButton(
                   icon: Icons.close,
-                  onPressed: () => windowManager.close(),
+                  onPressed: () {
+                    final settings = Provider.of<SettingsProvider>(
+                      context,
+                      listen: false,
+                    );
+                    if (settings.minimizeToTray) {
+                      windowManager.hide();
+                    } else {
+                      windowManager.close();
+                    }
+                  },
                   hoverColor: const Color.fromRGBO(239, 154, 154, 1),
                 ),
               ],

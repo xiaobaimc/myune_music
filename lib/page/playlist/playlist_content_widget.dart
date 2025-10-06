@@ -909,7 +909,19 @@ class _SongTileWidgetState extends State<SongTileWidget> {
         );
       } else {
         // 如果在具体的歌单页面，只从当前歌单删除
-        await notifier.removeSongFromCurrentPlaylist(widget.index);
+        // 检查是否在搜索模式下
+        if (notifier.isSearching) {
+          // 在搜索模式下，需要根据歌曲路径找到它在原始列表中的索引
+          final actualIndex = notifier.currentPlaylistSongs.indexWhere(
+            (song) => song.filePath == widget.song.filePath,
+          );
+          if (actualIndex != -1) {
+            await notifier.removeSongFromCurrentPlaylist(actualIndex);
+          }
+        } else {
+          // 非搜索模式下，直接使用widget.index
+          await notifier.removeSongFromCurrentPlaylist(widget.index);
+        }
       }
 
       // messenger.showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));

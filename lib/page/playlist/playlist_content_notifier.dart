@@ -503,13 +503,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
     // 如果不为空，说明有新歌曲被添加
     if (newSongPaths.isNotEmpty) {
-      currentPlaylist.songFilePaths.addAll(newSongPaths);
-      await _savePlaylists();
-      await _loadCurrentPlaylistSongs();
-      await _updateAllSongsList();
-
-      _infoStreamController.add('成功添加 ${newSongPaths.length} 首歌曲');
-
+      // 后台异步处理歌曲添加
+      _processSongsInBackground(currentPlaylist, newSongPaths);
       return true; // 真的有添加
     }
     // 如果确实选择了文件，但 newSongPaths 为空，说明选择是重复歌曲
@@ -520,6 +515,75 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 其他情况不提示
     else {
       return false;
+    }
+  }
+
+  Future<void> _processSongsInBackground(
+    Playlist currentPlaylist,
+    List<String> newSongPaths,
+  ) async {
+    _isLoadingSongs = true;
+    notifyListeners();
+
+    try {
+      // 分批处理歌曲以避免阻塞UI
+      const batchSize = 10;
+      final List<Song> parsedSongs = [];
+
+      // 分批解析歌曲元数据
+      for (int i = 0; i < newSongPaths.length; i += batchSize) {
+        final end = (i + batchSize < newSongPaths.length)
+            ? i + batchSize
+            : newSongPaths.length;
+        final batch = newSongPaths.sublist(i, end);
+
+        // 并行处理同一批次的歌曲
+        final batchSongs = await Future.wait(
+          batch.map((path) => _parseSongMetadata(path)).toList(),
+        );
+
+        parsedSongs.addAll(batchSongs);
+        await Future.delayed(const Duration(milliseconds: 10)); // 允许UI更新
+      }
+
+      // 添加歌曲路径到播放列表
+      currentPlaylist.songFilePaths.addAll(newSongPaths);
+
+      // 更新歌曲对象列表
+      if (currentPlaylist.songs != null) {
+        currentPlaylist.songs!.addAll(parsedSongs);
+      } else {
+        // 如果之前没有解析过歌曲，则全部重新解析
+        await _ensurePlaylistSongs(currentPlaylist);
+      }
+
+      // 保存播放列表
+      await _savePlaylists();
+
+      // 更新当前播放列表和所有歌曲列表
+      if (_selectedIndex == _playlists.indexOf(currentPlaylist)) {
+        _currentPlaylistSongs = List.from(currentPlaylist.songs ?? []);
+      }
+      await _updateAllSongsList();
+
+      _infoStreamController.add('成功添加 ${newSongPaths.length} 首歌曲');
+    } catch (e, stackTrace) {
+      _errorStreamController.add('添加歌曲时发生错误: $e');
+      _writeErrorToLog('添加歌曲时发生错误', e);
+      debugPrint('添加歌曲错误详情: $e\nStack trace: $stackTrace');
+
+      // 恢复到添加前的状态
+      // 移除已添加的歌曲路径
+      currentPlaylist.songFilePaths.removeWhere(
+        (path) => newSongPaths.contains(path),
+      );
+
+      // 重新加载播放列表
+      await _loadCurrentPlaylistSongs();
+      await _updateAllSongsList();
+    } finally {
+      _isLoadingSongs = false;
+      notifyListeners();
     }
   }
 
@@ -1496,14 +1560,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'https://music.163.com/api/search/get/?s=$encodedSearchKeyword&type=1&limit=1';
       final searchUri = Uri.parse(searchUrl);
 
-      final searchResponse = await http.get(
-        searchUri,
-        headers: {
-          'Referer': 'https://music.163.com',
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-      );
+      final searchResponse = await http
+          .get(
+            searchUri,
+            headers: {
+              'Referer': 'https://music.163.com',
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       // 如果状态码不为200，清空并返回
       if (searchResponse.statusCode != 200) {
@@ -1533,14 +1599,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1';
       final lrcUri = Uri.parse(lrcUrl);
 
-      final lrcResponse = await http.get(
-        lrcUri,
-        headers: {
-          'Referer': 'https://music.163.com',
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-      );
+      final lrcResponse = await http
+          .get(
+            lrcUri,
+            headers: {
+              'Referer': 'https://music.163.com',
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       // 如果状态码不为200，清空并返回
       if (lrcResponse.statusCode != 200) {
@@ -1556,14 +1624,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'https://music.163.com/api/song/lyric?os=pc&id=$songId&tv=-1';
       final tlyricUri = Uri.parse(tlyricUrl);
 
-      final tlyricResponse = await http.get(
-        tlyricUri,
-        headers: {
-          'Referer': 'https://music.163.com',
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-      );
+      final tlyricResponse = await http
+          .get(
+            tlyricUri,
+            headers: {
+              'Referer': 'https://music.163.com',
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       final tlyricResult = json.decode(tlyricResponse.body);
 
@@ -1622,7 +1692,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'http://mobilecdnbj.kugou.com/api/v3/search/song?keyword=$encodedSearchKeyword&page=1&pagesize=1';
       final searchUri = Uri.parse(searchUrl);
 
-      final searchResponse = await http.get(searchUri);
+      final searchResponse = await http
+          .get(searchUri)
+          .timeout(const Duration(seconds: 10));
 
       // 如果状态码不为200，清空并返回
       if (searchResponse.statusCode != 200) {
@@ -1651,7 +1723,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'https://krcs.kugou.com/search?man=yes&hash=$songHash';
       final candidatesUri = Uri.parse(candidatesUrl);
 
-      final candidatesResponse = await http.get(candidatesUri);
+      final candidatesResponse = await http
+          .get(candidatesUri)
+          .timeout(const Duration(seconds: 10));
 
       // 如果状态码不为200，清空并返回
       if (candidatesResponse.statusCode != 200) {
@@ -1680,7 +1754,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'https://lyrics.kugou.com/download?ver=1&id=$lyricId&accesskey=$accessKey&fmt=lrc';
       final lyricUri = Uri.parse(lyricUrl);
 
-      final lyricResponse = await http.get(lyricUri);
+      final lyricResponse = await http
+          .get(lyricUri)
+          .timeout(const Duration(seconds: 10));
 
       // 如果状态码不为200，清空并返回
       if (lyricResponse.statusCode != 200) {
@@ -1741,9 +1817,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
           // 获取歌词内容：时间戳之后的内容
           final String text = match.group(4)!.trim();
 
-          // 兼容逐字歌词
+          // 清除逐字歌词里的时间标记（ <> [] () ）
           final String cleanedText = text.replaceAll(
-            RegExp(r'<\d{2}:\d{2}\.\d{2,3}>'),
+            RegExp(
+              r'(<\d{2}:\d{2}\.\d{2,3}>|\[\d{2}:\d{2}\.\d{2,3}\]|\(\d{2}:\d{2}\.\d{2,3}\))',
+            ),
             '',
           );
 

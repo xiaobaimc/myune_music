@@ -653,6 +653,26 @@ class _SettingPageState extends State<SettingPage>
                       context.read<SettingsProvider>().setAllowAnyFormat(value);
                     },
                   ),
+                  // 允许最小化到托盘
+                  SwitchListTile(
+                    title: const Row(
+                      children: [
+                        Text('允许最小化到托盘'),
+                        SizedBox(width: 4),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(),
+                          icon: Icon(Icons.info_outline, size: 20),
+                          tooltip: '启用后点击关闭按钮将最小化到系统托盘而不是退出程序',
+                          onPressed: null,
+                        ),
+                      ],
+                    ),
+                    value: settings.minimizeToTray,
+                    onChanged: (value) {
+                      context.read<SettingsProvider>().setMinimizeToTray(value);
+                    },
+                  ),
                 ],
               ),
             ],
