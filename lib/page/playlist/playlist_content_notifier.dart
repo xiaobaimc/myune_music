@@ -272,11 +272,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> setVolume(double newVolume) async {
-    if (newVolume.isNaN || newVolume.isInfinite) {
-      newVolume = 0.0;
-    }
-
-    _volume = newVolume.clamp(0.0, 100.0);
+    _volume = _sanitizeVolume(newVolume, 0.0);
     if (_volume > 1.0) _lastVolumeBeforeMute = _volume;
 
     await _mediaPlayer.setVolume(_volume);
