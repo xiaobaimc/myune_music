@@ -91,6 +91,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
   double _volume = 100.0; // 当前音量
   double _lastVolumeBeforeMute = 100.0; // 静音前的音量
 
+  static const _volumeKey = 'player_volume';
+  static const _lastVolumeBeforeMuteKey = 'player_last_volume';
+
   double get volume => _volume;
   double get lastVolumeBeforeMute => _lastVolumeBeforeMute;
 
@@ -247,21 +250,36 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
   }
 
+  double _sanitizeVolume(double? value, double fallback) {
+    if (value == null || value.isNaN || value.isInfinite) {
+      return fallback;
+    }
+    final clamped = value.clamp(0.0, 100.0);
+    return clamped.toDouble();
+  }
+
   Future<void> _loadVolumeSetting() async {
     final prefs = await SharedPreferences.getInstance();
-    _volume = prefs.getDouble('player_volume') ?? 100.0;
-    _lastVolumeBeforeMute = _volume;
+    _volume = _sanitizeVolume(prefs.getDouble(_volumeKey), 100.0);
+
+    final defaultLastVolume = _volume < 1.0 ? 100.0 : _volume;
+    final storedLastVolume =
+        _sanitizeVolume(prefs.getDouble(_lastVolumeBeforeMuteKey), defaultLastVolume);
+    _lastVolumeBeforeMute =
+        storedLastVolume < 1.0 ? defaultLastVolume : storedLastVolume;
+
     await _mediaPlayer.setVolume(_volume);
   }
 
   Future<void> setVolume(double newVolume) async {
-    _volume = newVolume.clamp(0.0, 100.0);
+    _volume = _sanitizeVolume(newVolume, 0.0);
     if (_volume > 1.0) _lastVolumeBeforeMute = _volume;
 
     await _mediaPlayer.setVolume(_volume);
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('player_volume', _volume);
+    await prefs.setDouble(_volumeKey, _volume);
+    await prefs.setDouble(_lastVolumeBeforeMuteKey, _lastVolumeBeforeMute);
 
     notifyListeners();
   }
