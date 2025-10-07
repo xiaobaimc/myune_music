@@ -282,11 +282,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _mediaPlayer.setVolume(_volume);
 
     final prefs = await SharedPreferences.getInstance();
-    final defaultLastVolume = _volume < 1.0 ? 100.0 : _volume;
-    final sanitizedLastVolume =
-        _sanitizeVolume(_lastVolumeBeforeMute, defaultLastVolume);
-    _lastVolumeBeforeMute =
-        sanitizedLastVolume < 1.0 ? defaultLastVolume : sanitizedLastVolume;
     await prefs.setDouble(_volumeKey, _volume);
     await prefs.setDouble(_lastVolumeBeforeMuteKey, _lastVolumeBeforeMute);
 
