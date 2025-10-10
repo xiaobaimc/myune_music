@@ -3,7 +3,7 @@
 一个基于 **Flutter (Dart)** 实现的简易本地音乐播放器。
 
 ## ✨ 特性
-* 支持 **windows**/**linux** 双端 (linux可能会有点小问题)
+* 支持 **windows**/**linux** 双端 (MacOS可使用社区项目 **[myune_music_macos](https://github.com/Lannamokia/myune_music_macos)** )
 * 使用歌单管理歌曲
 * 支持添加文件夹管理歌曲
 * 根据 **歌手** 和 **专辑** 自动分类歌曲
