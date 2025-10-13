@@ -263,10 +263,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _volume = _sanitizeVolume(prefs.getDouble(_volumeKey), 100.0);
 
     final defaultLastVolume = _volume < 1.0 ? 100.0 : _volume;
-    final storedLastVolume =
-        _sanitizeVolume(prefs.getDouble(_lastVolumeBeforeMuteKey), defaultLastVolume);
-    _lastVolumeBeforeMute =
-        storedLastVolume < 1.0 ? defaultLastVolume : storedLastVolume;
+    final storedLastVolume = _sanitizeVolume(
+      prefs.getDouble(_lastVolumeBeforeMuteKey),
+      defaultLastVolume,
+    );
+    _lastVolumeBeforeMute = storedLastVolume < 1.0
+        ? defaultLastVolume
+        : storedLastVolume;
 
     await _mediaPlayer.setVolume(_volume);
   }

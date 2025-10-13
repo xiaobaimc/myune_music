@@ -41,6 +41,8 @@ class ThemeProvider with ChangeNotifier {
 
   Color get currentSeedColor => _currentSeedColor;
 
+  String get currentFontFamily => _currentFontFamily;
+
   ColorScheme get currentColorScheme {
     return ColorScheme.fromSeed(seedColor: _currentSeedColor);
   }

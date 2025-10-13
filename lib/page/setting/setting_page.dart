@@ -28,7 +28,6 @@ class SettingPage extends StatefulWidget {
 class _SettingPageState extends State<SettingPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _fontSelectorEnabled = false;
   final bool _isCheckingUpdate = false; // 是否正在检查更新
   final String _updateStatus = ''; // 更新状态信息
 
@@ -187,6 +186,11 @@ class _SettingPageState extends State<SettingPage>
                         ),
                       ),
                     ),
+                  // 系统字体选择器
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: FontSelectorRow(),
+                  ),
                   // 深色模式
                   SwitchListTile(
                     title: Text(
@@ -197,28 +201,6 @@ class _SettingPageState extends State<SettingPage>
                     onChanged: (value) =>
                         context.read<ThemeProvider>().toggleDarkMode(),
                   ),
-                  // 启用系统字体选择器
-                  SwitchListTile(
-                    title: Text(
-                      '启用系统字体选择器',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    value: _fontSelectorEnabled,
-                    onChanged: (value) {
-                      setState(() {
-                        _fontSelectorEnabled = value;
-                      });
-                    },
-                  ),
-                  // 系统字体选择器
-                  if (_fontSelectorEnabled)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: FontSelectorRow(),
-                    ),
                   // 启用动态获取颜色
                   SwitchListTile(
                     title: Text(
