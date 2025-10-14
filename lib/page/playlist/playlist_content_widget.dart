@@ -613,11 +613,21 @@ class HeadSongListWidget extends StatelessWidget {
                               },
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete),
-                              tooltip: '删除选中歌曲',
+                              icon: const Icon(Icons.playlist_add),
+                              tooltip: '添加到歌单',
                               onPressed: () =>
-                                  _showDeleteConfirmationDialog(context),
+                                  _showAddToPlaylistDialog(context),
                             ),
+                            // 只有不是基于文件夹的歌单才显示删除按钮
+                            if (!notifier
+                                .playlists[notifier.selectedIndex]
+                                .isFolderBased)
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                tooltip: '删除选中歌曲',
+                                onPressed: () =>
+                                    _showDeleteConfirmationDialog(context),
+                              ),
                             const Spacer(),
                             IconButton(
                               icon: const Icon(Icons.close),
@@ -656,10 +666,7 @@ class HeadSongListWidget extends StatelessWidget {
                                 onPressed: () => _showSortDialog(context),
                               ),
                             // 多选按钮
-                            if (isPlaylistSelected &&
-                                !notifier
-                                    .playlists[notifier.selectedIndex]
-                                    .isFolderBased)
+                            if (isPlaylistSelected)
                               IconButton(
                                 icon: const Icon(Icons.check_circle_outline),
                                 tooltip: '多选歌曲',
@@ -824,6 +831,84 @@ class HeadSongListWidget extends StatelessWidget {
                 Navigator.of(context).pop();
               },
               child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddToPlaylistDialog(BuildContext context) {
+    final notifier = context.read<PlaylistContentNotifier>();
+    if (notifier.selectedSongs.isEmpty) {
+      notifier.postInfo('未选择任何歌曲');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('添加到歌单'),
+          content: Selector<PlaylistContentNotifier, List<Playlist>>(
+            selector: (context, notifier) => notifier.playlists,
+            builder: (context, playlists, _) {
+              final scrollController = ScrollController();
+              final currentPlaylistIndex = notifier.selectedIndex;
+              final currentPlaylist = currentPlaylistIndex >= 0
+                  ? playlists[currentPlaylistIndex]
+                  : null;
+
+              final targetPlaylists = playlists.where((playlist) {
+                // 排除当前歌单和基于文件夹的歌单
+                return playlist != currentPlaylist && !playlist.isFolderBased;
+              }).toList();
+
+              if (targetPlaylists.isEmpty) {
+                return const Text('没有可添加的歌单');
+              }
+
+              return Container(
+                width: 300,
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: Scrollbar(
+                  controller: scrollController,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    controller: scrollController,
+                    itemCount: targetPlaylists.length,
+                    itemBuilder: (context, index) {
+                      final playlist = targetPlaylists[index];
+                      return ListTile(
+                        title: Text(playlist.name),
+                        onTap: () async {
+                          // 添加歌曲到选中的歌单
+                          final selectedSongs = notifier.selectedSongs;
+                          final playlistIndex = playlists.indexOf(playlist);
+
+                          if (playlistIndex != -1) {
+                            await notifier.addSongsToPlaylist(
+                              playlistIndex,
+                              selectedSongs.map((s) => s.filePath).toList(),
+                            );
+
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              notifier.exitMultiSelectMode();
+                            }
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
             ),
           ],
         );

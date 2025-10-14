@@ -2079,6 +2079,67 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 直接添加歌曲到指定歌单（通过路径列表）
+  Future<void> addSongsToPlaylist(
+    int playlistIndex,
+    List<String> songPaths,
+  ) async {
+    if (playlistIndex < 0 || playlistIndex >= _playlists.length) {
+      _errorStreamController.add('无效的歌单索引');
+      return;
+    }
+
+    final targetPlaylist = _playlists[playlistIndex];
+
+    // 检查是否是基于文件夹的播放列表
+    if (targetPlaylist.isFolderBased) {
+      _infoStreamController.add('基于文件夹的歌单不支持手动添加歌曲');
+      return;
+    }
+
+    // 过滤掉已经存在于目标歌单中的歌曲
+    final newSongPaths = songPaths
+        .where((path) => !targetPlaylist.songFilePaths.contains(path))
+        .toList();
+
+    if (newSongPaths.isEmpty) {
+      _infoStreamController.add('所选歌曲已存在于目标歌单中');
+      return;
+    }
+
+    // 添加新歌曲到目标歌单
+    targetPlaylist.songFilePaths.addAll(newSongPaths);
+
+    // 如果目标歌单已经解析过歌曲，则同时解析并添加新歌曲
+    if (targetPlaylist.songs != null) {
+      final List<Song> newSongs = [];
+      for (final path in newSongPaths) {
+        final song = await _parseSongMetadata(path);
+        newSongs.add(song);
+      }
+      targetPlaylist.songs!.addAll(newSongs);
+    }
+
+    // 保存播放列表
+    await _savePlaylists();
+
+    // 如果目标歌单是当前选中的歌单，则更新UI
+    if (_selectedIndex == playlistIndex) {
+      await _loadCurrentPlaylistSongs();
+    }
+
+    // 更新所有歌曲列表
+    await _updateAllSongsList();
+
+    // 计算被排除的歌曲数量
+    final excludedCount = songPaths.length - newSongPaths.length;
+    final message = excludedCount > 0
+        ? '成功添加 ${newSongPaths.length} 首歌曲到歌单"${targetPlaylist.name}"（已排除 $excludedCount 首重复歌曲）'
+        : '成功添加 ${newSongPaths.length} 首歌曲到歌单"${targetPlaylist.name}"';
+
+    _infoStreamController.add(message);
+  }
+
   // -------
 
   // 这个方法是专门给歌曲详情页用的
