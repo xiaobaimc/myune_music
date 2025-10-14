@@ -1,0 +1,48 @@
+name: 🛠 改进 / 优化 / 其他事项
+description: 提出性能优化、流程改进、文档更新或其他杂项建议
+title: "[Improvement] "
+labels: [improvement]
+assignees: [xiaobaimc] 
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: 📌 背景 / 上下文
+      description: 简要说明改进的背景，或者这个问题/建议与什么相关。
+      placeholder: 例如：“希望可以优化内存占用”
+    validations:
+      required: true
+
+  - type: textarea
+    id: improvement
+    attributes:
+      label: 🛠 改进建议
+      description: 描述你希望进行的改进或优化的内容。
+      placeholder: |
+        例如：
+        - 在「……」操作下内存占用过高
+        - 优化「……」带来的内存占用
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefit
+    attributes:
+      label: 🌟 预期收益
+      description: 说明这个改进会带来什么好处。
+      placeholder: 例如：“能显著减少内存占用”
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 💡 实施建议（可选）
+      description: 如果你对如何实现有初步想法，请在这里说明。
+      placeholder: 例如：“可以缓存部分数据来减少内存占用”
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📝 补充信息（可选）
+      description: 其他有助于理解该改进的背景、资料或相关链接。

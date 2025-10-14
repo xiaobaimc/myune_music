@@ -1,0 +1,48 @@
+name: 💡 功能请求
+description: 提出一个新功能或改进的想法
+title: "[Feature] "
+labels: [enhancement]
+assignees: [xiaobaimc]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: ✨ 功能概述
+      description: 简要描述你希望添加的功能或改进。
+      placeholder: 例如：“希望可以排序歌曲”
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 🤔 背景与动机
+      description: 说明你为什么需要这个功能？它解决了什么问题？
+      placeholder: 例如：“当前歌曲顺序是固定的，希望可以自定义顺序”
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 🧠 解决方案/建议
+      description: 详细描述你对该功能的设想或建议。
+      placeholder: |
+        例如：
+        - 根据歌手名称进行排序
+        - 根据歌曲名称进行排序
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 备选方案（可选）
+      description: 如果有，请描述你考虑过的其他实现方式。
+      placeholder: 例如：“可以手动拖动排序”
+  
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📝 补充信息（可选）
+      description: 任何其他有助于理解该请求的背景、资料或链接。

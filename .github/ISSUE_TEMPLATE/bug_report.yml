@@ -1,0 +1,53 @@
+name: 🐞 Bug 报告
+description: 提交一个 Bug 以帮助我们改进
+title: "[Bug] "
+labels: [bug]
+assignees: [xiaobaimc]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 🐞 描述 Bug
+      description: 请清晰简明地描述你遇到的问题
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 🔁 复现步骤
+      description: 请说明如何复现此问题
+      placeholder: |
+        1. 进入「……」
+        2. 点击「……」
+        3. 向下滚动到「……」
+        4. 出现错误
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: ✅ 预期行为
+      description: 请描述你期望发生的结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 🖼️ 截图（可选）
+      description: 如果有，请附上截图帮助说明问题
+      placeholder: 可以直接拖入图片到这里
+
+  - type: input
+    id: desktop
+    attributes:
+      label: 💻 桌面端环境（可选）
+      description: 请输入操作系统、版本信息
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📝 其他补充信息（可选）
+      description: 请添加与问题相关的其他上下文信息
