@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+
 import '../playlist/playlist_content_notifier.dart';
 import '../playlist/playlist_models.dart';
 
@@ -110,6 +112,17 @@ class SongDetailsPage extends StatelessWidget {
                             label: '文件路径',
                             value: details.filePath,
                             selectable: true,
+                            trailing: IconButton(
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                              onPressed: () {
+                                _openFileLocation(details.filePath, notifier);
+                              },
+                              tooltip: '打开文件所在位置',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              splashRadius: 18,
+                              iconSize: 18,
+                            ),
                           ),
                           _infoCard(
                             context: context,
@@ -156,12 +169,33 @@ class SongDetailsPage extends StatelessWidget {
     return '$y-$m-$d $h:$min:$s';
   }
 
+  void _openFileLocation(
+    String filePath,
+    PlaylistContentNotifier notifier,
+  ) async {
+    try {
+      final directory = File(filePath).parent.path;
+
+      if (Platform.isWindows) {
+        await Process.run('explorer', ['/select,', filePath]);
+      } else if (Platform.isMacOS) {
+        // 对于MacOS的支持
+        await Process.run('open', ['-R', filePath]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [directory]);
+      }
+    } catch (e) {
+      notifier.postError('打开文件位置失败');
+    }
+  }
+
   Widget _infoCard({
     required BuildContext context,
     required IconData icon,
     required String label,
     required String value,
     bool selectable = false,
+    Widget? trailing,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -180,9 +214,20 @@ class SongDetailsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SelectableText(
-                    label,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: SelectableText(
+                          label,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      if (trailing != null) ...[
+                        const SizedBox(width: 4),
+                        SizedBox(height: 18, width: 18, child: trailing),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   SelectableText(value),

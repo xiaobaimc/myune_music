@@ -39,6 +39,7 @@ void main() async {
   // 初始化窗口状态管理器
   final windowState = WindowStateManager();
   final initialSize = await windowState.loadWindowSize();
+  final initialPosition = await windowState.loadWindowPosition();
 
   const minPossibleSize = Size(480, 600);
   final windowOptions = WindowOptions(
@@ -52,6 +53,11 @@ void main() async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.setAsFrameless();
     await windowManager.setHasShadow(true);
+    // 设置窗口位置
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.containsKey('window_x') && prefs.containsKey('window_y')) {
+      await windowManager.setPosition(initialPosition);
+    }
     await windowManager.show();
     await windowManager.focus();
   });
@@ -152,9 +158,16 @@ class _MyAppState extends State<MyApp> with TrayListener {
 class WindowStateManager with WindowListener {
   Future<Size> loadWindowSize() async {
     final prefs = await SharedPreferences.getInstance();
-    final width = prefs.getDouble('window_width') ?? 1200;
-    final height = prefs.getDouble('window_height') ?? 700;
+    final width = prefs.getDouble('window_width') ?? 1150;
+    final height = prefs.getDouble('window_height') ?? 620;
     return Size(width, height);
+  }
+
+  Future<Offset> loadWindowPosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    final x = prefs.getDouble('window_x') ?? 0;
+    final y = prefs.getDouble('window_y') ?? 0;
+    return Offset(x, y);
   }
 
   @override
@@ -163,5 +176,13 @@ class WindowStateManager with WindowListener {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('window_width', size.width);
     await prefs.setDouble('window_height', size.height);
+  }
+
+  @override
+  void onWindowMove() async {
+    final position = await windowManager.getPosition();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('window_x', position.dx);
+    await prefs.setDouble('window_y', position.dy);
   }
 }

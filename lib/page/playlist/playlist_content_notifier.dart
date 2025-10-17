@@ -113,9 +113,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
   bool _isSearching = false; // 是否正在搜索（用于切换UI）
   List<Song> _filteredSongs = []; // 搜索结果列表
 
+  bool _disableHotKeys = false; // 是否禁用快捷键
+
   String get searchKeyword => _searchKeyword;
   bool get isSearching => _isSearching;
   List<Song> get filteredSongs => _filteredSongs;
+
+  bool get disableHotKeys => _disableHotKeys;
 
   // --- 日志相关 ---
   File? _logFile;
@@ -238,16 +242,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> _loadAllData() async {
+    // 先加载歌手和专辑排序，避免初始化过程中被覆盖
+    _artistSortOrders = await _playlistManager.loadArtistSortOrders();
+    _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
+
     // 加载现有的播放列表
     await _loadPlaylists();
     // 加载播放模式
     await loadPlayMode();
     // 加载音量设置
     await _loadVolumeSetting();
-
-    // 加载歌手和专辑的排序
-    _artistSortOrders = await _playlistManager.loadArtistSortOrders();
-    _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
   }
 
   double _sanitizeVolume(double? value, double fallback) {
@@ -2697,5 +2701,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   void postInfo(String infoMessage) {
     _infoStreamController.add(infoMessage);
+  }
+
+  // 控制快捷键启用/禁用的方法
+  void setDisableHotKeys(bool value) {
+    _disableHotKeys = value;
+    notifyListeners();
   }
 }

@@ -88,6 +88,7 @@ flutter:
     - assets/
     - assets/images/icon/icon.png
     - assets/images/icon/tray_icon.ico
+    - assets/images/icon/logo.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

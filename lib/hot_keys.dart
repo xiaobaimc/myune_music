@@ -26,7 +26,7 @@ class Hotkeys extends StatelessWidget {
     final notifier = context.watch<PlaylistContentNotifier>();
 
     // 如果正在搜索，则直接返回子组件，不应用任何快捷键
-    if (notifier.isSearching) {
+    if (notifier.isSearching || notifier.disableHotKeys) {
       return child;
     }
 

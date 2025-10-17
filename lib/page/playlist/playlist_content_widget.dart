@@ -63,10 +63,17 @@ class PlaylistListWidget extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(hintText: '输入歌单名称'),
-                      autofocus: true,
+                    Focus(
+                      onFocusChange: (hasFocus) {
+                        final notifier = context
+                            .read<PlaylistContentNotifier>();
+                        notifier.setDisableHotKeys(hasFocus);
+                      },
+                      child: TextField(
+                        controller: controller,
+                        decoration: const InputDecoration(hintText: '输入歌单名称'),
+                        autofocus: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     const Text('选择管理模式：'),
@@ -271,10 +278,16 @@ class PlaylistListWidget extends StatelessWidget {
       builder: (context) {
         return AlertDialog(
           title: const Text('编辑歌单名称'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: '输入新的歌单名称'),
-            autofocus: true,
+          content: Focus(
+            onFocusChange: (hasFocus) {
+              final notifier = context.read<PlaylistContentNotifier>();
+              notifier.setDisableHotKeys(hasFocus);
+            },
+            child: TextField(
+              controller: controller,
+              decoration: const InputDecoration(hintText: '输入新的歌单名称'),
+              autofocus: true,
+            ),
           ),
           actions: [
             TextButton(

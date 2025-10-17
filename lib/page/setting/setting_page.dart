@@ -12,6 +12,7 @@ import '../../widgets/font_selector_row.dart';
 import 'update_checker.dart';
 import 'audio_device_selector.dart';
 import 'artist_separator.dart';
+import 'about.dart';
 
 // 定义应用版本号常量
 const String appVersion = '0.6.8';
@@ -325,6 +326,8 @@ class _SettingPageState extends State<SettingPage>
                       ],
                     ),
                   ),
+                  // 关于
+                  const About(),
                 ],
               ),
 
@@ -340,6 +343,19 @@ class _SettingPageState extends State<SettingPage>
                     value: settings.useBlurBackground, // 使用 settings
                     onChanged: (value) {
                       context.read<SettingsProvider>().setUseBlurBackground(
+                        value,
+                      );
+                    },
+                  ),
+                  // 启用歌词模糊效果
+                  SwitchListTile(
+                    title: Text(
+                      '启用歌词模糊效果',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    value: settings.enableLyricBlur,
+                    onChanged: (value) {
+                      context.read<SettingsProvider>().setEnableLyricBlur(
                         value,
                       );
                     },

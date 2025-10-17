@@ -171,7 +171,7 @@ class SongDetailPage extends StatelessWidget {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const SizedBox(height: 50),
+                                          const SizedBox(height: 45),
                                           // 歌曲标题
                                           Text(
                                             currentSong?.title ?? '未知歌曲',
@@ -196,7 +196,7 @@ class SongDetailPage extends StatelessWidget {
                                             overflow: TextOverflow.clip,
                                             softWrap: false,
                                           ),
-                                          const SizedBox(height: 8),
+                                          const SizedBox(height: 6),
                                           // 专辑封面
                                           LayoutBuilder(
                                             builder: (context, constraints) {

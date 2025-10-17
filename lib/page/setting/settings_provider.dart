@@ -20,6 +20,7 @@ class SettingsProvider with ChangeNotifier {
   static const _addLyricPaddingKey = 'addLyricPadding'; // 歌词上下补位设置的 key
   static const _artistSeparatorsKey = 'artistSeparators'; // 艺术家分隔符设置的 key
   static const _minimizeToTrayKey = 'minimizeToTray'; // 最小化到托盘设置的 key
+  static const _enableLyricBlurKey = 'enableLyricBlur'; // 歌词模糊效果设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -31,6 +32,7 @@ class SettingsProvider with ChangeNotifier {
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
   bool _addLyricPadding = false; // 默认不启用歌词上下补位
   bool _minimizeToTray = false; // 默认不启用最小化到托盘
+  bool _enableLyricBlur = false; // 默认不启用歌词模糊效果
 
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
   String _primaryLyricSource = 'primary'; // 默认主要歌词源为某易云音乐
@@ -49,6 +51,7 @@ class SettingsProvider with ChangeNotifier {
   double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
   bool get addLyricPadding => _addLyricPadding; // 获取歌词上下补位设置
   bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
+  bool get enableLyricBlur => _enableLyricBlur; // 获取歌词模糊效果设置
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
   String get primaryLyricSource => _primaryLyricSource; // 获取主要歌词源
@@ -75,6 +78,8 @@ class SettingsProvider with ChangeNotifier {
     _addLyricPadding =
         prefs.getBool(_addLyricPaddingKey) ?? false; // 加载歌词上下补位设置
     _minimizeToTray = prefs.getBool(_minimizeToTrayKey) ?? false; // 加载最小化到托盘设置
+    _enableLyricBlur =
+        prefs.getBool(_enableLyricBlurKey) ?? false; // 加载歌词模糊效果设置
     _primaryLyricSource =
         prefs.getString(_primaryLyricSourceKey) ?? 'primary'; // 加载主要歌词源设置
     _secondaryLyricSource =
@@ -195,5 +200,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_minimizeToTrayKey, value);
+  }
+
+  void setEnableLyricBlur(bool value) async {
+    _enableLyricBlur = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableLyricBlurKey, value);
   }
 }
