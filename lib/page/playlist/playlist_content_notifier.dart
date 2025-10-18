@@ -2706,6 +2706,5 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 控制快捷键启用/禁用的方法
   void setDisableHotKeys(bool value) {
     _disableHotKeys = value;
-    notifyListeners();
   }
 }
