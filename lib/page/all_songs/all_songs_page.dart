@@ -103,6 +103,16 @@ class AllSongsPage extends StatelessWidget {
                             : notifier.allSongs;
                       },
                       builder: (context, songs, _) {
+                        // 检查是否仍在加载全部歌曲
+                        if (!notifier.allSongsLoaded) {
+                          return const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [CircularProgressIndicator()],
+                            ),
+                          );
+                        }
+
                         if (songs.isEmpty) {
                           return Center(
                             child: Text(isSearching ? '未找到匹配的歌曲' : '没有发现任何歌曲'),

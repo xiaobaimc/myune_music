@@ -31,6 +31,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
   final SettingsProvider _settingsProvider;
   final ThemeProvider _themeProvider;
 
+  bool _allSongsLoaded = false; // 表示全部歌曲是否已加载完成
+  bool get allSongsLoaded => _allSongsLoaded;
+
   List<Playlist> _playlists = []; // 所有歌单列表
   List<Playlist> get playlists => _playlists;
   int _selectedIndex = -1; // 当前选中的歌单索引
@@ -372,8 +375,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
         .loadPlaylists();
     _playlists = loadedPlaylists;
     _selectedIndex = _playlists.isNotEmpty ? 0 : -1;
-    await _updateAllSongsList();
+    // await _updateAllSongsList();
     notifyListeners();
+
+    // 异步加载全部歌曲列表，不阻塞UI
+    unawaited(_updateAllSongsList());
 
     if (_selectedIndex != -1) {
       _loadCurrentPlaylistSongs();
@@ -2488,6 +2494,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 全部歌曲页面相关 ---
 
   Future<void> _updateAllSongsList() async {
+    // 初始化加载状态
+    _allSongsLoaded = false;
+    notifyListeners();
+
     // 从所有歌单中获取当前所有可用的、不重复的歌曲路径集合
     final allAvailablePaths = <String>{};
     for (final playlist in _playlists) {
@@ -2505,10 +2515,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 解析元数据
     final List<Song> songsWithMetadata = [];
+
+    // final stopwatch = Stopwatch()..start();
+
     for (final path in savedOrder) {
       final song = await _parseSongMetadata(path);
       songsWithMetadata.add(song);
     }
+
+    // stopwatch.stop();
+    // print('解析耗时: ${stopwatch.elapsedMilliseconds} ms');
+
     _allSongs = songsWithMetadata;
 
     // 二次去重：通过歌手+歌曲名
@@ -2540,6 +2557,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // }
     // 清理无效的排序数据
     _cleanupInvalidSortingData();
+
+    // 标记加载完成
+    _allSongsLoaded = true;
+    notifyListeners();
   }
 
   Future<void> reorderAllSongs(int oldIndex, int newIndex) async {
