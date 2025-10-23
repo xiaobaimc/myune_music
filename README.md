@@ -1,68 +1,54 @@
-# myune\_music
+# 🎵 Myune Music
 
-一个基于 **Flutter (Dart)** 实现的简易本地音乐播放器。
+[![Flutter](https://img.shields.io/badge/Flutter-3.35%2B-blue?logo=flutter)](https://flutter.dev/)
+[![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux-brightgreen)](#)
+[![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)
+
+一个基于 **Flutter (Dart)** 实现的简洁本地音乐播放器，支持 **Windows / Linux** 双端。
+
+> 🍎 macOS 用户可使用社区移植版：[myune_music_macos](https://github.com/Lannamokia/myune_music_macos)
 
 ## ✨ 特性
-* 支持 **windows**/**linux** 双端 (MacOS可使用社区项目 **[myune_music_macos](https://github.com/Lannamokia/myune_music_macos)** )
-* 使用歌单管理歌曲
-* 支持添加文件夹管理歌曲
-* 根据 **歌手** 和 **专辑** 自动分类歌曲
-* 使用 [**Material 3**](https://m3.material.io/) 配色
-* 支持导入多种 **本地音频格式**，自动读取 **音频元数据**
-* 支持 **歌词显示**，兼容本地 `.lrc` 文件及音频文件中的 **内嵌歌词**，支持从网络获取歌词
-* 提供 **音调控制** 与 **倍速播放** 功能
-* 支持读取多种 **音频文件信息**
-* 可自定义 **主题配色**与**字体**
-* 支持 **SMTC（系统媒体传输控制）**
-* 支持 Linux 下的 **MPRIS**
-* 支持 **音频独占** 播放 （仅Winsows）
-* 支持 **手动选择音频输出设备**
+* 💻 支持 **Windows / Linux** 双平台
+* 🎶 歌曲管理：支持 **文件夹歌单** 与 **手动歌单**
+* 🧠 自动按 **歌手** 与 **专辑** 分类
+* 🎨 使用 [Material 3](https://m3.material.io/) 组件与配色
+* 🎧 自动读取音频元数据，支持多种格式
+* 📝 歌词支持：内嵌歌词、本地 `.lrc`、网络歌词源
+* 🔊 提供 **音调控制** 与 **倍速播放**
+* ✨ 可自定义主题配色与字体
+* 🖥️ 集成 **SMTC（系统媒体传输控制）** 与 **MPRIS（Linux）**
+* 🧩 支持 **音频独占模式**（仅 Windows）
+* 🔌 支持 **手动选择音频输出设备**
 
-## 🎶 关于歌曲管理
+## 🎵 歌曲管理说明
 
-软件内提供了两种管理方法 **文件夹** 和 **手动管理**
-***
-**手动管理** ：在添加歌单的时候选择 **手动管理歌单歌曲**，创建完歌单后手动添加歌曲
+播放器提供两种管理方式：**文件夹模式** 与 **手动模式**。
 
-可以对歌单内的 **所有歌曲** 进行删除或添加
+### 🗂️ 文件夹模式
 
-在添加时，可以选择**一个或多个歌曲文件**，软件会自动去除重复添加的歌曲
-***
-**文件夹** ：在添加歌单的时候选择 **添加文件夹**，并按照提示选择 **一个或多个文件夹**
+* 添加歌单时选择“**添加文件夹**”，可选多个路径
+* 自动扫描文件夹及其子目录内的所有歌曲
+* 可通过右键菜单添加 / 删除文件夹
+* 手动点击“**刷新按钮**”可更新歌曲列表
+* ⚠️ 文件夹模式中无法手动添加或删除单曲
 
-可以随时 **右键歌单** 添加或删除文件夹
+### 📝 手动模式
 
-在首次添加时，软件会自动扫描文件夹(包括其子文件夹)内所有歌曲
+* 创建歌单时选择“**手动管理歌单歌曲**”
+* 可自由添加 / 删除歌曲
+* 支持批量选择文件并自动去重
 
-在此之后，软件将不会静默扫描文件夹，需要手动点击 **刷新按钮** 更新
-
-注意：使用文件夹歌单将无法 **手动删除和添加歌曲**
-***
-
-以上两种方式都可以根据 **歌手** 和 **专辑** 进行自动分类
+> 两种方式均支持按 歌手/专辑 分类展示
 
 ## 🎶 关于桌面歌词
-由于我使用的框架 [Flutetr](https://flutter.dev/) 暂时不支持多窗口，所以软件内没有提供桌面歌词功能
+由于 [Flutter](https://flutter.dev/) 暂不支持多窗口功能，因此暂未提供桌面歌词。
+可使用以下第三方工具替代：
 
-可以使用其他软件进行替代
-例如：
-- [Lyricify Lite](https://apps.microsoft.com/detail/9nltpsv395k2)
-- [BetterLyrics](https://apps.microsoft.com/detail/9p1wcd1p597r)
+* [Lyricify Lite](https://apps.microsoft.com/detail/9nltpsv395k2)
+* [BetterLyrics](https://apps.microsoft.com/detail/9p1wcd1p597r)
 
-只需在播放器内播放音乐，软件即可自动显示歌词
-
-> 上述软件非本人开发，请支持原作者！
-
-## 📦 内嵌元数据支持
-
-| 音频格式     | 元数据格式               | 支持 |
-|-------------|-------------------------|-------|
-| MP3         | `ID3v1`, `ID3v2`        | ✅   |
-| MP4         | `iTunes-style ilst`     | ✅   |
-| FLAC        | `Vorbis Comments`       | ✅   |
-| OGG         | `Vorbis Comments`       | ✅   |
-| Opus        | `Vorbis Comments`       | ✅   |
-| WAV         | `RIFF`                  | ✅   |
+> 以上软件非本人开发，请支持原作者 🙏
 
 ## 🌐 关于歌词
 
@@ -94,6 +80,37 @@
 
 软件内提供设置`同时间戳歌词行数`，例如调整数值为2，最后一行（罗马音）就不会被显示
 
+## 📦 内嵌元数据支持
+
+| 音频格式     | 元数据格式               | 支持 |
+|-------------|-------------------------|-------|
+| MP3         | `ID3v1`, `ID3v2`        | ✅   |
+| MP4         | `iTunes-style ilst`     | ✅   |
+| FLAC        | `Vorbis Comments`       | ✅   |
+| OGG         | `Vorbis Comments`       | ✅   |
+| Opus        | `Vorbis Comments`       | ✅   |
+| WAV         | `RIFF`                  | ✅   |
+
+## 🎵 支持的音频格式
+
+由于底层采用 **[mpv](https://mpv.io)** 播放引擎（基于 FFmpeg），理论上支持几乎所有常见及部分非常规的音频格式，包括但不限于：
+
+| 类型          | 格式示例                                               | 说明                      |
+| ----------- | -------------------------------------------------- | ----------------------- |
+| **无损格式**    | `FLAC`, `ALAC`, `APE`, `WAV`, `AIFF`, `DSF`, `DFF` | 支持高解析度音频、无损压缩或未压缩格式     |
+| **有损格式**    | `MP3`, `AAC`, `M4A`, `OGG`, `OPUS`, `WMA`, `MP2`   | 主流压缩格式，兼容性极佳            |
+| **其他实验性格式** | `TTA`, `WV`, `SPX`, `CAF` 等                        | FFmpeg 原生支持的冷门格式        |
+
+### 🛠️ 启用冷门格式支持
+
+若需要播放非常规音频格式（例如 `TTA`、`WV` 等），请前往设置菜单：
+
+1. 打开 **设置**
+2. 转到 **高级**
+3. 启用 **允许添加任何格式的文件**
+
+此操作会允许添加任何格式的文件到软件内
+
 ## 🔧关于 Linux
 
 目前 Linux 版本仅在 **Debian 12 + Gnome(X11)** 测试过，已知问题有**无法选择字体**
@@ -110,14 +127,36 @@
 sudo apt install libmpv-dev mpv 
 ```
 
-## 📸 项目截图
-![](screenshot/0ed4c6045d9d5ec7ffbb1e2d37fbc082.png)
-![](screenshot/80b1797d1eeffb5e676c999e9111c29e.png)
-![](screenshot/b9c1ea02a032da463abe86ec6fbedbe4.png) 
-![](screenshot/8525ee8949583b6648132a43849dbab3.png)
-![](screenshot/a55adee800e474ac31f5ea79a36f2a57.png)
-![](screenshot/43b5446daf9a740ea7cf7b596f2bad1f.png)
-![](screenshot/8ee8249892e86a396a181306406e3a9d.png) 
+## 📸 软件截图
+![](screenshot/6e14973b9473176c5e971fcd489292db.png)
+> 字体大小22，垂直间距6，居左对齐，启用歌词模糊和背景模糊效果
+
+![](screenshot/cad821b2b9bcab39866bed28aa10ba64.png)
+> 字体大小22，垂直间距6，居中对齐，启用歌词模糊和背景模糊效果
+
+![](screenshot/9b4ecbf45ba3e627ad0f49eb58de49a6.png)
+> 字体大小25，垂直间距10，居左对齐，关闭歌词模糊，启用背景模糊效果
+
+![](screenshot/52736f272726c264106786882e10294f.png)
+> 字体大小22，垂直间距6，居左对齐，启用歌词模糊和背景模糊效果，启用深色模式
+
+![](screenshot/5b3a494c901a3b4f45cde9346cbaa494.png)
+
+![](screenshot/8bf7b69971d2ee82d6a1b07458435429.png)
+
+![](screenshot/d4555aec0a2d22cf94a532cf556f5833.png)
+
+![](screenshot/4a7670f3ebf01f882075ad2d1d8503b8.png)
+
+![](screenshot/229b937e755fc80c1b6c2b035a9fce9d.png)
+
+![](screenshot/e4c6b8a45a044f23f6a0cab5b911a3e4.png)
+
+![](screenshot/2d2dcc15474a0305dd38c5c95d796171.png)
+
+![](screenshot/e5509c9d49dd41c80a5eaff376e37d9b.png)
+
+![](screenshot/0d13a2582b84e3d163988899b1944333.png)
 
 ## 🚀 快速开始
 
@@ -138,18 +177,23 @@ flutter pub get
 flutter run
 ```
 
-## 📦 使用的插件与致谢
+## 🧱 使用的依赖与致谢
 
-* [**audio\_metadata\_reader**](https://pub.dev/packages/audio_metadata_reader)：读取音频元信息
-* [**media_kit**](https://pub.dev/packages/media_kit)：音频播放支持（太好用了）
-* [**anni\_mpris\_service**](https://pub.dev/packages/anni_mpris_service): D-Bus MPRIS 控件
-* 更多依赖请查看 **[pubspec.yaml](pubspec.yaml)**
+| 插件                                                                      | 功能             |
+| ----------------------------------------------------------------------- | -------------- |
+| [audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader) | 读取音频元信息        |
+| [media_kit](https://pub.dev/packages/media_kit)                         | 音频播放支持         |
+| [anni_mpris_service](https://pub.dev/packages/anni_mpris_service)       | D-Bus MPRIS 控件 |
 
-感谢以下项目和开发者的无私分享：
+更多依赖请查看 [pubspec.yaml](pubspec.yaml)。
 
-* [**爱情终是残念**](https://aqzscn.cn/archives/flutter-smtc) 与 [**Ferry-200**](https://github.com/Ferry-200/coriander_player)：提供了 Rust + Flutter 的 **SMTC 实现参考**
+特别感谢：
 
-🙏 再次致敬所有热爱开源、默默付出的开发者们！
+* [爱情终是残念](https://aqzscn.cn/archives/flutter-smtc)
+* [Ferry-200](https://github.com/Ferry-200/coriander_player)
+
+> 提供了 Rust + Flutter 的 SMTC 实现参考 🙏
+
 
 ## 📄 许可证
 

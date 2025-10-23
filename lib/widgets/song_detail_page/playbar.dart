@@ -184,16 +184,14 @@ class _PlaybarState extends State<Playbar> {
                 Row(
                   mainAxisSize: MainAxisSize.min, // 确保这个Row只占用必要的空间
                   children: [
-                    // 上一首按钮
+                    // 上一首
                     IconButton(
                       icon: Icon(
                         Icons.skip_previous,
                         color: onBarColor,
                         size: 28,
                       ),
-                      onPressed: playlistNotifier.playingPlaylist != null
-                          ? () => playlistNotifier.playPrevious()
-                          : null,
+                      onPressed: () => playlistNotifier.playPrevious(),
                     ),
                     // 播放/暂停按钮
                     StreamBuilder<bool>(
@@ -210,14 +208,10 @@ class _PlaybarState extends State<Playbar> {
                         );
                       },
                     ),
-                    // 下一首按钮
+                    // 下一首
                     IconButton(
                       icon: Icon(Icons.skip_next, color: onBarColor, size: 28),
-                      onPressed:
-                          playlistNotifier.currentPlaylistSongs.isNotEmpty &&
-                              !playlistNotifier.isLoadingSongs
-                          ? () => playlistNotifier.playNext()
-                          : null,
+                      onPressed: () => playlistNotifier.playNext(),
                     ),
                   ],
                 ),
