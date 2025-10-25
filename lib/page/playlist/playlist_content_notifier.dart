@@ -255,6 +255,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await loadPlayMode();
     // 加载音量设置
     await _loadVolumeSetting();
+    // 恢复播放状态
+    await _restorePlaybackState();
   }
 
   double _sanitizeVolume(double? value, double fallback) {
@@ -308,6 +310,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _exclusiveModeSubscription?.cancel(); // 取消独占模式订阅
     _mediaPlayer.dispose(); // 释放播放器资源
     _cleanupSmtc();
+    savePlaybackState();
     super.dispose();
   }
 
@@ -1201,6 +1204,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       await _mediaPlayer.play(); // 最后执行播放
 
+      // 保存播放状态
+      savePlaybackState();
+
       notifyListeners();
     } catch (e) {
       // 捕获所有播放相关的异常
@@ -1326,6 +1332,98 @@ class PlaylistContentNotifier extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _errorStreamController.add('设置自动音频设备失败: $e');
+    }
+  }
+
+  // 保存播放状态
+  Future<void> savePlaybackState() async {
+    // 只有在有播放列表和当前歌曲索引有效时才保存
+    if (_playingPlaylist != null &&
+        _playingSongIndex >= 0 &&
+        _playingPlaylist!.songFilePaths.length > _playingSongIndex) {
+      final playbackState = PlaybackState(
+        playlistId: _playingPlaylist!.id,
+        songIndex: _playingSongIndex,
+      );
+
+      await _playlistManager.savePlaybackState(playbackState);
+      // 保存播放队列
+      await _playlistManager.savePlaybackQueue(_playingPlaylist!.songFilePaths);
+    } else {
+      // 如果没有有效的播放状态，清除已保存的状态
+      await _playlistManager.clearPlaybackState();
+      await _playlistManager.clearPlaybackQueue();
+    }
+  }
+
+  // 恢复播放状态
+  Future<void> _restorePlaybackState() async {
+    final playbackState = await _playlistManager.loadPlaybackState();
+    final playbackQueue = await _playlistManager.loadPlaybackQueue();
+
+    if (playbackState != null) {
+      // 查找对应的播放列表
+      Playlist? targetPlaylist;
+      if (playbackState.playlistId != null) {
+        targetPlaylist = _playlists.firstWhere(
+          (playlist) => playlist.id == playbackState.playlistId,
+          orElse: () => _allSongsVirtualPlaylist,
+        );
+      } else {
+        // 如果没有playlistId，使用全部歌曲播放列表
+        targetPlaylist = _allSongsVirtualPlaylist;
+      }
+
+      // 如果有保存的播放队列，则使用它更新播放列表
+      if (playbackQueue != null) {
+        targetPlaylist.songFilePaths = playbackQueue;
+      }
+
+      // 检查歌曲索引是否有效
+      if (playbackState.songIndex >= 0 &&
+          targetPlaylist.songFilePaths.length > playbackState.songIndex) {
+        // 设置播放上下文
+        _playingPlaylist = targetPlaylist;
+        _playingSongIndex = playbackState.songIndex;
+
+        // 确保播放列表的歌曲已被解析
+        await _ensurePlaylistSongs(_playingPlaylist!);
+
+        // 设置当前歌曲
+        _currentSong = _playingPlaylist!.songs![_playingSongIndex];
+
+        // 加载歌词
+        final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
+        _loadLyricsForSong(songFilePath);
+
+        // 更新SMTC元数据
+        await _smtcManager?.updateMetadata(
+          title: _currentSong!.title,
+          artist: _currentSong!.artist,
+          albumArt: _currentSong!.albumArt,
+        );
+
+        // 提取并应用动态主题色
+        extractAndApplyDynamicColor(_currentSong!.albumArt);
+
+        // 将歌曲加载到播放器中，但不自动播放
+        try {
+          await _mediaPlayer.open(
+            Media(songFilePath),
+            play: false, // 不自动播放
+          );
+        } catch (e) {
+          // 如果加载失败，清除播放状态
+          await _playlistManager.clearPlaybackState();
+          await _playlistManager.clearPlaybackQueue();
+          _playingPlaylist = null;
+          _playingSongIndex = -1;
+          _currentSong = null;
+          _currentPosition = Duration.zero;
+        }
+
+        notifyListeners();
+      }
     }
   }
 

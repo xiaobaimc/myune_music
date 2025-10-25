@@ -116,3 +116,21 @@ class SongDetails {
     this.modified,
   });
 }
+
+class PlaybackState {
+  final String? playlistId;
+  final int songIndex;
+
+  PlaybackState({this.playlistId, required this.songIndex});
+
+  Map<String, dynamic> toJson() {
+    return {'playlistId': playlistId, 'songIndex': songIndex};
+  }
+
+  factory PlaybackState.fromJson(Map<String, dynamic> json) {
+    return PlaybackState(
+      playlistId: json['playlistId'],
+      songIndex: json['songIndex'],
+    );
+  }
+}

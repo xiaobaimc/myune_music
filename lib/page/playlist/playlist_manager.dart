@@ -338,4 +338,89 @@ class PlaylistManager {
       // print('保存专辑排序失败: $e');
     }
   }
+
+  // 获取播放状态文件路径
+  Future<File> _getPlaybackStateFile() async {
+    final path = await _getLocalPath();
+    return File('$path/playback_state.json');
+  }
+
+  // 获取播放队列文件路径
+  Future<File> _getPlaybackQueueFile() async {
+    final path = await _getLocalPath();
+    return File('$path/playback_queue.json');
+  }
+
+  // 保存播放状态
+  Future<void> savePlaybackState(PlaybackState state) async {
+    try {
+      final file = await _getPlaybackStateFile();
+      await file.writeAsString(jsonEncode(state.toJson()));
+    } catch (e) {
+      //
+    }
+  }
+
+  // 加载播放状态
+  Future<PlaybackState?> loadPlaybackState() async {
+    try {
+      final file = await _getPlaybackStateFile();
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        final json = jsonDecode(contents) as Map<String, dynamic>;
+        return PlaybackState.fromJson(json);
+      }
+    } catch (e) {
+      //
+    }
+    return null;
+  }
+
+  // 清除播放状态
+  Future<void> clearPlaybackState() async {
+    try {
+      final file = await _getPlaybackStateFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      //
+    }
+  }
+
+  // 保存播放队列
+  Future<void> savePlaybackQueue(List<String> queue) async {
+    try {
+      final file = await _getPlaybackQueueFile();
+      await file.writeAsString(jsonEncode(queue));
+    } catch (e) {
+      //
+    }
+  }
+
+  // 加载播放队列
+  Future<List<String>?> loadPlaybackQueue() async {
+    try {
+      final file = await _getPlaybackQueueFile();
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        return (jsonDecode(contents) as List<dynamic>).cast<String>();
+      }
+    } catch (e) {
+      //
+    }
+    return null;
+  }
+
+  // 清除播放队列
+  Future<void> clearPlaybackQueue() async {
+    try {
+      final file = await _getPlaybackQueueFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      //
+    }
+  }
 }
