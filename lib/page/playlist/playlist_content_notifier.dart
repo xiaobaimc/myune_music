@@ -1408,10 +1408,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
         // 将歌曲加载到播放器中，但不自动播放
         try {
-          await _mediaPlayer.open(
-            Media(songFilePath),
-            play: false, // 不自动播放
-          );
+          // 检查文件是否存在
+          final songFile = File(songFilePath);
+          if (await songFile.exists()) {
+            await _mediaPlayer.open(
+              Media(songFilePath),
+              play: false, // 不自动播放
+            );
+          } else {
+            // 如果文件不存在，清除播放状态
+            await _playlistManager.clearPlaybackState();
+            await _playlistManager.clearPlaybackQueue();
+            _playingPlaylist = null;
+            _playingSongIndex = -1;
+            _currentSong = null;
+            _currentPosition = Duration.zero;
+          }
         } catch (e) {
           // 如果加载失败，清除播放状态
           await _playlistManager.clearPlaybackState();
