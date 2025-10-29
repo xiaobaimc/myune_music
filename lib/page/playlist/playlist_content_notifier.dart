@@ -69,6 +69,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Song? _currentSong; // 当前播放的歌曲
   Song? get currentSong => _currentSong;
 
+  bool _isAutoPlaying = false; // 是否为自动播放（播放完成后的自动切换）
   PlayMode _playMode = PlayMode.sequence; // 播放模式：顺序、随机、单曲循环
   static const _playModeKey = 'play_mode'; // 存储播放模式的 key
   PlayMode get playMode => _playMode;
@@ -324,7 +325,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       if (completed) {
         _isPlaying = false; // 更新内部状态
         notifyListeners();
+        _isAutoPlaying = true; // 标记为自动播放
         await _playNextLogic();
+        _isAutoPlaying = false; // 重置标记
       }
     });
 
@@ -1024,10 +1027,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       nextIndex =
           _shuffledIndices[(currentShuffledPos + 1) % _shuffledIndices.length];
-    } else if (_playMode == PlayMode.repeatOne) {
+    } else if (_playMode == PlayMode.repeatOne && _isAutoPlaying) {
+      // 只有在自动播放且为单曲循环模式时才重复播放当前歌曲
       nextIndex = currentIndex;
     } else {
-      // 顺序播放
+      // 顺序播放或其他情况（包括手动点击下一首）
       nextIndex = (currentIndex + 1) % songCount;
     }
 
@@ -1063,17 +1067,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
       prevIndex =
           _shuffledIndices[(currentShuffledPos - 1) % _shuffledIndices.length];
-    } else if (_playMode == PlayMode.repeatOne) {
-      // 单曲循环模式下，上一首还是当前这首歌
-      prevIndex = currentIndex;
     } else {
-      // 顺序播放
+      // 顺序播放或其他情况（包括手动点击上一首）
       // `+ songCount` 是为了防止 `currentIndex` 为 0 时出现负数
       prevIndex = (currentIndex - 1 + songCount) % songCount;
     }
 
     // 更新播放索引
     _playingSongIndex = prevIndex;
+    _isAutoPlaying = false;
     await _startPlaybackNow();
   }
 

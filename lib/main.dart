@@ -175,6 +175,7 @@ class _MyAppState extends State<MyApp> with TrayListener {
       // 初始化任务栏进度模式
       await WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
     } catch (e) {
+      // FIXME: 这里有报错，不影响使用
       // debugPrint('_initializeThumbnailToolbar出现错误: $e');
     }
   }
