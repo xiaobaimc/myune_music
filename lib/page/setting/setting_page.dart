@@ -243,6 +243,16 @@ class _SettingPageState extends State<SettingPage>
                       );
                     },
                   ),
+                  if (Platform.isWindows)
+                    SwitchListTile(
+                      title: const Text('在任务栏显示播放进度'),
+                      value: settings.showTaskbarProgress,
+                      onChanged: (value) {
+                        context.read<SettingsProvider>().setShowTaskbarProgress(
+                          value,
+                        );
+                      },
+                    ),
                   // 是否启用从网络获取歌词
                   SwitchListTile(
                     title: const Text('从网络获取歌词'),

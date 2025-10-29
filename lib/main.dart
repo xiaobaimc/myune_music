@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
@@ -5,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:windows_taskbar/windows_taskbar.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -99,15 +102,162 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with TrayListener {
+  late PlaylistContentNotifier _playlistNotifier;
+
   @override
   void initState() {
     trayManager.addListener(this);
     super.initState();
+
+    // 确保窗口已经初始化
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Platform.isWindows) {
+        _initializeThumbnailToolbar();
+        _initializeTaskbarProgress();
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _playlistNotifier = context.read<PlaylistContentNotifier>();
+
+    // 监听播放状态变化以更新工具栏按钮
+    if (Platform.isWindows) {
+      _playlistNotifier.addListener(_updateThumbnailToolbar);
+    }
+
+    // 监听设置变化以更新任务栏状态
+    context.read<SettingsProvider>().addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    final settings = context.read<SettingsProvider>();
+    if (!settings.showTaskbarProgress) {
+      // 当关闭任务栏进度显示时，立即重置进度条状态
+      if (Platform.isWindows) {
+        WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+      }
+    } else {
+      // 当开启任务栏进度显示时，根据当前播放状态设置进度条模式
+      if (Platform.isWindows) {
+        if (_playlistNotifier.isPlaying) {
+          WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
+        } else {
+          WindowsTaskbar.setProgressMode(TaskbarProgressMode.paused);
+        }
+      }
+    }
+  }
+
+  Future<void> _initializeThumbnailToolbar() async {
+    WindowsTaskbar.setWindowTitle('Never Gonna Give You Up');
+    try {
+      await WindowsTaskbar.setThumbnailToolbar([
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon('assets/images/icon/prev.ico'),
+          '上一首',
+          _playlistNotifier.playPrevious,
+        ),
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon('assets/images/icon/play.ico'),
+          '播放',
+          _playlistNotifier.play,
+        ),
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon('assets/images/icon/next.ico'),
+          '下一首',
+          _playlistNotifier.playNext,
+        ),
+      ]);
+
+      // 初始化任务栏进度模式
+      await WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
+    } catch (e) {
+      // debugPrint('_initializeThumbnailToolbar出现错误: $e');
+    }
+  }
+
+  Future<void> _updateThumbnailToolbar() async {
+    try {
+      final isPlaying = _playlistNotifier.isPlaying;
+
+      await WindowsTaskbar.setThumbnailToolbar([
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon('assets/images/icon/prev.ico'),
+          '上一首',
+          _playlistNotifier.playPrevious,
+        ),
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon(
+            isPlaying
+                ? 'assets/images/icon/pause.ico'
+                : 'assets/images/icon/play.ico',
+          ),
+          isPlaying ? '暂停' : '播放',
+          isPlaying ? _playlistNotifier.pause : _playlistNotifier.play,
+        ),
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon('assets/images/icon/next.ico'),
+          '下一首',
+          _playlistNotifier.playNext,
+        ),
+      ]);
+    } catch (e) {
+      // debugPrint('_updateThumbnailToolbar出现错误: $e');
+    }
+  }
+
+  Future<void> _initializeTaskbarProgress() async {
+    final settings = context.read<SettingsProvider>();
+
+    // 监听播放进度变化以更新任务栏进度
+    _playlistNotifier.mediaPlayer.stream.position.listen((position) {
+      if (!settings.showTaskbarProgress) return;
+
+      final duration = _playlistNotifier.totalDuration;
+      if (duration != Duration.zero) {
+        final progress =
+            (position.inMilliseconds / duration.inMilliseconds * 100).round();
+        WindowsTaskbar.setProgress(progress.clamp(0, 100), 100);
+      }
+    });
+
+    // 监听播放状态变化
+    _playlistNotifier.mediaPlayer.stream.playing.listen((playing) {
+      if (!settings.showTaskbarProgress) {
+        // 当关闭任务栏进度显示时，重置进度条状态
+        WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+        return;
+      }
+
+      if (playing) {
+        WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
+      } else {
+        WindowsTaskbar.setProgressMode(TaskbarProgressMode.paused);
+      }
+    });
+
+    // 监听播放完成
+    _playlistNotifier.mediaPlayer.stream.completed.listen((completed) {
+      if (!settings.showTaskbarProgress) {
+        // 当关闭任务栏进度显示时，重置进度条状态
+        WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+        return;
+      }
+
+      if (completed) {
+        WindowsTaskbar.setProgress(0, 100);
+      }
+    });
   }
 
   @override
   void dispose() {
     trayManager.removeListener(this);
+    _playlistNotifier.removeListener(_updateThumbnailToolbar);
+    context.read<SettingsProvider>().removeListener(_onSettingsChanged);
     super.dispose();
   }
 

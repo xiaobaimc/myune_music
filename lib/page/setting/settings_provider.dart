@@ -21,6 +21,8 @@ class SettingsProvider with ChangeNotifier {
   static const _artistSeparatorsKey = 'artistSeparators'; // 艺术家分隔符设置的 key
   static const _minimizeToTrayKey = 'minimizeToTray'; // 最小化到托盘设置的 key
   static const _enableLyricBlurKey = 'enableLyricBlur'; // 歌词模糊效果设置的 key
+  static const _showTaskbarProgressKey =
+      'showTaskbarProgress'; // 任务栏进度显示设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -34,6 +36,7 @@ class SettingsProvider with ChangeNotifier {
   bool _minimizeToTray = false; // 默认不启用最小化到托盘
   bool _enableLyricBlur = false; // 默认不启用歌词模糊效果
 
+  bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
   String _primaryLyricSource = 'primary'; // 默认主要歌词源为某易云音乐
   String _secondaryLyricSource = 'secondary'; // 默认备用歌词源为某狗音乐
@@ -52,6 +55,7 @@ class SettingsProvider with ChangeNotifier {
   bool get addLyricPadding => _addLyricPadding; // 获取歌词上下补位设置
   bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
   bool get enableLyricBlur => _enableLyricBlur; // 获取歌词模糊效果设置
+  bool get showTaskbarProgress => _showTaskbarProgress; // 获取任务栏进度显示设置
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
   String get primaryLyricSource => _primaryLyricSource; // 获取主要歌词源
@@ -84,6 +88,8 @@ class SettingsProvider with ChangeNotifier {
         prefs.getString(_primaryLyricSourceKey) ?? 'primary'; // 加载主要歌词源设置
     _secondaryLyricSource =
         prefs.getString(_secondaryLyricSourceKey) ?? 'secondary'; // 加载备用歌词源设置
+    _showTaskbarProgress =
+        prefs.getBool(_showTaskbarProgressKey) ?? false; // 加载任务栏进度显示设置
 
     // 加载艺术家分隔符设置
     final separatorsList = prefs.getStringList(_artistSeparatorsKey);
@@ -207,5 +213,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableLyricBlurKey, value);
+  }
+
+  void setShowTaskbarProgress(bool value) async {
+    _showTaskbarProgress = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showTaskbarProgressKey, value);
   }
 }
