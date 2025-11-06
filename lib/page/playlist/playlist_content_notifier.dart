@@ -1417,6 +1417,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
               Media(songFilePath),
               play: false, // 不自动播放
             );
+
+            if (_mediaPlayer.platform is NativePlayer) {
+              try {
+                await (_mediaPlayer.platform as dynamic).setProperty(
+                  'sub-auto',
+                  'no',
+                );
+
+                // 监听播放状态，在开始播放后再启用独占模式
+                if (_isExclusiveModeEnabled) {
+                  _enableExclusive();
+                }
+              } catch (e) {
+                //
+              }
+            }
           } else {
             // 如果文件不存在，清除播放状态
             await _playlistManager.clearPlaybackState();
