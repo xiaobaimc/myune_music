@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,9 +16,30 @@ import 'layout/app_shell.dart';
 import 'page/playlist/playlist_content_notifier.dart';
 import 'page/setting/settings_provider.dart';
 import 'src/rust/frb_generated.dart';
+import 'package:flutter_single_instance/flutter_single_instance.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 先初始化window_manager
+  await windowManager.ensureInitialized();
+
+  // 回调函数
+  FlutterSingleInstance.onFocus =
+      (Map<String, dynamic> metadata) async {
+            // 先恢复窗口，再显示和聚焦
+            await windowManager.restore();
+            await windowManager.show();
+            await windowManager.focus();
+          }
+          as FutureOr<void> Function(Map<String, dynamic>)?;
+
+  // 单实例检测
+  final singleInstance = FlutterSingleInstance();
+  if (!await singleInstance.isFirstInstance()) {
+    await singleInstance.focus();
+    exit(0); // 退出第二个实例
+  }
 
   MediaKit.ensureInitialized();
 
@@ -36,8 +58,8 @@ void main() async {
   );
   await trayManager.setContextMenu(menu);
 
-  // 初始化window_manager
-  await windowManager.ensureInitialized();
+  // // 初始化window_manager
+  // await windowManager.ensureInitialized();
 
   // 初始化窗口状态管理器
   final windowState = WindowStateManager();

@@ -53,7 +53,7 @@ class SongDetailsPage extends StatelessWidget {
                               width: 160,
                               height: 160,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(6),
                                 image: DecorationImage(
                                   image: MemoryImage(details.albumArt!),
                                   fit: BoxFit.cover,
@@ -208,7 +208,13 @@ class SongDetailsPage extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 20),
+            Icon(
+              icon,
+              size: 20,
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.8),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
