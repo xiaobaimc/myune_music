@@ -499,6 +499,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: true,
+        lockParentWindow: true,
       );
     } else {
       result = await FilePicker.platform.pickFiles(
@@ -520,6 +521,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           'pcm',
         ],
         allowMultiple: true,
+        lockParentWindow: true,
       );
     }
 

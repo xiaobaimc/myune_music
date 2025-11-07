@@ -106,7 +106,10 @@ class PlaylistListWidget extends StatelessWidget {
                       ElevatedButton.icon(
                         onPressed: () async {
                           final folder = await FilePicker.platform
-                              .getDirectoryPath(dialogTitle: '请选择文件夹');
+                              .getDirectoryPath(
+                                dialogTitle: '请选择文件夹',
+                                lockParentWindow: true,
+                              );
                           if (folder != null) {
                             setState(() {
                               if (!selectedFolders.contains(folder)) {
@@ -382,7 +385,10 @@ class PlaylistListWidget extends StatelessWidget {
                     ElevatedButton.icon(
                       onPressed: () async {
                         final folder = await FilePicker.platform
-                            .getDirectoryPath(dialogTitle: '请选择文件夹');
+                            .getDirectoryPath(
+                              dialogTitle: '请选择文件夹',
+                              lockParentWindow: true,
+                            );
                         if (folder != null) {
                           setState(() {
                             if (!selectedFolders.contains(folder)) {
