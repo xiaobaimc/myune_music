@@ -12,6 +12,7 @@ import 'package:media_kit/media_kit.dart' hide Playlist;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:colorgram/colorgram.dart';
+import 'package:pinyin/pinyin.dart';
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
@@ -1532,17 +1533,38 @@ class PlaylistContentNotifier extends ChangeNotifier {
         sortableList.add({'path': path, 'metadata': metadata});
       }
 
+      String mixedPinyin(String text) {
+        final buffer = StringBuffer();
+        for (final char in text.characters) {
+          final pinyin = PinyinHelper.getPinyin(char);
+
+          // 如果能成功转换成拼音就用拼音，否则保留原字符
+          if (pinyin.isNotEmpty && pinyin != char) {
+            buffer.write(pinyin);
+          } else {
+            buffer.write(char.toLowerCase());
+          }
+        }
+        return buffer.toString();
+      }
+
       // 对这个临时列表进行排序
       sortableList.sort((a, b) {
         final songA = a['metadata'] as Song;
         final songB = b['metadata'] as Song;
-        final valueA = criterion == SortCriterion.title
-            ? songA.title.toLowerCase()
-            : songA.artist.toLowerCase();
-        final valueB = criterion == SortCriterion.title
-            ? songB.title.toLowerCase()
-            : songB.artist.toLowerCase();
-        return descending ? valueB.compareTo(valueA) : valueA.compareTo(valueB);
+
+        final valueA = (criterion == SortCriterion.title
+            ? songA.title
+            : songA.artist);
+        final valueB = (criterion == SortCriterion.title
+            ? songB.title
+            : songB.artist);
+
+        final mixedA = mixedPinyin(valueA);
+        final mixedB = mixedPinyin(valueB);
+
+        final result = mixedA.compareTo(mixedB);
+        return descending ? -result : result;
       });
 
       // 提取出排好序的路径并返回
