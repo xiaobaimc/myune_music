@@ -47,7 +47,9 @@ void main() async {
 
   // 初始化系统托盘
   await trayManager.setIcon('assets/images/icon/tray_icon.ico');
-  await trayManager.setToolTip('MyuneMusic');
+  if (!Platform.isLinux) {
+    await trayManager.setToolTip('MyuneMusic');
+  }
 
   final Menu menu = Menu(
     items: [
@@ -293,7 +295,9 @@ class _MyAppState extends State<MyApp> with TrayListener {
   @override
   void onTrayIconRightMouseDown() {
     // 右键点击托盘图标时弹出菜单
-    trayManager.popUpContextMenu();
+    if (!Platform.isLinux) {
+      trayManager.popUpContextMenu();
+    }
   }
 
   @override
