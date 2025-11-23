@@ -15,7 +15,7 @@ import 'artist_separator.dart';
 import 'about.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.7.2';
+const String appVersion = '0.7.3';
 
 bool get isLinux => Platform.isLinux;
 

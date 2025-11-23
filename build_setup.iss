@@ -1,6 +1,6 @@
 [Setup]
 AppName=MyuneMusic
-AppVersion=0.7.2
+AppVersion=0.7.3
 AppPublisher=Myune
 DefaultDirName={autopf}\MyuneMusic
 DefaultGroupName=MyuneMusic

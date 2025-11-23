@@ -18,9 +18,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
   flutter::DartProject project(L"data");
-  // // 临时方案，请在新版本等待修复
-  // // https://github.com/flutter/flutter/issues/175135
-  // project.set_ui_thread_policy(flutter::UIThreadPolicy::RunOnSeparateThread);
+  // 临时方案，请在新版本等待修复
+  // https://github.com/flutter/flutter/issues/175135
+  project.set_ui_thread_policy(flutter::UIThreadPolicy::RunOnSeparateThread);
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
