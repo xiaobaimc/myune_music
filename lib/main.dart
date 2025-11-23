@@ -77,8 +77,11 @@ void main() async {
     titleBarStyle: TitleBarStyle.hidden,
     // backgroundColor: Colors.transparent, // 让原生窗口背景透明
   );
+
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.setAsFrameless();
+    // 这一行会导致全屏的时候抖3次
+    // await windowManager.setAsFrameless();
+
     await windowManager.setHasShadow(true);
     // 设置窗口位置
     final prefs = await SharedPreferences.getInstance();
@@ -89,7 +92,7 @@ void main() async {
     await windowManager.focus();
   });
 
-  // 添加监听器 保存窗口大小
+  //  添加监听器 保存窗口大小
   windowManager.addListener(windowState);
 
   final themeProvider = ThemeProvider();
@@ -176,7 +179,7 @@ class _MyAppState extends State<MyApp> with TrayListener {
   }
 
   Future<void> _initializeThumbnailToolbar() async {
-    WindowsTaskbar.setWindowTitle('Never Gonna Give You Up');
+    WindowsTaskbar.setWindowTitle('MyuneMusic');
     try {
       await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
@@ -199,8 +202,8 @@ class _MyAppState extends State<MyApp> with TrayListener {
       // 初始化任务栏进度模式
       await WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
     } catch (e) {
-      // FIXME: 这里有报错，不影响使用
-      // debugPrint('_initializeThumbnailToolbar出现错误: $e');
+      // FIXME: 这里有报错，不影响使用（可能的原因是taskbar相关api被调用得太早了，考虑在窗口完全准备好之后再调用）
+      debugPrint('_initializeThumbnailToolbar出现错误: $e');
     }
   }
 

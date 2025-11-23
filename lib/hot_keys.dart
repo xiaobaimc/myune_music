@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 
-// 定义三种意图：播放/暂停、下一首、上一首
+// 播放/暂停、下一首、上一首
 class PlayPauseIntent extends Intent {
   const PlayPauseIntent();
 }
@@ -14,6 +15,15 @@ class NextTrackIntent extends Intent {
 
 class PreviousTrackIntent extends Intent {
   const PreviousTrackIntent();
+}
+
+// 全屏和退出全屏
+class ToggleFullscreenIntent extends Intent {
+  const ToggleFullscreenIntent();
+}
+
+class ExitFullscreenIntent extends Intent {
+  const ExitFullscreenIntent();
 }
 
 class Hotkeys extends StatelessWidget {
@@ -38,6 +48,8 @@ class Hotkeys extends StatelessWidget {
             NextTrackIntent(),
         SingleActivator(LogicalKeyboardKey.arrowLeft, control: true):
             PreviousTrackIntent(),
+        SingleActivator(LogicalKeyboardKey.f11): ToggleFullscreenIntent(),
+        SingleActivator(LogicalKeyboardKey.escape): ExitFullscreenIntent(),
       },
       actions: {
         // 绑定意图
@@ -60,6 +72,22 @@ class Hotkeys extends StatelessWidget {
         PreviousTrackIntent: CallbackAction<PreviousTrackIntent>(
           onInvoke: (intent) {
             notifier.playPrevious();
+            return null;
+          },
+        ),
+        ToggleFullscreenIntent: CallbackAction<ToggleFullscreenIntent>(
+          onInvoke: (intent) async {
+            final bool isFullScreen = await windowManager.isFullScreen();
+            await windowManager.setFullScreen(!isFullScreen);
+            return null;
+          },
+        ),
+        ExitFullscreenIntent: CallbackAction<ExitFullscreenIntent>(
+          onInvoke: (intent) async {
+            final bool isFullScreen = await windowManager.isFullScreen();
+            if (isFullScreen) {
+              await windowManager.setFullScreen(false);
+            }
             return null;
           },
         ),

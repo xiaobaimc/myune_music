@@ -1708,11 +1708,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
       notifyListeners();
 
       // 根据设置选择主选歌词源
-      if (_settingsProvider.primaryLyricSource == 'primary') {
-        // 后台异步加载网络歌词
+      if (_settingsProvider.primaryLyricSource == 'qq') {
+        // 后台异步加载QQ音乐歌词
+        _loadQQLyrics(currentSong!.title);
+      } else if (_settingsProvider.primaryLyricSource == 'netease') {
+        // 后台异步加载网易云音乐歌词
         _loadOnlineLyrics(currentSong!.title);
       } else {
-        // 后台异步加载备选歌词
+        // 后台异步加载酷狗音乐歌词
         _loadKugouLyrics(currentSong!.title);
       }
     } else {
@@ -1721,7 +1724,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
-  // 后台异步加载网络歌词
+  // 后台异步加载网易歌词
   Future<void> _loadOnlineLyrics(String songTitle) async {
     try {
       // 检查 artist 是否为默认值，如果是则设置为空字符串
@@ -1853,7 +1856,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 备选平台音乐歌词获取方法
+  // 酷狗歌词获取方法
   Future<void> _loadKugouLyrics(String songTitle) async {
     try {
       // 检查 artist 是否为默认值，如果是则设置为空字符串
@@ -1963,6 +1966,148 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 解析歌词
       _currentLyrics = _parseLrcContent([decodedLyric]);
+    } catch (e) {
+      _currentLyrics = [];
+    }
+    notifyListeners();
+  }
+
+  // 企鹅音乐歌词获取方法
+  Future<void> _loadQQLyrics(String songTitle) async {
+    try {
+      // 检查 artist 是否为默认值，如果是则设置为空字符串
+      final rawArtist = _currentSong?.artist ?? '';
+      final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
+          ? ''
+          : rawArtist;
+
+      // 组合搜索关键词（有歌手时：歌手 - 歌名；否则只用歌名）
+      final searchKeyword = artist.isEmpty
+          ? songTitle.trim()
+          : '${artist.trim()} - ${songTitle.trim()}';
+
+      // 第一步：搜索歌曲
+      const searchUrl = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
+      final searchBody = jsonEncode({
+        "comm": {"ct": "19", "cv": "1873", "uin": "0"},
+        "music.search.SearchCgiService": {
+          "method": "DoSearchForQQMusicDesktop",
+          "module": "music.search.SearchCgiService",
+          "param": {
+            "grp": 1,
+            "num_per_page": 40,
+            "page_num": 1,
+            "query": searchKeyword,
+            "search_type": 0,
+          },
+        },
+      });
+
+      final searchRequest = http.Request('POST', Uri.parse(searchUrl))
+        ..headers['User-Agent'] =
+            'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)'
+        ..body = searchBody;
+
+      final searchStreamedResponse = await http.Client().send(searchRequest);
+      final searchResponse = await http.Response.fromStream(
+        searchStreamedResponse,
+      );
+
+      if (searchResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 直接使用bodyBytes避免Content-Type解析问题
+      final searchResult = json.decode(utf8.decode(searchResponse.bodyBytes));
+
+      // 检查搜索结果
+      if (searchResult['music.search.SearchCgiService'] == null ||
+          searchResult['music.search.SearchCgiService']['data'] == null ||
+          searchResult['music.search.SearchCgiService']['data']['body'] ==
+              null ||
+          searchResult['music.search.SearchCgiService']['data']['body']['song'] ==
+              null ||
+          searchResult['music.search.SearchCgiService']['data']['body']['song']['list'] ==
+              null ||
+          searchResult['music.search.SearchCgiService']['data']['body']['song']['list']
+              .isEmpty) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 获取第一首歌曲的信息
+      final songList =
+          searchResult['music.search.SearchCgiService']['data']['body']['song']['list'];
+      final firstSong = songList[0];
+      final songMid = firstSong['mid'].toString();
+      final musicId = firstSong['id'].toString();
+
+      // 第二步：获取歌词
+      final lyricUrl = Uri.parse(
+        'https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg'
+        '?songmid=$songMid'
+        '&musicid=$musicId'
+        '&format=json'
+        '&g_tk=5381',
+      );
+
+      final lyricRequest = http.Request('GET', lyricUrl)
+        ..headers['Referer'] = 'https://y.qq.com/n/ryqq/player'
+        ..headers['User-Agent'] =
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36';
+
+      final lyricStreamedResponse = await http.Client().send(lyricRequest);
+      final lyricResponse = await http.Response.fromStream(
+        lyricStreamedResponse,
+      );
+
+      if (lyricResponse.statusCode != 200) {
+        _currentLyrics = [];
+        notifyListeners();
+        return;
+      }
+
+      // 手动处理响应体，避免因Content-Type导致的解析问题
+      final lyricResult = json.decode(utf8.decode(lyricResponse.bodyBytes));
+
+      // 处理歌词内容
+      List<String> lrcLines = [];
+      if (lyricResult['lyric'] != null) {
+        try {
+          final lyricBase64 = lyricResult['lyric'];
+          final lyricData = utf8.decode(base64Decode(lyricBase64));
+          lrcLines = lyricData.split('\n');
+        } catch (e) {
+          //
+        }
+      }
+
+      // 处理翻译歌词内容
+      List<String> tlyricLines = [];
+      if (lyricResult['trans'] != null && lyricResult['trans'].isNotEmpty) {
+        try {
+          final transBase64 = lyricResult['trans'];
+          final transData = utf8.decode(base64Decode(transBase64));
+          tlyricLines = transData.split('\n');
+        } catch (e) {
+          //
+        }
+      }
+
+      // 合并歌词
+      final List<String> mergedLyrics = [];
+      mergedLyrics.addAll(lrcLines);
+
+      if (tlyricLines.isNotEmpty) {
+        mergedLyrics.add(''); // 空行分隔
+        mergedLyrics.addAll(tlyricLines);
+      }
+
+      // 解析歌词
+      _currentLyrics = _parseLrcContent(mergedLyrics);
     } catch (e) {
       _currentLyrics = [];
     }

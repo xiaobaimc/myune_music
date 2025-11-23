@@ -167,56 +167,68 @@ class SongDetailPage extends StatelessWidget {
                                     builder: (context, playlistNotifier, child) {
                                       final currentSong =
                                           playlistNotifier.currentSong;
-                                      return Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          const SizedBox(height: 45),
-                                          // 歌曲标题
-                                          Text(
-                                            currentSong?.title ?? '未知歌曲',
-                                            style: const TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                            softWrap: false,
-                                          ),
-                                          // 艺术家
-                                          Text(
-                                            currentSong?.artist ?? '未知歌曲',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.clip,
-                                            softWrap: false,
-                                          ),
-                                          const SizedBox(height: 6),
-                                          // 专辑封面
-                                          LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final w = constraints.maxWidth;
-                                              // 按父容器宽度的60%计算封面大小，再限制在310~480像素之间，最后不超过父容器宽度
-                                              final double size = min(
-                                                w,
-                                                ((w * 0.6)).clamp(310.0, 480.0),
+                                      return LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final w = constraints.maxWidth;
+                                          // 按父容器宽度的60%计算封面大小，再限制在310~480像素之间，最后不超过父容器宽度
+                                          final double imageSize = min(
+                                            w,
+                                            ((w * 0.6)).clamp(310.0, 480.0),
+                                          );
+
+                                          // 根据图片大小计算字体大小
+                                          final double titleFontSize =
+                                              (imageSize * 0.05).clamp(
+                                                20.0,
+                                                26.0,
+                                              );
+                                          final double artistFontSize =
+                                              (imageSize * 0.03).clamp(
+                                                14.0,
+                                                18.0,
                                               );
 
-                                              final borderRadius =
-                                                  BorderRadius.circular(12);
-                                              const Widget fallback = Icon(
-                                                Icons.music_note,
-                                                size: 72,
-                                                color: Colors.black12,
-                                              );
+                                          final borderRadius =
+                                              BorderRadius.circular(12);
+                                          const Widget fallback = Icon(
+                                            Icons.music_note,
+                                            size: 72,
+                                            color: Colors.black12,
+                                          );
 
-                                              return SizedBox.square(
-                                                dimension: size,
+                                          return Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              const SizedBox(height: 45),
+                                              // 歌曲标题
+                                              Text(
+                                                currentSong?.title ?? '未知歌曲',
+                                                style: TextStyle(
+                                                  fontSize: titleFontSize,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
+                                                softWrap: false,
+                                              ),
+                                              // 艺术家
+                                              Text(
+                                                currentSong?.artist ?? '未知艺术家',
+                                                style: TextStyle(
+                                                  fontSize: artistFontSize,
+                                                  color: Colors.grey,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.clip,
+                                                softWrap: false,
+                                              ),
+                                              const SizedBox(height: 6),
+                                              // 专辑封面
+                                              SizedBox.square(
+                                                dimension: imageSize,
                                                 child: DecoratedBox(
                                                   decoration: BoxDecoration(
                                                     borderRadius: borderRadius,
@@ -265,13 +277,13 @@ class SongDetailPage extends StatelessWidget {
                                                     ),
                                                   ),
                                                 ),
-                                              );
-                                            },
-                                          ),
-                                          const SizedBox(height: 8),
-                                          // 播放控制区域
-                                          const Playbar(),
-                                        ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // 播放控制区域
+                                              const Playbar(),
+                                            ],
+                                          );
+                                        },
                                       );
                                     },
                                   ),

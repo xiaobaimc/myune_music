@@ -89,6 +89,16 @@ class AppWindowTitleBar extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 _WindowButton(
+                  icon: Icons.fullscreen_rounded,
+                  onPressed: () async {
+                    final bool isFullScreen = await windowManager
+                        .isFullScreen();
+                    await windowManager.setFullScreen(!isFullScreen);
+                  },
+                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                ),
+                const SizedBox(width: 2),
+                _WindowButton(
                   icon: Icons.close,
                   onPressed: () => windowManager.close(),
                   hoverColor: const Color.fromRGBO(239, 154, 154, 1),

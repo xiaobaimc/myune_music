@@ -38,8 +38,8 @@ class SettingsProvider with ChangeNotifier {
 
   bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
-  String _primaryLyricSource = 'primary'; // 默认主要歌词源为某易云音乐
-  String _secondaryLyricSource = 'secondary'; // 默认备用歌词源为某狗音乐
+  String _primaryLyricSource = 'qq'; // 默认主要歌词源为qq音乐
+  String _secondaryLyricSource = 'netease'; // 默认备用歌词源为网易云音乐
 
   // 默认艺术家分隔符
   List<String> _artistSeparators = [';', '、', '；', '，', ','];
@@ -85,9 +85,9 @@ class SettingsProvider with ChangeNotifier {
     _enableLyricBlur =
         prefs.getBool(_enableLyricBlurKey) ?? false; // 加载歌词模糊效果设置
     _primaryLyricSource =
-        prefs.getString(_primaryLyricSourceKey) ?? 'primary'; // 加载主要歌词源设置
+        prefs.getString(_primaryLyricSourceKey) ?? 'qq'; // 加载主要歌词源设置
     _secondaryLyricSource =
-        prefs.getString(_secondaryLyricSourceKey) ?? 'secondary'; // 加载备用歌词源设置
+        prefs.getString(_secondaryLyricSourceKey) ?? 'netease'; // 加载备用歌词源设置
     _showTaskbarProgress =
         prefs.getBool(_showTaskbarProgressKey) ?? false; // 加载任务栏进度显示设置
 

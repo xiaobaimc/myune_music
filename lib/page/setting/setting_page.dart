@@ -284,7 +284,7 @@ class _SettingPageState extends State<SettingPage>
                               padding: EdgeInsets.zero,
                               constraints: BoxConstraints(),
                               tooltip:
-                                  '主选来源为某易云音乐，备选来源为某狗音乐\n其中备选只有原文没有翻译，但歌词匹配可能会更精确\n当未启用从网络获取歌词时，该选项不会生效',
+                                  '企鹅：匹配准、支持翻译（推荐）\n网抑：匹配一般，支持翻译\n库狗：匹配高，不支持翻译',
                               onPressed: null,
                             ),
                           ],
@@ -302,22 +302,29 @@ class _SettingPageState extends State<SettingPage>
                                 ),
                               ),
                               segments: const [
+                                ButtonSegment(value: 'qq', label: Text('企鹅')),
                                 ButtonSegment(
-                                  value: 'primary',
-                                  label: Text('主选'),
+                                  value: 'netease',
+                                  label: Text('网抑'),
                                 ),
                                 ButtonSegment(
-                                  value: 'secondary',
-                                  label: Text('备选'),
+                                  value: 'kugou',
+                                  label: Text('库狗'),
                                 ),
                               ],
                               selected: {settings.primaryLyricSource},
                               onSelectionChanged: (newSelection) {
                                 if (newSelection.isNotEmpty) {
                                   final selected = newSelection.first;
-                                  final secondary = selected == 'primary'
-                                      ? 'secondary'
-                                      : 'primary';
+                                  String secondary;
+                                  if (selected == 'qq') {
+                                    secondary = 'netease';
+                                  } else if (selected == 'netease') {
+                                    secondary = 'qq';
+                                  } else {
+                                    secondary = 'qq';
+                                  }
+
                                   final settingsProvider = context
                                       .read<SettingsProvider>();
 

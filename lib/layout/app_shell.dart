@@ -53,6 +53,8 @@ class _AppShellState extends State<AppShell> {
                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 },
               ),
+              // TODO: 暂时使用3.35，直到 https://github.com/media-kit/media-kit/issues/1314 解决
+              // persist: false,
             ),
           );
         }
@@ -85,6 +87,7 @@ class _AppShellState extends State<AppShell> {
                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 },
               ),
+              // persist: false,
             ),
           );
         }

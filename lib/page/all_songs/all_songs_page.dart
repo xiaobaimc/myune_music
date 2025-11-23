@@ -139,6 +139,7 @@ class AllSongsPage extends StatelessWidget {
                               song: song,
                               index: index,
                               contextPlaylist: notifier.allSongsVirtualPlaylist,
+                              enableContextMenu: false,
                               onTap: () {
                                 if (originalIndex != -1) {
                                   notifier.playSongFromAllSongs(originalIndex);
