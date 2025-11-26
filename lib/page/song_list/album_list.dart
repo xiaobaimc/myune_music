@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../playlist/playlist_content_notifier.dart';
 import 'song_list_detail_page.dart';
+import 'package:pinyin/pinyin.dart';
 
 class AlbumList extends StatefulWidget {
   const AlbumList({super.key});
@@ -107,10 +108,26 @@ class _AlbumListState extends State<AlbumList> {
                     }).toList();
                   }
 
-                  // 简化为固定的字母排序
-                  albumNames.sort(
-                    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-                  );
+                  // 拼音排序
+                  albumNames.sort((a, b) {
+                    final pinyinA = PinyinHelper.getPinyin(
+                      a,
+                      separator: '',
+                    ).toLowerCase();
+                    final pinyinB = PinyinHelper.getPinyin(
+                      b,
+                      separator: '',
+                    ).toLowerCase();
+
+                    final compareA = pinyinA.isEmpty
+                        ? a.toLowerCase()
+                        : pinyinA;
+                    final compareB = pinyinB.isEmpty
+                        ? b.toLowerCase()
+                        : pinyinB;
+
+                    return compareA.compareTo(compareB);
+                  });
 
                   if (albumNames.isEmpty) {
                     return Center(

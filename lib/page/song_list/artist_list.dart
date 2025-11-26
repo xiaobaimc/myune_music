@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pinyin/pinyin.dart';
 import 'package:provider/provider.dart';
 import '../playlist/playlist_content_notifier.dart';
 import 'song_list_detail_page.dart';
@@ -106,10 +107,26 @@ class _ArtistListState extends State<ArtistList> {
                     }).toList();
                   }
 
-                  // 简化为固定的字母排序
-                  artistNames.sort(
-                    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-                  );
+                  // 拼音排序
+                  artistNames.sort((a, b) {
+                    final pinyinA = PinyinHelper.getPinyin(
+                      a,
+                      separator: '',
+                    ).toLowerCase();
+                    final pinyinB = PinyinHelper.getPinyin(
+                      b,
+                      separator: '',
+                    ).toLowerCase();
+
+                    final compareA = pinyinA.isEmpty
+                        ? a.toLowerCase()
+                        : pinyinA;
+                    final compareB = pinyinB.isEmpty
+                        ? b.toLowerCase()
+                        : pinyinB;
+
+                    return compareA.compareTo(compareB);
+                  });
 
                   if (artistNames.isEmpty) {
                     return Center(
