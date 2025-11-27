@@ -19,6 +19,7 @@ import 'playlist_manager.dart';
 import '../../media_service/smtc_manager.dart';
 import '../setting/settings_provider.dart';
 import '../../theme/theme_provider.dart';
+import '../statistics_page/playback_tracker.dart';
 
 enum SortCriterion { title, artist, dateModified, random }
 
@@ -947,6 +948,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (!_isPlaying) {
       await _mediaPlayer.play(); // 开始播放
       _isPlaying = true; // 立即更新状态
+
+      // 恢复播放跟踪
+      PlaybackTracker().resumeTracking();
     }
     await _smtcManager?.updateState(true);
     notifyListeners();
@@ -956,6 +960,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (_isPlaying) {
       await _mediaPlayer.pause();
       _isPlaying = false; // 立即更新状态
+
+      // 暂停播放跟踪
+      PlaybackTracker().pauseTracking();
     }
     await _smtcManager?.updateState(false);
     notifyListeners();
@@ -1199,6 +1206,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _smtcManager?.updateMetadata(
         title: songToPlay.title,
         artist: songToPlay.artist,
+        album: songToPlay.album,
         albumArt: songToPlay.albumArt,
       );
       // await dumpCover(songToPlay.albumArt!);
@@ -1206,6 +1214,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 提取并应用动态主题色
       extractAndApplyDynamicColor(songToPlay.albumArt);
+
+      // 开始跟踪播放
+      PlaybackTracker().startTracking(songToPlay);
 
       await _mediaPlayer.play(); // 最后执行播放
 

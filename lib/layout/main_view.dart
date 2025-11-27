@@ -8,6 +8,7 @@ import '../page/pages/song_details.dart';
 import '../page/pages/all_songs.dart';
 import '../page/pages/album_list_page.dart';
 import '../page/pages/artist_list_page.dart';
+import '../page/pages/statistics_page.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
 
@@ -37,8 +38,10 @@ class _MainViewState extends State<MainView> {
       case 3:
         return const AlbumListPage();
       case 4:
-        return const SongDetails();
+        return const StatisticsPage();
       case 5:
+        return const SongDetails();
+      case 6:
         return const Setting();
       default:
         return const SizedBox.shrink();
@@ -209,6 +212,30 @@ class _MainViewState extends State<MainView> {
                       ),
                     ),
                     label: Text('专辑', style: _mainViewTextStyle),
+                  ),
+                  NavigationRailDestination(
+                    icon: AnimatedScale(
+                      scale: _tappedIndex == 3 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Tooltip(
+                        message: '统计',
+                        child: Icon(
+                          Icons.leaderboard_outlined,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    selectedIcon: AnimatedScale(
+                      scale: _currentIndex == 3 ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.leaderboard,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    label: Text('统计', style: _mainViewTextStyle),
                   ),
                   NavigationRailDestination(
                     icon: AnimatedScale(
