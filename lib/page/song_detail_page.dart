@@ -13,9 +13,37 @@ import '../widgets/playing_queue_drawer.dart';
 import '../widgets/lyrics_settings_drawer.dart';
 
 // 公共模糊背景组件
-class BackgroundBlurWidget extends StatelessWidget {
+class BackgroundBlurWidget extends StatefulWidget {
   final Widget child;
   const BackgroundBlurWidget({super.key, required this.child});
+
+  @override
+  State<BackgroundBlurWidget> createState() => _BackgroundBlurWidgetState();
+}
+
+class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
+    with TickerProviderStateMixin {
+  late AnimationController _rotationController;
+  late Animation<double> _rotationAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      duration: const Duration(seconds: 60),
+      vsync: this,
+    )..repeat();
+
+    _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
+      CurvedAnimation(parent: _rotationController, curve: Curves.linear),
+    );
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +52,7 @@ class BackgroundBlurWidget extends StatelessWidget {
         final currentSong = playlistNotifier.currentSong;
         final settings = context.watch<SettingsProvider>();
         final useBlurBackground = settings.useBlurBackground;
+        final enableDynamicBackground = settings.enableDynamicBackground;
 
         // 当没有封面图或用户未启用模糊背景时，使用纯色背景
         if (currentSong?.albumArt == null || !useBlurBackground) {
@@ -37,12 +66,21 @@ class BackgroundBlurWidget extends StatelessWidget {
         return Stack(
           fit: StackFit.expand,
           children: [
-            Image.memory(
-              currentSong!.albumArt!,
-              fit: BoxFit.cover, // 确保图片填充整个背景
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Theme.of(context).colorScheme.surface, // 加载失败时使用纯色背景
+            AnimatedBuilder(
+              animation: _rotationAnimation,
+              child: Image.memory(
+                currentSong!.albumArt!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Theme.of(context).colorScheme.surface,
+                  );
+                },
+              ),
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: enableDynamicBackground ? _rotationAnimation.value : 0,
+                  child: child,
                 );
               },
             ),
@@ -62,7 +100,7 @@ class BackgroundBlurWidget extends StatelessWidget {
           ],
         );
       },
-      child: child,
+      child: widget.child,
     );
   }
 }
@@ -215,10 +253,21 @@ class SongDetailPage extends StatelessWidget {
                                               ),
                                               // 艺术家
                                               Text(
-                                                currentSong?.artist ?? '未知艺术家',
+                                                currentSong != null
+                                                    ? context
+                                                              .watch<
+                                                                SettingsProvider
+                                                              >()
+                                                              .showAlbumName
+                                                          ? '${currentSong.artist} - ${currentSong.album}'
+                                                          : currentSong.artist
+                                                    : '未知歌手',
                                                 style: TextStyle(
                                                   fontSize: artistFontSize,
-                                                  color: Colors.grey,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface
+                                                      .withValues(alpha: 0.7),
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 maxLines: 1,

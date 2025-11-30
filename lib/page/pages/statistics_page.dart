@@ -20,7 +20,12 @@ class StatisticsPage extends StatelessWidget {
       body: const Column(
         children: [
           Divider(height: 1, thickness: 1),
-          Expanded(child: SingleChildScrollView(child: Statistics())),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: 4),
+              child: SingleChildScrollView(child: Statistics()),
+            ),
+          ),
         ],
       ),
     );

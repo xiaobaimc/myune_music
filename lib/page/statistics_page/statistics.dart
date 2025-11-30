@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 
 import '../playlist/playlist_content_notifier.dart';
 import '../setting/settings_provider.dart';
@@ -58,7 +59,7 @@ class _StatisticsState extends State<Statistics> {
 
     return SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -221,10 +222,14 @@ class _StatisticsState extends State<Statistics> {
       );
     }
 
-    // 创建一个映射，用于快速查找歌曲的专辑封面
-    final songMap = <String, Song>{};
+    // 创建一个映射，使用文件名作为键来查找所有具有相同文件名的歌曲
+    final songMap = <String, List<Song>>{};
     for (final song in allSongs) {
-      songMap[song.filePath] = song;
+      final fileName = p.basename(song.filePath);
+      if (!songMap.containsKey(fileName)) {
+        songMap[fileName] = [];
+      }
+      songMap[fileName]!.add(song);
     }
 
     return Card(
@@ -237,14 +242,33 @@ class _StatisticsState extends State<Statistics> {
           separatorBuilder: (_, __) => const Divider(height: 2),
           itemBuilder: (context, index) {
             final song = topSongs[index];
-            final songWithArt = songMap[song.path];
+
+            // 使用文件名进行匹配
+            final statFileName = p.basename(song.path);
+            final matchedSongs = songMap[statFileName];
+
+            // 优先选择有封面的歌曲，如果没有则选择第一个
+            Song songWithArt;
+            if (matchedSongs != null && matchedSongs.isNotEmpty) {
+              songWithArt = matchedSongs.firstWhere(
+                (s) => s.albumArt != null,
+                orElse: () => matchedSongs.first,
+              );
+            } else {
+              songWithArt = Song(
+                title: song.title,
+                artist: song.artist,
+                album: song.album,
+                filePath: song.path,
+              );
+            }
 
             return ListTile(
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
-                child: songWithArt?.albumArt != null
+                child: songWithArt.albumArt != null
                     ? Image.memory(
-                        songWithArt!.albumArt!,
+                        songWithArt.albumArt!,
                         width: 40,
                         height: 40,
                         fit: BoxFit.cover,
@@ -256,7 +280,11 @@ class _StatisticsState extends State<Statistics> {
                       ),
               ),
               title: Text(song.title),
-              subtitle: Text('${song.artist} - ${song.album}'),
+              subtitle: Text(
+                context.watch<SettingsProvider>().showAlbumName
+                    ? '${song.artist} - ${song.album}'
+                    : song.artist,
+              ),
               trailing: Text('${song.playCount} 次'),
             );
           },

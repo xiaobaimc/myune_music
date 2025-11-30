@@ -8,6 +8,7 @@ import '../page/song_detail_page.dart';
 import 'balance_rate_control.dart';
 import 'play_pause_button.dart';
 import 'play_mode_button.dart';
+import '../page/setting/settings_provider.dart';
 
 // 格式化时间函数
 String _formatDuration(Duration duration) {
@@ -193,7 +194,13 @@ class _PlaybarState extends State<Playbar> {
                                 maxLines: 1,
                               ),
                               Text(
-                                currentSong?.artist ?? '未知歌手',
+                                currentSong != null
+                                    ? context
+                                              .watch<SettingsProvider>()
+                                              .showAlbumName
+                                          ? '${currentSong.artist} - ${currentSong.album}'
+                                          : currentSong.artist
+                                    : '未知歌手',
                                 style: TextStyle(
                                   color: onBarColor.withValues(alpha: 0.7),
                                   fontSize: 13,

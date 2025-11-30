@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
 import '../../widgets/sort_dialog.dart';
+import '../setting/settings_provider.dart';
 
 enum ManagementMode { manual, folder }
 
@@ -1036,6 +1037,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final notifier = context.read<PlaylistContentNotifier>();
+    final settings = context.watch<SettingsProvider>();
 
     // 监听多选模式和选中歌曲的变化
     final isMultiSelectMode = context.select<PlaylistContentNotifier, bool>(
@@ -1114,7 +1116,9 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
-                  widget.song.artist,
+                  settings.showAlbumName
+                      ? '${widget.song.artist} - ${widget.song.album}'
+                      : widget.song.artist,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

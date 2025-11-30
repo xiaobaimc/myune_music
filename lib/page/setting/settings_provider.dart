@@ -10,6 +10,7 @@ class SettingsProvider with ChangeNotifier {
   static const _allowAnyFormatKey = 'allowAnyFormat'; // 允许任何格式设置的 key
   static const _forceSingleLineLyricKey =
       'forceSingleLineLyric'; // 强制单行歌词设置的 key
+  static const _showAlbumNameKey = 'showAlbumName'; // 显示专辑名称设置的 key
 
   static const _enableOnlineLyricsKey = 'enableOnlineLyrics';
   static const _lyricVerticalSpacingKey =
@@ -23,6 +24,9 @@ class SettingsProvider with ChangeNotifier {
   static const _enableLyricBlurKey = 'enableLyricBlur'; // 歌词模糊效果设置的 key
   static const _showTaskbarProgressKey =
       'showTaskbarProgress'; // 任务栏进度显示设置的 key
+  static const _hiddenPagesKey = 'hiddenPages'; // 隐藏页面设置的 key
+  static const _enableDynamicBackgroundKey =
+      'enableDynamicBackground'; // 动态背景设置的 key
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -35,11 +39,16 @@ class SettingsProvider with ChangeNotifier {
   bool _addLyricPadding = false; // 默认不启用歌词上下补位
   bool _minimizeToTray = false; // 默认不启用最小化到托盘
   bool _enableLyricBlur = false; // 默认不启用歌词模糊效果
+  bool _showAlbumName = false; // 默认不显示专辑名称
+  bool _enableDynamicBackground = false; // 默认不启用动态背景
 
   bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
   String _primaryLyricSource = 'qq'; // 默认主要歌词源为qq音乐
   String _secondaryLyricSource = 'netease'; // 默认备用歌词源为网易云音乐
+
+  // 隐藏页面列表，默认为空（都不隐藏）
+  List<String> _hiddenPages = [];
 
   // 默认艺术家分隔符
   List<String> _artistSeparators = [';', '、', '；', '，', ','];
@@ -56,10 +65,14 @@ class SettingsProvider with ChangeNotifier {
   bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
   bool get enableLyricBlur => _enableLyricBlur; // 获取歌词模糊效果设置
   bool get showTaskbarProgress => _showTaskbarProgress; // 获取任务栏进度显示设置
+  bool get showAlbumName => _showAlbumName; // 获取显示专辑名称设置
+  bool get enableDynamicBackground => _enableDynamicBackground; // 获取动态背景设置
 
   bool get enableOnlineLyrics => _enableOnlineLyrics;
   String get primaryLyricSource => _primaryLyricSource; // 获取主要歌词源
   String get secondaryLyricSource => _secondaryLyricSource; // 获取备用歌词源
+
+  List<String> get hiddenPages => _hiddenPages; // 获取隐藏页面列表
 
   List<String> get artistSeparators => _artistSeparators; // 获取艺术家分隔符
 
@@ -76,6 +89,7 @@ class SettingsProvider with ChangeNotifier {
     _allowAnyFormat = prefs.getBool(_allowAnyFormatKey) ?? false; // 加载允许任何格式设置
     _forceSingleLineLyric =
         prefs.getBool(_forceSingleLineLyricKey) ?? false; // 加载强制单行歌词设置
+    _showAlbumName = prefs.getBool(_showAlbumNameKey) ?? false; // 加载显示专辑名称设置
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
     _lyricVerticalSpacing =
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
@@ -90,6 +104,14 @@ class SettingsProvider with ChangeNotifier {
         prefs.getString(_secondaryLyricSourceKey) ?? 'netease'; // 加载备用歌词源设置
     _showTaskbarProgress =
         prefs.getBool(_showTaskbarProgressKey) ?? false; // 加载任务栏进度显示设置
+    _enableDynamicBackground =
+        prefs.getBool(_enableDynamicBackgroundKey) ?? false; // 加载动态背景设置
+
+    // 加载隐藏页面设置
+    final hiddenPagesList = prefs.getStringList(_hiddenPagesKey);
+    if (hiddenPagesList != null) {
+      _hiddenPages = hiddenPagesList;
+    }
 
     // 加载艺术家分隔符设置
     final separatorsList = prefs.getStringList(_artistSeparatorsKey);
@@ -220,5 +242,31 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_showTaskbarProgressKey, value);
+  }
+
+  void setShowAlbumName(bool value) async {
+    _showAlbumName = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showAlbumNameKey, value);
+  }
+
+  void setHiddenPages(List<String> hiddenPages) async {
+    // 确保歌单和设置不会被隐藏
+    final filteredHiddenPages = hiddenPages
+        .where((page) => page != '歌单' && page != '设置')
+        .toList();
+
+    _hiddenPages = filteredHiddenPages;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_hiddenPagesKey, filteredHiddenPages);
+  }
+
+  void setEnableDynamicBackground(bool value) async {
+    _enableDynamicBackground = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableDynamicBackgroundKey, value);
   }
 }

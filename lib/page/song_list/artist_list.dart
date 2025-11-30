@@ -16,6 +16,24 @@ class _ArtistListState extends State<ArtistList> {
   String _searchKeyword = '';
   bool _hideSingleSongArtists = false;
 
+  void sortArtists(List<String> artistNames) {
+    final Map<String, String> cache = {};
+
+    String getPy(String s) {
+      if (cache.containsKey(s)) return cache[s]!;
+      final py = PinyinHelper.getPinyin(s, separator: '').toLowerCase().trim();
+      final result = py.isEmpty ? s.toLowerCase() : py;
+      cache[s] = result;
+      return result;
+    }
+
+    artistNames.sort((a, b) {
+      final pa = getPy(a);
+      final pb = getPy(b);
+      return pa.compareTo(pb);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
@@ -108,25 +126,7 @@ class _ArtistListState extends State<ArtistList> {
                   }
 
                   // 拼音排序
-                  artistNames.sort((a, b) {
-                    final pinyinA = PinyinHelper.getPinyin(
-                      a,
-                      separator: '',
-                    ).toLowerCase();
-                    final pinyinB = PinyinHelper.getPinyin(
-                      b,
-                      separator: '',
-                    ).toLowerCase();
-
-                    final compareA = pinyinA.isEmpty
-                        ? a.toLowerCase()
-                        : pinyinA;
-                    final compareB = pinyinB.isEmpty
-                        ? b.toLowerCase()
-                        : pinyinB;
-
-                    return compareA.compareTo(compareB);
-                  });
+                  sortArtists(artistNames);
 
                   if (artistNames.isEmpty) {
                     return Center(

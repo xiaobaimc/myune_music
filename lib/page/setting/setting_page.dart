@@ -13,6 +13,7 @@ import 'update_checker.dart';
 import 'audio_device_selector.dart';
 import 'artist_separator.dart';
 import 'about.dart';
+import 'page_visibility_settings.dart';
 
 // 定义应用版本号常量
 const String appVersion = '0.7.3';
@@ -35,7 +36,7 @@ class _SettingPageState extends State<SettingPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -130,6 +131,7 @@ class _SettingPageState extends State<SettingPage>
             controller: _tabController,
             tabs: const [
               Tab(text: '常规'),
+              Tab(text: '个性化'),
               Tab(text: '播放页'),
               Tab(text: '高级'),
             ],
@@ -187,11 +189,6 @@ class _SettingPageState extends State<SettingPage>
                         ),
                       ),
                     ),
-                  // 系统字体选择器
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: FontSelectorRow(),
-                  ),
                   // 深色模式
                   SwitchListTile(
                     title: Text(
@@ -230,29 +227,6 @@ class _SettingPageState extends State<SettingPage>
                       }
                     },
                   ),
-                  // 始终保持单行歌词显示
-                  SwitchListTile(
-                    title: Text(
-                      '顶部歌词始终单行显示',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    value: settings.forceSingleLineLyric,
-                    onChanged: (value) {
-                      context.read<SettingsProvider>().setForceSingleLineLyric(
-                        value,
-                      );
-                    },
-                  ),
-                  if (Platform.isWindows)
-                    SwitchListTile(
-                      title: const Text('在任务栏显示播放进度'),
-                      value: settings.showTaskbarProgress,
-                      onChanged: (value) {
-                        context.read<SettingsProvider>().setShowTaskbarProgress(
-                          value,
-                        );
-                      },
-                    ),
                   // 是否启用从网络获取歌词
                   SwitchListTile(
                     title: const Text('从网络获取歌词'),
@@ -348,6 +322,55 @@ class _SettingPageState extends State<SettingPage>
                 ],
               ),
 
+              // 个性化设置
+              ListView(
+                children: [
+                  // 系统字体选择器
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: FontSelectorRow(),
+                  ),
+
+                  // 页面可见性设置
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: PageVisibilitySettings(),
+                  ),
+
+                  if (Platform.isWindows)
+                    SwitchListTile(
+                      title: const Text('在任务栏显示播放进度'),
+                      value: settings.showTaskbarProgress,
+                      onChanged: (value) {
+                        context.read<SettingsProvider>().setShowTaskbarProgress(
+                          value,
+                        );
+                      },
+                    ),
+                  // 始终保持单行歌词显示
+                  SwitchListTile(
+                    title: Text(
+                      '始终单行显示顶部歌词',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    value: settings.forceSingleLineLyric,
+                    onChanged: (value) {
+                      context.read<SettingsProvider>().setForceSingleLineLyric(
+                        value,
+                      );
+                    },
+                  ),
+                  // 始终显示专辑名称
+                  SwitchListTile(
+                    title: const Text('始终显示专辑名称'),
+                    value: settings.showAlbumName,
+                    onChanged: (value) {
+                      context.read<SettingsProvider>().setShowAlbumName(value);
+                    },
+                  ),
+                ],
+              ),
+
               // 播放页设置
               ListView(
                 children: [
@@ -362,6 +385,28 @@ class _SettingPageState extends State<SettingPage>
                       context.read<SettingsProvider>().setUseBlurBackground(
                         value,
                       );
+                    },
+                  ),
+                  // 启用动态背景
+                  SwitchListTile(
+                    title: const Row(
+                      children: [
+                        Text('启用播放页动态背景'),
+                        SizedBox(width: 4),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(),
+                          icon: Icon(Icons.info_outline, size: 20),
+                          tooltip: '未启用模糊背景时不生效',
+                          onPressed: null,
+                        ),
+                      ],
+                    ),
+                    value: settings.enableDynamicBackground,
+                    onChanged: (value) {
+                      context
+                          .read<SettingsProvider>()
+                          .setEnableDynamicBackground(value);
                     },
                   ),
                   // 启用歌词模糊效果
