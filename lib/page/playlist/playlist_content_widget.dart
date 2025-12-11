@@ -59,6 +59,18 @@ class PlaylistListWidget extends StatelessWidget {
 
         return StatefulBuilder(
           builder: (context, setState) {
+            void addPath(String path) {
+              if (path.isNotEmpty) {
+                setState(() {
+                  if (!selectedFolders.contains(path)) {
+                    selectedFolders.add(path);
+                  }
+                  pathController.clear();
+                  showPathInput = false;
+                });
+              }
+            }
+
             return AlertDialog(
               title: const Text('添加新歌单'),
               content: SingleChildScrollView(
@@ -157,34 +169,12 @@ class PlaylistListWidget extends StatelessWidget {
                                     vertical: 12,
                                   ),
                                 ),
-                                onSubmitted: (value) {
-                                  if (value.isNotEmpty) {
-                                    setState(() {
-                                      if (!selectedFolders.contains(value)) {
-                                        selectedFolders.add(value);
-                                      }
-                                      pathController.clear();
-                                      showPathInput = false;
-                                    });
-                                  }
-                                },
+                                onSubmitted: (value) => addPath(value),
                               ),
                             ),
                             const SizedBox(width: 8),
                             IconButton.filledTonal(
-                              onPressed: () {
-                                if (pathController.text.isNotEmpty) {
-                                  setState(() {
-                                    if (!selectedFolders.contains(
-                                      pathController.text,
-                                    )) {
-                                      selectedFolders.add(pathController.text);
-                                    }
-                                    pathController.clear();
-                                    showPathInput = false;
-                                  });
-                                }
-                              },
+                              onPressed: () => addPath(pathController.text),
                               icon: const Icon(Icons.check),
                             ),
                           ],
@@ -447,6 +437,18 @@ class PlaylistListWidget extends StatelessWidget {
         bool showPathInput = false;
         return StatefulBuilder(
           builder: (context, setState) {
+            void addPath(String path) {
+              if (path.isNotEmpty) {
+                setState(() {
+                  if (!selectedFolders.contains(path)) {
+                    selectedFolders.add(path);
+                  }
+                  pathController.clear();
+                  showPathInput = false;
+                });
+              }
+            }
+
             return AlertDialog(
               title: const Text('编辑文件夹'),
               content: SingleChildScrollView(
@@ -504,34 +506,12 @@ class PlaylistListWidget extends StatelessWidget {
                                   vertical: 12,
                                 ),
                               ),
-                              onSubmitted: (value) {
-                                if (value.isNotEmpty) {
-                                  setState(() {
-                                    if (!selectedFolders.contains(value)) {
-                                      selectedFolders.add(value);
-                                    }
-                                    pathController.clear();
-                                    showPathInput = false;
-                                  });
-                                }
-                              },
+                              onSubmitted: (value) => addPath(value),
                             ),
                           ),
                           const SizedBox(width: 8),
                           IconButton.filledTonal(
-                            onPressed: () {
-                              if (pathController.text.isNotEmpty) {
-                                setState(() {
-                                  if (!selectedFolders.contains(
-                                    pathController.text,
-                                  )) {
-                                    selectedFolders.add(pathController.text);
-                                  }
-                                  pathController.clear();
-                                  showPathInput = false;
-                                });
-                              }
-                            },
+                            onPressed: () => addPath(pathController.text),
                             icon: const Icon(Icons.check),
                           ),
                         ],
