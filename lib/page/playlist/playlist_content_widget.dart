@@ -52,8 +52,10 @@ class PlaylistListWidget extends StatelessWidget {
       context: context,
       builder: (context) {
         final controller = TextEditingController();
+        final pathController = TextEditingController();
         final List<String> selectedFolders = [];
         ManagementMode selectedMode = ManagementMode.manual; // 默认为手动管理
+        bool showPathInput = false;
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -126,54 +128,68 @@ class PlaylistListWidget extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
-                            onPressed: () async {
-                              final controller = TextEditingController();
-                              final folder = await showDialog<String>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('输入文件夹路径'),
-                                  content: TextField(
-                                    controller: controller,
-                                    decoration: const InputDecoration(
-                                      labelText: '文件夹路径',
-                                      hintText: '请输入绝对路径',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    autofocus: true,
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('取消'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        if (controller.text.isNotEmpty) {
-                                          Navigator.pop(
-                                            context,
-                                            controller.text,
-                                          );
-                                        }
-                                      },
-                                      child: const Text('确定'),
-                                    ),
-                                  ],
-                                ),
-                              );
-
-                              if (folder != null && folder.isNotEmpty) {
-                                setState(() {
-                                  if (!selectedFolders.contains(folder)) {
-                                    selectedFolders.add(folder);
-                                  }
-                                });
-                              }
+                            onPressed: () {
+                              setState(() {
+                                showPathInput = !showPathInput;
+                              });
                             },
-                            icon: const Icon(Icons.input),
+                            icon: Icon(
+                              showPathInput ? Icons.expand_less : Icons.input,
+                            ),
                             label: const Text('输入路径'),
                           ),
                         ],
                       ),
+                      if (showPathInput) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: pathController,
+                                decoration: const InputDecoration(
+                                  labelText: '文件夹路径',
+                                  hintText: '请输入绝对路径',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                onSubmitted: (value) {
+                                  if (value.isNotEmpty) {
+                                    setState(() {
+                                      if (!selectedFolders.contains(value)) {
+                                        selectedFolders.add(value);
+                                      }
+                                      pathController.clear();
+                                      showPathInput = false;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              onPressed: () {
+                                if (pathController.text.isNotEmpty) {
+                                  setState(() {
+                                    if (!selectedFolders.contains(
+                                      pathController.text,
+                                    )) {
+                                      selectedFolders.add(pathController.text);
+                                    }
+                                    pathController.clear();
+                                    showPathInput = false;
+                                  });
+                                }
+                              },
+                              icon: const Icon(Icons.check),
+                            ),
+                          ],
+                        ),
+                      ],
                       if (selectedFolders.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         SizedBox(
@@ -427,6 +443,8 @@ class PlaylistListWidget extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) {
+        final pathController = TextEditingController();
+        bool showPathInput = false;
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -435,69 +453,90 @@ class PlaylistListWidget extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final folder = await FilePicker.platform
-                            .getDirectoryPath(
-                              dialogTitle: '请选择文件夹',
-                              lockParentWindow: true,
-                            );
-                        if (folder != null) {
-                          setState(() {
-                            if (!selectedFolders.contains(folder)) {
-                              selectedFolders.add(folder);
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final folder = await FilePicker.platform
+                                .getDirectoryPath(
+                                  dialogTitle: '请选择文件夹',
+                                  lockParentWindow: true,
+                                );
+                            if (folder != null) {
+                              setState(() {
+                                if (!selectedFolders.contains(folder)) {
+                                  selectedFolders.add(folder);
+                                }
+                              });
                             }
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.folder_open),
-                      label: const Text('添加文件夹'),
+                          },
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('添加文件夹'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              showPathInput = !showPathInput;
+                            });
+                          },
+                          icon: Icon(
+                            showPathInput ? Icons.expand_less : Icons.input,
+                          ),
+                          label: const Text('输入路径'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final controller = TextEditingController();
-                        final folder = await showDialog<String>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('输入文件夹路径'),
-                            content: TextField(
-                              controller: controller,
+                    if (showPathInput) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: pathController,
                               decoration: const InputDecoration(
                                 labelText: '文件夹路径',
                                 hintText: '请输入绝对路径',
                                 border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
                               ),
-                              autofocus: true,
+                              onSubmitted: (value) {
+                                if (value.isNotEmpty) {
+                                  setState(() {
+                                    if (!selectedFolders.contains(value)) {
+                                      selectedFolders.add(value);
+                                    }
+                                    pathController.clear();
+                                    showPathInput = false;
+                                  });
+                                }
+                              },
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('取消'),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  if (controller.text.isNotEmpty) {
-                                    Navigator.pop(context, controller.text);
-                                  }
-                                },
-                                child: const Text('确定'),
-                              ),
-                            ],
                           ),
-                        );
-
-                        if (folder != null && folder.isNotEmpty) {
-                          setState(() {
-                            if (!selectedFolders.contains(folder)) {
-                              selectedFolders.add(folder);
-                            }
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.input),
-                      label: const Text('输入路径'),
-                    ),
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            onPressed: () {
+                              if (pathController.text.isNotEmpty) {
+                                setState(() {
+                                  if (!selectedFolders.contains(
+                                    pathController.text,
+                                  )) {
+                                    selectedFolders.add(pathController.text);
+                                  }
+                                  pathController.clear();
+                                  showPathInput = false;
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.check),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (selectedFolders.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       SizedBox(
