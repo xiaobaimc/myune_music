@@ -83,9 +83,7 @@ void main() async {
     // 这一行会导致全屏的时候抖3次
     // await windowManager.setAsFrameless();
 
-    if (!Platform.isLinux) {
-      await windowManager.setHasShadow(true);
-    }
+    await windowManager.setHasShadow(true);
     // 设置窗口位置
     final prefs = await SharedPreferences.getInstance();
     if (prefs.containsKey('window_x') && prefs.containsKey('window_y')) {
