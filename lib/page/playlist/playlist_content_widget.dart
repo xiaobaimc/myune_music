@@ -50,209 +50,7 @@ class PlaylistListWidget extends StatelessWidget {
   ) {
     showDialog(
       context: context,
-      builder: (context) {
-        final controller = TextEditingController();
-        final pathController = TextEditingController();
-        final List<String> selectedFolders = [];
-        ManagementMode selectedMode = ManagementMode.manual; // 默认为手动管理
-        bool showPathInput = false;
-
-        return StatefulBuilder(
-          builder: (context, setState) {
-            void addPath(String path) {
-              if (path.isNotEmpty) {
-                setState(() {
-                  if (!selectedFolders.contains(path)) {
-                    selectedFolders.add(path);
-                  }
-                  pathController.clear();
-                  showPathInput = false;
-                });
-              }
-            }
-
-            return AlertDialog(
-              title: const Text('添加新歌单'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Focus(
-                      onFocusChange: (hasFocus) {
-                        final notifier = context
-                            .read<PlaylistContentNotifier>();
-                        notifier.setDisableHotKeys(hasFocus);
-                      },
-                      child: TextField(
-                        controller: controller,
-                        decoration: const InputDecoration(hintText: '输入歌单名称'),
-                        autofocus: true,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('选择管理模式：'),
-                    RadioGroup<ManagementMode>(
-                      groupValue: selectedMode,
-                      onChanged: (value) {
-                        setState(() {
-                          selectedMode = value!;
-                        });
-                      },
-                      child: const Column(
-                        children: [
-                          // 手动管理模式单选按钮
-                          RadioListTile<ManagementMode>(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('手动管理歌单歌曲'),
-                            value: ManagementMode.manual,
-                          ),
-                          // 文件夹管理模式单选按钮
-                          RadioListTile<ManagementMode>(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('使用文件夹管理歌单'),
-                            value: ManagementMode.folder,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (selectedMode == ManagementMode.folder) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              final folder = await FilePicker.platform
-                                  .getDirectoryPath(
-                                    dialogTitle: '请选择文件夹',
-                                    lockParentWindow: true,
-                                  );
-                              if (folder != null) {
-                                setState(() {
-                                  if (!selectedFolders.contains(folder)) {
-                                    selectedFolders.add(folder);
-                                  }
-                                });
-                              }
-                            },
-                            icon: const Icon(Icons.folder_open),
-                            label: const Text('添加文件夹'),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                showPathInput = !showPathInput;
-                              });
-                            },
-                            icon: Icon(
-                              showPathInput ? Icons.expand_less : Icons.input,
-                            ),
-                            label: const Text('输入路径'),
-                          ),
-                        ],
-                      ),
-                      if (showPathInput) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: pathController,
-                                decoration: const InputDecoration(
-                                  labelText: '文件夹路径',
-                                  hintText: '请输入绝对路径',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                onSubmitted: (value) => addPath(value),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton.filledTonal(
-                              onPressed: () => addPath(pathController.text),
-                              icon: const Icon(Icons.check),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (selectedFolders.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 100,
-                          child: Scrollbar(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: List.generate(
-                                  selectedFolders.length,
-                                  (index) => ListTile(
-                                    title: Text(
-                                      selectedFolders[index],
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    dense: true,
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.delete, size: 18),
-                                      onPressed: () {
-                                        setState(() {
-                                          selectedFolders.removeAt(index);
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('取消'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final notifier = context.read<PlaylistContentNotifier>();
-
-                    if (selectedMode == ManagementMode.folder &&
-                        selectedFolders.isEmpty) {
-                      // 选择了文件夹管理模式但未选择文件夹
-                      notifier.postInfo('请选择至少一个文件夹');
-                      return;
-                    }
-
-                    if (selectedMode == ManagementMode.folder) {
-                      // 创建基于文件夹的播放列表
-                      if (notifier.addPlaylist(
-                        controller.text,
-                        folderPaths: selectedFolders,
-                      )) {
-                        Navigator.of(context).pop();
-                      }
-                    } else {
-                      // 创建普通播放列表（手动管理）
-                      if (notifier.addPlaylist(controller.text)) {
-                        Navigator.of(context).pop();
-                      }
-                    }
-                  },
-                  child: const Text('添加'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context) => _AddPlaylistDialog(notifier: notifier),
     );
   }
 
@@ -332,45 +130,10 @@ class PlaylistListWidget extends StatelessWidget {
     int index,
     PlaylistContentNotifier notifier,
   ) {
-    final controller = TextEditingController(
-      text: notifier.playlists[index].name,
-    );
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('编辑歌单名称'),
-          content: Focus(
-            onFocusChange: (hasFocus) {
-              final notifier = context.read<PlaylistContentNotifier>();
-              notifier.setDisableHotKeys(hasFocus);
-            },
-            child: TextField(
-              controller: controller,
-              decoration: const InputDecoration(hintText: '输入新的歌单名称'),
-              autofocus: true,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final newName = controller.text.trim();
-                final notifier = context.read<PlaylistContentNotifier>();
-
-                if (notifier.editPlaylistName(index, newName)) {
-                  // 仅在操作成功时关闭对话框
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
+      builder: (context) =>
+          _EditPlaylistDialog(index: index, notifier: notifier),
     );
   }
 
@@ -433,122 +196,15 @@ class PlaylistListWidget extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) {
-        final pathController = TextEditingController();
-        bool showPathInput = false;
         return StatefulBuilder(
           builder: (context, setState) {
-            void addPath(String path) {
-              if (path.isNotEmpty) {
-                setState(() {
-                  if (!selectedFolders.contains(path)) {
-                    selectedFolders.add(path);
-                  }
-                  pathController.clear();
-                  showPathInput = false;
-                });
-              }
-            }
-
             return AlertDialog(
               title: const Text('编辑文件夹'),
               content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final folder = await FilePicker.platform
-                                .getDirectoryPath(
-                                  dialogTitle: '请选择文件夹',
-                                  lockParentWindow: true,
-                                );
-                            if (folder != null) {
-                              setState(() {
-                                if (!selectedFolders.contains(folder)) {
-                                  selectedFolders.add(folder);
-                                }
-                              });
-                            }
-                          },
-                          icon: const Icon(Icons.folder_open),
-                          label: const Text('添加文件夹'),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              showPathInput = !showPathInput;
-                            });
-                          },
-                          icon: Icon(
-                            showPathInput ? Icons.expand_less : Icons.input,
-                          ),
-                          label: const Text('输入路径'),
-                        ),
-                      ],
-                    ),
-                    if (showPathInput) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: pathController,
-                              decoration: const InputDecoration(
-                                labelText: '文件夹路径',
-                                hintText: '请输入绝对路径',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                              ),
-                              onSubmitted: (value) => addPath(value),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton.filledTonal(
-                            onPressed: () => addPath(pathController.text),
-                            icon: const Icon(Icons.check),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (selectedFolders.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 150,
-                        child: Scrollbar(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: List.generate(
-                                selectedFolders.length,
-                                (index) => ListTile(
-                                  title: Text(
-                                    selectedFolders[index],
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  dense: true,
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.delete, size: 18),
-                                    onPressed: () {
-                                      setState(() {
-                                        selectedFolders.removeAt(index);
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                child: _FolderManagementWidget(
+                  selectedFolders: selectedFolders,
+                  onFoldersChanged: () => setState(() {}),
+                  listHeight: 150,
                 ),
               ),
               actions: [
@@ -569,6 +225,315 @@ class PlaylistListWidget extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _FolderManagementWidget extends StatefulWidget {
+  final List<String> selectedFolders;
+  final VoidCallback onFoldersChanged;
+  final double listHeight;
+
+  const _FolderManagementWidget({
+    required this.selectedFolders,
+    required this.onFoldersChanged,
+    this.listHeight = 100,
+  });
+
+  @override
+  State<_FolderManagementWidget> createState() =>
+      _FolderManagementWidgetState();
+}
+
+class _FolderManagementWidgetState extends State<_FolderManagementWidget> {
+  final TextEditingController _pathController = TextEditingController();
+  bool _showPathInput = false;
+
+  @override
+  void dispose() {
+    _pathController.dispose();
+    super.dispose();
+  }
+
+  void _addPath(String path) {
+    if (path.isNotEmpty) {
+      if (!widget.selectedFolders.contains(path)) {
+        setState(() {
+          widget.selectedFolders.add(path);
+        });
+        widget.onFoldersChanged();
+      }
+      _pathController.clear();
+      setState(() {
+        _showPathInput = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: () async {
+                final folder = await FilePicker.platform.getDirectoryPath(
+                  dialogTitle: '请选择文件夹',
+                  lockParentWindow: true,
+                );
+                if (folder != null) {
+                  if (!widget.selectedFolders.contains(folder)) {
+                    setState(() {
+                      widget.selectedFolders.add(folder);
+                    });
+                    widget.onFoldersChanged();
+                  }
+                }
+              },
+              icon: const Icon(Icons.folder_open),
+              label: const Text('添加文件夹'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _showPathInput = !_showPathInput;
+                });
+              },
+              icon: Icon(_showPathInput ? Icons.expand_less : Icons.input),
+              label: const Text('输入路径'),
+            ),
+          ],
+        ),
+        if (_showPathInput) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _pathController,
+                  decoration: const InputDecoration(
+                    labelText: '文件夹路径',
+                    hintText: '请输入绝对路径',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                  ),
+                  onSubmitted: (value) => _addPath(value),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: () => _addPath(_pathController.text),
+                icon: const Icon(Icons.check),
+              ),
+            ],
+          ),
+        ],
+        if (widget.selectedFolders.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: widget.listHeight,
+            child: Scrollbar(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(
+                    widget.selectedFolders.length,
+                    (index) => ListTile(
+                      title: Text(
+                        widget.selectedFolders[index],
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      dense: true,
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            widget.selectedFolders.removeAt(index);
+                          });
+                          widget.onFoldersChanged();
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AddPlaylistDialog extends StatefulWidget {
+  final PlaylistContentNotifier notifier;
+
+  const _AddPlaylistDialog({required this.notifier});
+
+  @override
+  State<_AddPlaylistDialog> createState() => _AddPlaylistDialogState();
+}
+
+class _AddPlaylistDialogState extends State<_AddPlaylistDialog> {
+  final TextEditingController _controller = TextEditingController();
+  final List<String> _selectedFolders = [];
+  ManagementMode _selectedMode = ManagementMode.manual;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('添加新歌单'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Focus(
+              onFocusChange: (hasFocus) {
+                widget.notifier.setDisableHotKeys(hasFocus);
+              },
+              child: TextField(
+                controller: _controller,
+                decoration: const InputDecoration(hintText: '输入歌单名称'),
+                autofocus: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('选择管理模式：'),
+            RadioGroup<ManagementMode>(
+              groupValue: _selectedMode,
+              onChanged: (value) {
+                setState(() {
+                  _selectedMode = value!;
+                });
+              },
+              child: const Column(
+                children: [
+                  RadioListTile<ManagementMode>(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('手动管理歌单歌曲'),
+                    value: ManagementMode.manual,
+                  ),
+                  RadioListTile<ManagementMode>(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('使用文件夹管理歌单'),
+                    value: ManagementMode.folder,
+                  ),
+                ],
+              ),
+            ),
+            if (_selectedMode == ManagementMode.folder) ...[
+              const SizedBox(height: 8),
+              _FolderManagementWidget(
+                selectedFolders: _selectedFolders,
+                onFoldersChanged: () => setState(() {}),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (_selectedMode == ManagementMode.folder &&
+                _selectedFolders.isEmpty) {
+              widget.notifier.postInfo('请选择至少一个文件夹');
+              return;
+            }
+
+            if (_selectedMode == ManagementMode.folder) {
+              if (widget.notifier.addPlaylist(
+                _controller.text,
+                folderPaths: _selectedFolders,
+              )) {
+                Navigator.of(context).pop();
+              }
+            } else {
+              if (widget.notifier.addPlaylist(_controller.text)) {
+                Navigator.of(context).pop();
+              }
+            }
+          },
+          child: const Text('添加'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditPlaylistDialog extends StatefulWidget {
+  final int index;
+  final PlaylistContentNotifier notifier;
+
+  const _EditPlaylistDialog({required this.index, required this.notifier});
+
+  @override
+  State<_EditPlaylistDialog> createState() => _EditPlaylistDialogState();
+}
+
+class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.notifier.playlists[widget.index].name,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('编辑歌单名称'),
+      content: Focus(
+        onFocusChange: (hasFocus) {
+          widget.notifier.setDisableHotKeys(hasFocus);
+        },
+        child: TextField(
+          controller: _controller,
+          decoration: const InputDecoration(hintText: '输入新的歌单名称'),
+          autofocus: true,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final newName = _controller.text.trim();
+            if (widget.notifier.editPlaylistName(widget.index, newName)) {
+              Navigator.of(context).pop();
+            }
+          },
+          child: const Text('保存'),
+        ),
+      ],
     );
   }
 }
