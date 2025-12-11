@@ -13,6 +13,7 @@
 migrate_working_dir/
 list_data/
 output_setup/
+rust_builder/
 
 # IntelliJ related
 *.iml
@@ -34,6 +35,7 @@ output_setup/
 .pub-cache/
 .pub/
 /build/
+
 
 # Symbolication related
 app.*.symbols
