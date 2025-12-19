@@ -6,7 +6,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:path/path.dart' as p;
 import 'package:media_kit/media_kit.dart' hide Playlist;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +19,7 @@ import '../../media_service/smtc_manager.dart';
 import '../setting/settings_provider.dart';
 import '../../theme/theme_provider.dart';
 import '../statistics_page/playback_tracker.dart';
+import '../../src/rust/api/audio_info.dart';
 
 enum SortCriterion { title, artist, dateModified, random }
 
@@ -459,7 +459,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     try {
-      final metadata = readMetadata(file, getImage: true);
+      final metadata = await readAudioInfo(
+        path: normalizedPath,
+        options: const AudioInfoOptions(
+          needCover: true,
+          needLyrics: false,
+          needAudioProps: true,
+        ),
+      );
+
       if (metadata.title != null && metadata.title!.isNotEmpty) {
         title = metadata.title!;
       }
@@ -469,10 +477,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
       if (metadata.album != null && metadata.album!.isNotEmpty) {
         album = metadata.album!;
       }
-      duration = metadata.duration;
-      albumArt = metadata.pictures.isNotEmpty
-          ? metadata.pictures.first.bytes
-          : null;
+
+      if (metadata.durationMs != null) {
+        duration = Duration(milliseconds: metadata.durationMs!.toInt());
+      }
+
+      albumArt = metadata.cover;
     } catch (e) {
       artist = '未知歌手 (解析失败)';
       albumArt = null;
@@ -1678,7 +1688,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
         return;
       }
 
-      final metadata = readMetadata(file, getImage: false);
+      final metadata = await readAudioInfo(
+        path: normalizedPath,
+        options: const AudioInfoOptions(
+          needCover: false,
+          needLyrics: true,
+          needAudioProps: false,
+        ),
+      );
 
       if (metadata.lyrics != null && metadata.lyrics!.isNotEmpty) {
         _currentLyrics = _parseLrcContent([metadata.lyrics!]);
@@ -2486,19 +2503,25 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     try {
-      final metadata = readMetadata(file, getImage: true);
+      final metadata = await readAudioInfo(
+        path: normalizedPath,
+        options: const AudioInfoOptions(
+          needCover: true,
+          needLyrics: false,
+          needAudioProps: true,
+        ),
+      );
       final stat = await file.stat();
 
-      Uint8List? albumArtBytes;
-      if (metadata.pictures.isNotEmpty) {
-        albumArtBytes = metadata.pictures.first.bytes;
-      }
+      final Uint8List? albumArtBytes = metadata.cover;
 
       return SongDetails(
         title: metadata.title ?? p.basenameWithoutExtension(filePath),
         artist: metadata.artist ?? '未知歌手',
         album: metadata.album ?? '未知专辑',
-        duration: metadata.duration ?? Duration.zero,
+        duration: metadata.durationMs != null
+            ? Duration(milliseconds: metadata.durationMs!.toInt())
+            : Duration.zero,
         albumArt: albumArtBytes,
         bitrate: metadata.bitrate,
         sampleRate: metadata.sampleRate,

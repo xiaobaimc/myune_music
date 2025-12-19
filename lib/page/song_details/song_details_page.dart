@@ -95,7 +95,7 @@ class SongDetailsPage extends StatelessWidget {
                             icon: Icons.graphic_eq,
                             label: '比特率',
                             value: details.bitrate != null
-                                ? '${details.bitrate! / 1000} kbps'
+                                ? '${details.bitrate!} kbps'
                                 : '未知',
                           ),
                           _infoCard(
