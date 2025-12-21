@@ -357,19 +357,27 @@ class WindowStateManager with WindowListener {
     return Offset(x, y);
   }
 
+  Timer? _resizeTimer;
   @override
   void onWindowResize() async {
-    final size = await windowManager.getSize();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('window_width', size.width);
-    await prefs.setDouble('window_height', size.height);
+    _resizeTimer?.cancel();
+    _resizeTimer = Timer(const Duration(milliseconds: 300), () async {
+      final size = await windowManager.getSize();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('window_width', size.width);
+      await prefs.setDouble('window_height', size.height);
+    });
   }
 
+  Timer? _moveTimer;
   @override
   void onWindowMove() async {
-    final position = await windowManager.getPosition();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('window_x', position.dx);
-    await prefs.setDouble('window_y', position.dy);
+    _moveTimer?.cancel();
+    _moveTimer = Timer(const Duration(milliseconds: 300), () async {
+      final position = await windowManager.getPosition();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('window_x', position.dx);
+      await prefs.setDouble('window_y', position.dy);
+    });
   }
 }
