@@ -3,9 +3,11 @@ use serde::Serialize;
 use std::path::Path;
 
 // Lofty 相关的导入
+use lofty::config::{ParseOptions, ParsingMode};
 use lofty::prelude::*;
-use lofty::read_from_path;
+use lofty::probe::Probe;
 use lofty::tag::{Accessor, ItemKey};
+use lofty::file::TaggedFile;
 
 #[derive(Debug)]
 #[frb(non_opaque)]
@@ -28,13 +30,53 @@ pub struct AudioInfo {
     pub sample_rate: Option<u32>,
 }
 
+fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFile, String> {
+    let strict_result = Probe::open(path)
+        .map_err(|e| e.to_string())?
+        .options(
+            ParseOptions::new()
+                .parsing_mode(ParsingMode::Strict) 
+                .read_properties(options.need_audio_props)
+                .read_tags(true)
+                .read_cover_art(options.need_cover),
+        )
+        .read();
+
+    if let Ok(file) = strict_result {
+        // 检查是否真的读到标签/封面
+        let has_tag = file.primary_tag().is_some() || !file.tags().is_empty();
+        let has_cover = !options.need_cover
+            || file
+                .primary_tag()
+                .and_then(|t| t.pictures().first())
+                .is_some();
+
+        if has_tag && has_cover {
+            return Ok(file);
+        }
+    }
+
+    // fallback Relaxed
+    Probe::open(path)
+        .map_err(|e| e.to_string())?
+        .options(
+            ParseOptions::new()
+                .parsing_mode(ParsingMode::Relaxed) // 宽容，救命
+                .read_properties(options.need_audio_props)
+                .read_tags(true)
+                .read_cover_art(options.need_cover),
+        )
+        .read()
+        .map_err(|e| e.to_string())
+}
+
 // 对Dart暴露的主函数
 
 #[frb]
 pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioInfo, String> {
     let path_ref = Path::new(&path);
 
-    let tagged_file = read_from_path(path_ref).map_err(|e| e.to_string())?;
+    let tagged_file = read_tagged_file(path_ref, &options)?;
 
     let mut info = AudioInfo {
         title: None,
