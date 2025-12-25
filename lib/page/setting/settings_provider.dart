@@ -27,6 +27,9 @@ class SettingsProvider with ChangeNotifier {
   static const _hiddenPagesKey = 'hiddenPages'; // 隐藏页面设置的 key
   static const _enableDynamicBackgroundKey =
       'enableDynamicBackground'; // 动态背景设置的 key
+  static const _audioDeviceNameKey = 'audio_device_name';
+  static const _audioDeviceDescKey = 'audio_device_desc';
+  static const _audioDeviceIsAutoKey = 'audio_device_is_auto';
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -41,6 +44,9 @@ class SettingsProvider with ChangeNotifier {
   bool _enableLyricBlur = false; // 默认不启用歌词模糊效果
   bool _showAlbumName = false; // 默认不显示专辑名称
   bool _enableDynamicBackground = false; // 默认不启用动态背景
+  bool _audioDeviceIsAuto = true; // 默认音频设备为自动
+  String? _audioDeviceName; // 音频设备名称
+  String? _audioDeviceDesc; // 音频设备描述
 
   bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
@@ -76,6 +82,10 @@ class SettingsProvider with ChangeNotifier {
 
   List<String> get artistSeparators => _artistSeparators; // 获取艺术家分隔符
 
+  bool get audioDeviceIsAuto => _audioDeviceIsAuto;
+  String? get audioDeviceName => _audioDeviceName;
+  String? get audioDeviceDesc => _audioDeviceDesc;
+
   SettingsProvider() {
     _loadFromPrefs();
   }
@@ -106,6 +116,10 @@ class SettingsProvider with ChangeNotifier {
         prefs.getBool(_showTaskbarProgressKey) ?? false; // 加载任务栏进度显示设置
     _enableDynamicBackground =
         prefs.getBool(_enableDynamicBackgroundKey) ?? false; // 加载动态背景设置
+
+    _audioDeviceIsAuto = prefs.getBool(_audioDeviceIsAutoKey) ?? true;
+    _audioDeviceName = prefs.getString(_audioDeviceNameKey);
+    _audioDeviceDesc = prefs.getString(_audioDeviceDescKey);
 
     // 加载隐藏页面设置
     final hiddenPagesList = prefs.getStringList(_hiddenPagesKey);
@@ -268,5 +282,27 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableDynamicBackgroundKey, value);
+  }
+
+  void setAudioDevice(String name, String desc) async {
+    _audioDeviceIsAuto = false;
+    _audioDeviceName = name;
+    _audioDeviceDesc = desc;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_audioDeviceIsAutoKey, false);
+    await prefs.setString(_audioDeviceNameKey, name);
+    await prefs.setString(_audioDeviceDescKey, desc);
+  }
+
+  void setAudioDeviceToAuto() async {
+    _audioDeviceIsAuto = true;
+    _audioDeviceName = null;
+    _audioDeviceDesc = null;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_audioDeviceIsAutoKey, true);
+    await prefs.remove(_audioDeviceNameKey);
+    await prefs.remove(_audioDeviceDescKey);
   }
 }

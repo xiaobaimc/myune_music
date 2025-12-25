@@ -66,6 +66,8 @@ class PlaylistListWidget extends StatelessWidget {
       listen: false,
     );
 
+    final iconColor = Theme.of(context).colorScheme.primary;
+
     final List<PopupMenuItem<String>> menuItems = [];
     if (index == null) {
       menuItems.add(
@@ -73,20 +75,50 @@ class PlaylistListWidget extends StatelessWidget {
       );
     } else {
       menuItems.add(
-        const PopupMenuItem<String>(value: 'edit', child: Text('编辑歌单')),
+        PopupMenuItem<String>(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.change_circle_outlined, color: iconColor),
+              const SizedBox(width: 5),
+              const Text("编辑歌单"),
+            ],
+          ),
+        ),
       );
       // 只有非默认歌单才能删除
       if (!playlistNotifier.playlists[index].isDefault) {
         menuItems.add(
-          const PopupMenuItem<String>(value: 'delete', child: Text('删除歌单')),
+          PopupMenuItem<String>(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, color: iconColor),
+                const SizedBox(width: 5),
+                const Text("删除歌单"),
+              ],
+            ),
+          ),
         );
       }
       // 如果是基于文件夹的播放列表，添加编辑文件夹选项
       if (playlistNotifier.playlists[index].isFolderBased) {
         menuItems.add(
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             value: 'editFolders',
-            child: Text('编辑文件夹'),
+            child: Row(
+              children: [
+                Icon(Icons.folder_outlined, color: iconColor),
+                const SizedBox(width: 5),
+                const Text("编辑文件夹"),
+              ],
+            ),
           ),
         );
       }
@@ -719,6 +751,19 @@ class HeadSongListWidget extends StatelessWidget {
                               onPressed: () =>
                                   _showAddToPlaylistDialog(context),
                             ),
+                            IconButton(
+                              icon: const Icon(Icons.queue_music),
+                              tooltip: '添加到播放队列',
+                              onPressed: () async {
+                                final selectedSongs = notifier.selectedSongs;
+                                if (selectedSongs.isNotEmpty) {
+                                  await notifier.addSongsToPlayingQueue(
+                                    selectedSongs,
+                                  );
+                                  notifier.exitMultiSelectMode();
+                                }
+                              },
+                            ),
                             // 只有不是基于文件夹的歌单才显示删除按钮
                             if (!notifier
                                 .playlists[notifier.selectedIndex]
@@ -1051,6 +1096,8 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     final RenderBox overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
 
+    final iconColor = Theme.of(context).colorScheme.primary;
+
     // 检查是否是基于文件夹的播放列表
     final isFolderBasedPlaylist =
         notifier.playlists[notifier.selectedIndex].isFolderBased;
@@ -1064,10 +1111,68 @@ class _SongTileWidgetState extends State<SongTileWidget> {
         overlay.size.height - position.dy,
       ),
       items: <PopupMenuItem<String>>[
-        const PopupMenuItem<String>(value: 'moveToTop', child: Text('置于顶部')),
+        PopupMenuItem<String>(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          value: 'moveToTop',
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.arrow_circle_up_rounded, color: iconColor),
+                  const SizedBox(width: 5),
+                  const Text('置于顶部'),
+                ],
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          value: 'addToQueue',
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.playlist_add_circle_outlined, color: iconColor),
+                  const SizedBox(width: 5),
+                  const Text('添加到播放队列'),
+                ],
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          value: 'nextSong',
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.play_circle_outline_outlined, color: iconColor),
+                  const SizedBox(width: 5),
+                  const Text('作为下一首播放'),
+                ],
+              ),
+            ],
+          ),
+        ),
         // 只有非基于文件夹的播放列表才允许删除歌曲
         if (!isFolderBasedPlaylist)
-          const PopupMenuItem<String>(value: 'deleteSong', child: Text('删除歌曲')),
+          PopupMenuItem<String>(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            value: 'deleteSong',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline_outlined, color: iconColor),
+                const SizedBox(width: 5),
+                const Text('删除歌曲'),
+              ],
+            ),
+          ),
       ],
     );
 
@@ -1082,6 +1187,12 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       } else {
         await notifier.moveSongToTop(widget.index);
       }
+    } else if (result == 'addToQueue') {
+      // 添加到播放队列
+      await notifier.addToPlayingQueue(widget.song);
+    } else if (result == 'nextSong') {
+      // 作为下一首播放
+      await notifier.addToPlayingQueueNext(widget.song);
     } else if (result == 'deleteSong') {
       // 判断当前 widget 是在哪个上下文中
       final isAllSongsContext =

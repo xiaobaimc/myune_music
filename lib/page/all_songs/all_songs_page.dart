@@ -31,6 +31,13 @@ class AllSongsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
+    // 确保当前视图上下文为全部歌曲
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (notifier.currentDetailViewContext != DetailViewContext.allSongs) {
+        notifier.setActiveAllSongsView();
+      }
+    });
+
     final isSearching = notifier.isSearching;
     final colorScheme = Theme.of(context).colorScheme;
     return Column(

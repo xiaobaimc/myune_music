@@ -2,6 +2,7 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.35%2B-blue?logo=flutter)](https://flutter.dev/)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux-brightgreen)](#)
+![Rust](https://img.shields.io/badge/lang-Rust-orange)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)
 
 一个基于 **Flutter (Dart)** 实现的简洁本地音乐播放器，支持 **Windows / Linux** 双端。
@@ -39,7 +40,7 @@
 * 可自由添加 / 删除歌曲
 * 支持批量选择文件并自动去重
 
-> 两种方式均支持按 歌手/专辑 分类展示
+> 两种方式均支持按 **歌手/专辑** 分类展示
 
 ## 🎶 关于桌面歌词
 由于 [Flutter](https://flutter.dev/) 暂不支持多窗口功能，因此暂未提供桌面歌词。
@@ -82,14 +83,20 @@
 
 ## 📦 内嵌元数据支持
 
-| 音频格式     | 元数据格式               | 支持 |
-|-------------|-------------------------|-------|
-| MP3         | `ID3v1`, `ID3v2`        | ✅   |
-| MP4         | `iTunes-style ilst`     | ✅   |
-| FLAC        | `Vorbis Comments`       | ✅   |
-| OGG         | `Vorbis Comments`       | ✅   |
-| Opus        | `Vorbis Comments`       | ✅   |
-| WAV         | `RIFF`                  | ✅   |
+| 文件格式     | 元数据格式                     |
+|-------------|------------------------------|
+| AAC (ADTS)  | `ID3v2`, `ID3v1`             |
+| Ape         | `APE`, `ID3v2`, `ID3v1`      |
+| AIFF        | `ID3v2`, `Text Chunks`       |
+| FLAC        | `Vorbis Comments`, `ID3v2`   |
+| MP3         | `ID3v2`, `ID3v1`, `APE`      |
+| MP4         | `iTunes-style ilst`          |
+| MPC         | `APE`, `ID3v2`, `ID3v1`      |                        
+| Opus        | `Vorbis Comments`            |
+| Ogg Vorbis  | `Vorbis Comments`            |
+| Speex       | `Vorbis Comments`            |
+| WAV         | `ID3v2`, `RIFF INFO`         |
+| WavPack     | `APE`, `ID3v1`               |
 
 ## 🎵 支持的音频格式
 
@@ -181,7 +188,7 @@ flutter run
 
 | 插件                                                                      | 功能             |
 | ----------------------------------------------------------------------- | -------------- |
-| [audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader) | 读取音频元信息        |
+| [lofty-rs](https://github.com/serial-ata/lofty-rs) | 读取音频元信息        |
 | [media_kit](https://pub.dev/packages/media_kit)                         | 音频播放支持         |
 | [anni_mpris_service](https://pub.dev/packages/anni_mpris_service)       | D-Bus MPRIS 控件 |
 
@@ -193,7 +200,6 @@ flutter run
 * [Ferry-200](https://github.com/Ferry-200/coriander_player)
 
 > 提供了 Rust + Flutter 的 SMTC 实现参考 🙏
-
 
 ## 📄 许可证
 
@@ -207,3 +213,7 @@ flutter run
 * 字体版权归小米公司所有
 * 相关许可协议请查阅：[MiSans 字体知识产权使用许可协议](https://hyperos.mi.com/font-download/MiSans%E5%AD%97%E4%BD%93%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf)
 * MiSans 官网：[https://hyperos.mi.com/font/](https://hyperos.mi.com/font/)
+
+## Star History Chart
+
+[![Star History Chart](https://api.star-history.com/svg?repos=xiaobaimc/myune_music&type=Date)](https://star-history.com/#xiaobaimc/myune_music&Date)

@@ -176,6 +176,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 音频设备相关 ---
   List<AudioDevice> _availableAudioDevices = [];
   AudioDevice? _selectedAudioDevice;
+  bool _hasAttemptedRestore = false; // 防止每次设备列表变动都重复执行恢复逻辑
 
   List<AudioDevice> get availableAudioDevices => _availableAudioDevices;
   AudioDevice? get selectedAudioDevice => _selectedAudioDevice;
@@ -192,6 +193,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 存储从JSON加载的排序信息 ---
   Map<String, List<String>> _artistSortOrders = {};
   Map<String, List<String>> _albumSortOrders = {};
+
+  // 播放队列相关
+  List<Song>? _currentPlayingQueue; // 独立的播放队列，基于当前播放列表
+  List<String>? _currentPlayingQueueFilePaths; // 对应的文件路径列表
+  int _currentQueueIndex = -1; // 当前播放的歌曲在队列中的索引
+  bool _isUsingQueue = false; // 标记是否使用独立队列
+
+  List<Song> get playingQueue => _currentPlayingQueue ?? [];
+  List<String> get playingQueueFilePaths => _currentPlayingQueueFilePaths ?? [];
+  int get currentQueueIndex => _currentQueueIndex;
+  bool get isUsingQueue => _isUsingQueue;
 
   // --- 消息通知 ---
   final StreamController<String> _errorStreamController =
@@ -902,13 +914,53 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 获取当前播放队列的歌曲列表
   List<Song> get playingQueueSongs {
-    // 如果没有正在播放的歌单，返回空
-    if (_playingPlaylist == null || _playingPlaylist!.songs == null) {
-      return [];
+    if (_isUsingQueue && _currentPlayingQueue != null) {
+      return _currentPlayingQueue!;
+    } else {
+      if (_playingPlaylist == null || _playingPlaylist!.songs == null) {
+        return [];
+      }
+      return _playingPlaylist!.songs!;
+    }
+  }
+
+  // 将当前播放队列保存为新歌单
+  Future<bool> saveQueueAsPlaylist(
+    String playlistName,
+    List<Song> queue,
+  ) async {
+    final trimmedName = playlistName.trim();
+
+    if (trimmedName.isEmpty) {
+      _infoStreamController.add('歌单名称不能为空');
+      return false;
     }
 
-    // 直接使用_playingPlaylist对象中已解析好的songs列表
-    return _playingPlaylist!.songs!;
+    if (_playlists.any((playlist) => playlist.name == trimmedName)) {
+      _infoStreamController.add('歌单名称 "$trimmedName" 已存在');
+      return false;
+    }
+
+    if (addPlaylist(trimmedName)) {
+      final newPlaylist = _playlists[_playlists.length - 1];
+
+      // 添加歌曲路径和歌曲对象到新歌单
+      newPlaylist.songFilePaths = queue.map((song) => song.filePath).toList();
+      newPlaylist.songs = List.from(queue);
+
+      await _savePlaylists();
+
+      await _updateAllSongsList();
+
+      _infoStreamController.add(
+        '已成功创建歌单 "$trimmedName"，包含 ${queue.length} 首歌曲',
+      );
+
+      notifyListeners();
+      return true;
+    }
+
+    return false;
   }
 
   // 确保播放列表的歌曲已被解析
@@ -1010,7 +1062,51 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 根据播放模式播放下一首
   Future<void> _playNextLogic() async {
-    // 只依赖 _playingPlaylist
+    // 独立队列
+    if (_isUsingQueue &&
+        _currentPlayingQueue != null &&
+        _currentPlayingQueue!.isNotEmpty) {
+      int nextIndex;
+      final songCount = _currentPlayingQueue!.length;
+      final currentIndex = _currentQueueIndex;
+
+      if (_playMode == PlayMode.shuffle) {
+        // 只有在随机索引列表为空或者长度不匹配时才重新生成
+        if (_shuffledIndices.length != songCount) {
+          _generateShuffledIndices(count: songCount);
+        }
+
+        int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
+        // 如果当前歌曲不在随机列表中（异常情况）
+        if (currentShuffledPos == -1) {
+          // 重新生成随机列表
+          _generateShuffledIndices(count: songCount);
+          currentShuffledPos = -1; // 从新的随机列表的第一首开始
+        }
+        // 如果已经播放到列表末尾
+        else if (currentShuffledPos == _shuffledIndices.length - 1) {
+          // 播放完一轮后重新生成随机列表
+          _generateShuffledIndices(count: songCount);
+          currentShuffledPos = -1; // 从新的随机列表的第一首开始
+        }
+
+        nextIndex =
+            _shuffledIndices[(currentShuffledPos + 1) %
+                _shuffledIndices.length];
+      } else if (_playMode == PlayMode.repeatOne && _isAutoPlaying) {
+        // 只有在自动播放且为单曲循环模式时才重复播放当前歌曲
+        nextIndex = currentIndex;
+      } else {
+        // 顺序播放或其他情况（包括手动点击下一首）
+        nextIndex = (currentIndex + 1) % songCount;
+      }
+
+      _currentQueueIndex = nextIndex; // 更新队列索引
+      await _startPlaybackNow();
+      return;
+    }
+
+    // 否则按原来的逻辑播放
     if (_playingPlaylist == null || _playingPlaylist!.songFilePaths.isEmpty) {
       await stop();
       return;
@@ -1039,11 +1135,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _generateShuffledIndices(count: songCount);
         currentShuffledPos = -1; // 从新的随机列表的第一首开始
       }
-      // 有10%的概率重新生成随机列表
-      else if (_random.nextDouble() < 0.1) {
-        _generateShuffledIndices(count: songCount);
-        currentShuffledPos = -1; // 从新的随机列表的第一首开始
-      }
+      // // 有10%的概率重新生成随机列表
+      // else if (_random.nextDouble() < 0.1) {
+      //   _generateShuffledIndices(count: songCount);
+      //   currentShuffledPos = -1; // 从新的随机列表的第一首开始
+      // }
 
       nextIndex =
           _shuffledIndices[(currentShuffledPos + 1) % _shuffledIndices.length];
@@ -1065,6 +1161,42 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 播放上一首
   Future<void> playPrevious() async {
+    // 独立队列
+    if (_isUsingQueue &&
+        _currentPlayingQueue != null &&
+        _currentPlayingQueue!.isNotEmpty) {
+      int prevIndex;
+      final songCount = _currentPlayingQueue!.length;
+      final currentIndex = _currentQueueIndex;
+
+      // 根据不同的播放模式计算上一首的索引
+      if (_playMode == PlayMode.shuffle) {
+        // 随机模式下，在随机索引列表中找到上一个位置
+        if (_shuffledIndices.length != songCount) {
+          _generateShuffledIndices(count: songCount);
+        }
+
+        int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
+        if (currentShuffledPos == -1 || currentShuffledPos == 0) {
+          // 如果当前歌曲不在随机列表中，或已经是第一首，则跳到随机列表的最后一首
+          currentShuffledPos = _shuffledIndices.length;
+        }
+        prevIndex =
+            _shuffledIndices[(currentShuffledPos - 1) %
+                _shuffledIndices.length];
+      } else {
+        // 顺序播放或其他情况（包括手动点击上一首）
+        // `+ songCount` 是为了防止 `currentIndex` 为 0 时出现负数
+        prevIndex = (currentIndex - 1 + songCount) % songCount;
+      }
+
+      // 更新队列索引
+      _currentQueueIndex = prevIndex;
+      _isAutoPlaying = false;
+      await _startPlaybackNow();
+      return;
+    }
+
     if (_playingPlaylist == null || _playingPlaylist!.songFilePaths.isEmpty) {
       return;
     }
@@ -1096,6 +1228,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 更新播放索引
     _playingSongIndex = prevIndex;
     _isAutoPlaying = false;
+    await _startPlaybackNow();
+  }
+
+  // 这个方法专门用于播放抽屉内的点击事件
+  Future<void> playSongFromQueue(int index) async {
+    if (!_isUsingQueue ||
+        _currentPlayingQueue == null ||
+        index < 0 ||
+        index >= _currentPlayingQueue!.length) {
+      return;
+    }
+
+    _currentQueueIndex = index;
     await _startPlaybackNow();
   }
 
@@ -1141,10 +1286,151 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
+  void _initQueueFromCurrentPlaylist() {
+    if (_playingPlaylist != null && _playingPlaylist!.songs != null) {
+      _currentPlayingQueue = List<Song>.from(_playingPlaylist!.songs!);
+      _currentPlayingQueueFilePaths = List<String>.from(
+        _playingPlaylist!.songFilePaths,
+      );
+      _currentQueueIndex = _playingSongIndex;
+      _isUsingQueue = true;
+    }
+  }
+
+  // 批量添加歌曲到当前播放队列
+  Future<void> addSongsToPlayingQueue(List<Song> songs) async {
+    if (songs.isEmpty) return;
+
+    // 如果没有正在播放的歌单，创建一个临时播放列表
+    if (_playingPlaylist == null) {
+      await playFromDynamicList(songs, 0);
+      _infoStreamController.add('已添加 ${songs.length} 首歌曲到播放队列');
+      return;
+    }
+
+    await _ensurePlaylistSongs(_playingPlaylist!);
+
+    // 初始化
+    if (!_isUsingQueue) {
+      _initQueueFromCurrentPlaylist();
+    }
+
+    int addedCount = 0;
+    int skippedCount = 0;
+
+    for (final song in songs) {
+      // 检查歌曲是否已经在队列中
+      if (!_currentPlayingQueue!.any((s) => s.filePath == song.filePath)) {
+        // 将歌曲添加到队列的末尾
+        _currentPlayingQueue!.add(song);
+        _currentPlayingQueueFilePaths!.add(song.filePath);
+        addedCount++;
+      } else {
+        skippedCount++;
+      }
+    }
+
+    // 如果当前是随机播放模式，重新生成随机列表
+    if (_playMode == PlayMode.shuffle) {
+      _generateShuffledIndices(count: _currentPlayingQueue!.length);
+    }
+
+    String message = '';
+    if (addedCount > 0) {
+      message += '已添加 $addedCount 首歌曲到播放队列';
+    }
+    if (skippedCount > 0) {
+      if (message.isNotEmpty) message += '，';
+      message += '跳过 $skippedCount 首已在队列中的歌曲';
+    }
+
+    if (message.isNotEmpty) {
+      _infoStreamController.add(message);
+    }
+
+    notifyListeners();
+  }
+
+  // 添加歌曲到当前播放队列
+  Future<void> addToPlayingQueue(Song song) async {
+    await addSongsToPlayingQueue([song]);
+  }
+
+  // 添加歌曲到当前播放队列的下一首位置
+  Future<void> addToPlayingQueueNext(Song song) async {
+    // 如果没有正在播放的歌单，创建一个临时播放列表，只有这首歌
+    if (_playingPlaylist == null) {
+      await playFromDynamicList([song], 0);
+      _infoStreamController.add('已将歌曲设置为下一首：${song.title}');
+      return;
+    }
+
+    await _ensurePlaylistSongs(_playingPlaylist!);
+
+    // 初始化
+    if (!_isUsingQueue) {
+      _initQueueFromCurrentPlaylist();
+    }
+
+    // 检查歌曲是否已经在队列中
+    if (_currentPlayingQueue!.any((s) => s.filePath == song.filePath)) {
+      _infoStreamController.add('歌曲已在播放队列中：${song.title}');
+      return;
+    }
+
+    // 计算下一首播放的位置
+    int nextIndex = _currentQueueIndex + 1;
+    if (nextIndex < 0) nextIndex = 0; // 如果当前索引无效，则添加到开头
+
+    // 随机模式的处理
+    if (_playMode == PlayMode.shuffle) {
+      // 添加到队列中
+      _currentPlayingQueue!.insert(nextIndex, song);
+      _currentPlayingQueueFilePaths!.insert(nextIndex, song.filePath);
+
+      // 重新生成随机列表，但需要确保新添加的歌曲作为下一首播放
+      _generateShuffledIndices(count: _currentPlayingQueue!.length);
+
+      // 找到新歌曲在随机列表中的位置
+      final int newSongRandomIndex = _shuffledIndices.indexOf(nextIndex);
+
+      // 如果新歌曲不在预期位置，调整随机列表
+      if (newSongRandomIndex !=
+          _shuffledIndices.indexOf(_currentQueueIndex) + 1) {
+        // 移除新歌曲的索引
+        _shuffledIndices.remove(nextIndex);
+        // 在当前播放歌曲索引之后插入新歌曲索引
+        final int currentSongRandomPos = _shuffledIndices.indexOf(
+          _currentQueueIndex,
+        );
+        if (currentSongRandomPos >= 0) {
+          _shuffledIndices.insert(currentSongRandomPos + 1, nextIndex);
+        } else {
+          // 如果当前歌曲不在随机列表中，添加到开头
+          _shuffledIndices.insert(0, nextIndex);
+        }
+      }
+    } else {
+      // 在非随机模式下，直接插入到指定位置
+      _currentPlayingQueue!.insert(nextIndex, song);
+      _currentPlayingQueueFilePaths!.insert(nextIndex, song.filePath);
+    }
+
+    _infoStreamController.add('已将歌曲设置为下一首：${song.title}');
+
+    notifyListeners();
+  }
+
   // --- 歌曲播放 ---
 
   // 播放指定索引的歌曲
   Future<void> playSongAtIndex(int index) async {
+    // 切换到歌单播放模式，清空独立队列
+    _isUsingQueue = false;
+    _currentPlayingQueue = null;
+    _currentPlayingQueueFilePaths = null;
+    _currentQueueIndex = -1;
+
     if (_selectedIndex < 0 ||
         index < 0 ||
         index >= _currentPlaylistSongs.length) {
@@ -1159,22 +1445,33 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> _startPlaybackNow() async {
-    if (_playingPlaylist == null ||
-        _playingSongIndex < 0 ||
-        _playingSongIndex >= _playingPlaylist!.songFilePaths.length) {
-      return;
+    Song? songToPlay;
+    String? songFilePath;
+
+    if (_isUsingQueue &&
+        _currentPlayingQueue != null &&
+        _currentQueueIndex >= 0) {
+      // 使用队列中的歌曲
+      if (_currentQueueIndex >= 0 &&
+          _currentQueueIndex < _currentPlayingQueue!.length) {
+        songToPlay = _currentPlayingQueue![_currentQueueIndex];
+        songFilePath = _currentPlayingQueueFilePaths![_currentQueueIndex];
+      }
+    } else {
+      // 使用原播放列表中的歌曲
+      if (_playingSongIndex >= 0 &&
+          _playingPlaylist != null &&
+          _playingSongIndex < _playingPlaylist!.songFilePaths.length) {
+        await _ensurePlaylistSongs(_playingPlaylist!);
+        if (_playingPlaylist!.songs != null &&
+            _playingSongIndex < _playingPlaylist!.songs!.length) {
+          songToPlay = _playingPlaylist!.songs![_playingSongIndex];
+          songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
+        }
+      }
     }
 
-    // 确保播放列表的歌曲已被解析
-    await _ensurePlaylistSongs(_playingPlaylist!);
-
-    final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
-    final songToPlay = _playingPlaylist!.songs![_playingSongIndex];
-
-    // 检查文件是否存在
-    if (songToPlay.artist.contains('文件不存在')) {
-      _errorStreamController.add('文件不存在${p.basename(songFilePath)}');
-      await playNext();
+    if (songToPlay == null || songFilePath == null) {
       return;
     }
 
@@ -1327,6 +1624,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _mediaPlayer.stream.audioDevices.listen((devices) {
         _availableAudioDevices = devices;
         notifyListeners();
+
+        // 如果是第一次获取到设备列表，尝试恢复用户上次的选择
+        if (!_hasAttemptedRestore && devices.isNotEmpty) {
+          _restoreSavedDevice(devices);
+          _hasAttemptedRestore = true; // 标记已执行过恢复
+        }
       });
 
       // 获取当前选择的音频设备
@@ -1339,12 +1642,44 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
+  // 比对并恢复设备
+  Future<void> _restoreSavedDevice(List<AudioDevice> devices) async {
+    // 如果上次存的是"自动"，或者没有存储记录，则不做操作(默认为auto)
+    if (_settingsProvider.audioDeviceIsAuto) {
+      // 使用自动音频设备
+      await _mediaPlayer.setAudioDevice(AudioDevice.auto());
+      return;
+    }
+
+    final String? savedName = _settingsProvider.audioDeviceName;
+    final String? savedDesc = _settingsProvider.audioDeviceDesc;
+
+    if (savedName == null) return;
+
+    // 遍历当前可用设备列表进行比对
+    // 这里比对name和description，比直接对比对象更安全
+    try {
+      final matchedDevice = devices.firstWhere((device) {
+        return device.name == savedName && device.description == savedDesc;
+      });
+
+      await _mediaPlayer.setAudioDevice(matchedDevice);
+      // 不需要手动设 _selectedAudioDevice，stream.audioDevice 会回调更新
+    } catch (e) {
+      // firstWhere 没找到会抛出异常，说明上次保存的设备当前不可用
+      // 此时不做任何操作，保持auto即可
+      _errorStreamController.add('恢复音频设备失败: $e');
+    }
+  }
+
   // 选择音频设备
   Future<void> selectAudioDevice(AudioDevice device) async {
     try {
       await _mediaPlayer.setAudioDevice(device);
       _selectedAudioDevice = device;
       notifyListeners();
+
+      _settingsProvider.setAudioDevice(device.name, device.description);
     } catch (e) {
       _errorStreamController.add('设置音频设备失败: $e');
     }
@@ -1356,6 +1691,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _mediaPlayer.setAudioDevice(AudioDevice.auto());
       _selectedAudioDevice = AudioDevice.auto();
       notifyListeners();
+
+      _settingsProvider.setAudioDeviceToAuto();
     } catch (e) {
       _errorStreamController.add('设置自动音频设备失败: $e');
     }
@@ -2705,21 +3042,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
 
     // 所有后续的播放逻辑都将在这个临时歌单上进行
-    await _startPlaybackNow();
-  }
-
-  // 这个方法专门用于播放抽屉内的点击事件
-  Future<void> playSongFromQueue(int indexInQueue) async {
-    // 安全检查
-    if (_playingPlaylist == null ||
-        indexInQueue < 0 ||
-        indexInQueue >= _playingPlaylist!.songFilePaths.length) {
-      return;
-    }
-
-    // 只更新歌曲索引
-    _playingSongIndex = indexInQueue;
-
     await _startPlaybackNow();
   }
 

@@ -4,10 +4,11 @@ use std::path::Path;
 
 // Lofty 相关的导入
 use lofty::config::{ParseOptions, ParsingMode};
+use lofty::file::TaggedFile;
 use lofty::prelude::*;
 use lofty::probe::Probe;
+use lofty::read_from_path;
 use lofty::tag::{Accessor, ItemKey};
-use lofty::file::TaggedFile;
 
 #[derive(Debug)]
 #[frb(non_opaque)]
@@ -31,19 +32,8 @@ pub struct AudioInfo {
 }
 
 fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFile, String> {
-    let strict_result = Probe::open(path)
-        .map_err(|e| e.to_string())?
-        .options(
-            ParseOptions::new()
-                .parsing_mode(ParsingMode::Strict) 
-                .read_properties(options.need_audio_props)
-                .read_tags(true)
-                .read_cover_art(options.need_cover),
-        )
-        .read();
-
-    if let Ok(file) = strict_result {
-        // 检查是否真的读到标签/封面
+    // read_from_path
+    if let Ok(file) = read_from_path(path) {
         let has_tag = file.primary_tag().is_some() || !file.tags().is_empty();
         let has_cover = !options.need_cover
             || file
@@ -56,15 +46,15 @@ fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFil
         }
     }
 
-    // fallback Relaxed
+    // Relaxed Probe
     Probe::open(path)
         .map_err(|e| e.to_string())?
         .options(
             ParseOptions::new()
                 .parsing_mode(ParsingMode::Relaxed) // 宽容，救命
-                .read_properties(options.need_audio_props)
                 .read_tags(true)
-                .read_cover_art(options.need_cover),
+                .read_cover_art(options.need_cover)
+                .read_properties(options.need_audio_props),
         )
         .read()
         .map_err(|e| e.to_string())
