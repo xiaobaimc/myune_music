@@ -1233,15 +1233,28 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 这个方法专门用于播放抽屉内的点击事件
   Future<void> playSongFromQueue(int index) async {
-    if (!_isUsingQueue ||
-        _currentPlayingQueue == null ||
-        index < 0 ||
-        index >= _currentPlayingQueue!.length) {
-      return;
-    }
+    if (_isUsingQueue) {
+      // 队列模式下：播放队列中的歌曲
+      if (_currentPlayingQueue == null ||
+          index < 0 ||
+          index >= _currentPlayingQueue!.length) {
+        return;
+      }
 
-    _currentQueueIndex = index;
-    await _startPlaybackNow();
+      _currentQueueIndex = index;
+      await _startPlaybackNow();
+    } else {
+      // 歌单模式下：播放当前播放列表中的歌曲
+      if (_playingPlaylist == null ||
+          _playingPlaylist!.songs == null ||
+          index < 0 ||
+          index >= _playingPlaylist!.songs!.length) {
+        return;
+      }
+
+      _playingSongIndex = index;
+      await _startPlaybackNow();
+    }
   }
 
   // 切换播放模式
@@ -2035,7 +2048,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       );
 
       if (metadata.lyrics != null && metadata.lyrics!.isNotEmpty) {
-        _currentLyrics = _parseLrcContent([metadata.lyrics!]);
+        final lines = metadata.lyrics!.split(RegExp(r'\r?\n'));
+        _currentLyrics = _parseLrcContent(lines);
         notifyListeners();
         return;
       }
@@ -2482,36 +2496,60 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 解析歌词
   List<LyricLine> _parseLrcContent(List<String> lines) {
     final Map<Duration, List<String>> groupedLyrics = {};
+    final Map<Duration, List<List<LyricToken>>> karaokeTokenMap = {};
+
     // 兼容不带毫秒的时间戳格式（到底是谁在用这种）
     final RegExp timeStampRegExp = RegExp(
-      r'\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\](.*)',
+      r'\[(\d{1,2}):(\d{2})[.:](\d{1,3})\](.*)',
     );
 
     for (final line in lines) {
       final matches = timeStampRegExp.allMatches(line);
 
       // 跳过无时间戳的行
-      if (matches.isEmpty) continue;
+      if (matches.isEmpty) {
+        continue;
+      }
 
-      for (final match in matches) {
-        try {
-          final int minutes = int.parse(match.group(1)!);
-          final int seconds = int.parse(match.group(2)!);
-          // 处理可选的毫秒部分
-          final int milliseconds = match.group(3) != null
-              ? int.parse(match.group(3)!.padRight(3, '0'))
-              : 0;
-          final Duration timestamp = Duration(
-            minutes: minutes,
-            seconds: seconds,
-            milliseconds: milliseconds,
-          );
+      // 只处理每行的第一个时间戳作为该行的起始时间
+      // 行内后续的时间戳会被 _parseKaraokeTokens 识别为逐字标记
+      final match = matches.first;
 
-          // 获取歌词内容：时间戳之后的内容
-          final String text = match.group(4)!.trim();
+      try {
+        final int minutes = int.parse(match.group(1)!);
+        final int seconds = int.parse(match.group(2)!);
+        // 处理可选的毫秒部分
+        final int milliseconds = match.group(3) != null
+            ? int.parse(match.group(3)!.padRight(3, '0'))
+            : 0;
+        final Duration timestamp = Duration(
+          minutes: minutes,
+          seconds: seconds,
+          milliseconds: milliseconds,
+        );
 
-          // 清除逐字歌词里的时间标记（ <> [] () ）
-          final String cleanedText = text.replaceAll(
+        // 获取歌词内容
+        final String rawText = match.group(4)!.trim();
+
+        // 检查是否为逐字歌词格式
+        if (_isKaraokeLyric(rawText)) {
+          final tokens = _parseKaraokeTokens(rawText, timestamp);
+          final displayText = _extractDisplayText(rawText);
+
+          if (displayText.isNotEmpty) {
+            // 添加到对应时间戳的文本列表中
+            groupedLyrics.putIfAbsent(timestamp, () => []).add(displayText);
+          }
+
+          // 将当前行的tokens添加到列表中，而不是覆盖
+          // 这样可以支持多行共享同一时间戳的逐字歌词
+          if (tokens.isNotEmpty) {
+            karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
+          }
+        } else {
+          // 清除普通歌词里的时间标记（ <> [] () ）
+          // 这里是为了解析逐字歌词失败时不被时间标记所污染
+          final String cleanedText = rawText.replaceAll(
             RegExp(
               r'(<\d{2}:\d{2}\.\d{2,3}>|\[\d{2}:\d{2}\.\d{2,3}\]|\(\d{2}:\d{2}\.\d{2,3}\))',
             ),
@@ -2520,19 +2558,144 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
           if (cleanedText.isEmpty) continue;
           groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
-        } catch (e) {
-          _errorStreamController.add('无法解析当前歌词');
         }
+      } catch (e) {
+        _errorStreamController.add('无法解析当前歌词');
       }
     }
 
     final List<LyricLine> parsedLyrics =
         groupedLyrics.entries
-            .map((entry) => LyricLine(timestamp: entry.key, texts: entry.value))
+            .map(
+              (entry) => LyricLine(
+                timestamp: entry.key,
+                texts: entry.value,
+                tokens: karaokeTokenMap[entry.key],
+              ),
+            )
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
     return parsedLyrics;
+  }
+
+  // 检测是否为逐字歌词格式
+  bool _isKaraokeLyric(String text) {
+    if (RegExp(r'<\d+:\d+').hasMatch(text)) return true;
+    return RegExp(r'\[\d{2}:\d{2}(\.\d+)?\]').hasMatch(text);
+  }
+
+  // 从逐字歌词中提取显示文本
+  String _extractDisplayText(String rawText) {
+    // 移除所有时间戳标记，保留纯文本内容
+    return rawText
+        .replaceAll(
+          RegExp(
+            r'<\d{2}:\d{2}\.\d{2,3}>|\[\d{2}:\d{2}\.\d{2,3}\]|\(\d{2}:\d{2}\.\d{2,3}\)',
+          ),
+          '',
+        )
+        .trim();
+  }
+
+  List<LyricToken> _parseKaraokeTokens(String rawText, Duration lineStart) {
+    final List<LyricToken> tokens = [];
+
+    final RegExp inline = RegExp(r'<(\d{2}):(\d{2})\.(\d{2,3})>');
+    final RegExp bracket = RegExp(r'\[(\d{2}):(\d{2})\.(\d{2,3})\]');
+
+    final matches = inline.allMatches(rawText).isNotEmpty
+        ? inline.allMatches(rawText).toList()
+        : bracket.allMatches(rawText).toList();
+
+    // 处理第一个时间戳之前的文本
+    if (matches.isNotEmpty && matches.first.start > 0) {
+      final firstText = rawText.substring(0, matches.first.start);
+      if (firstText.isNotEmpty) {
+        // 不使用 trim().isEmpty，保留空格
+        tokens.add(
+          LyricToken(
+            text: firstText,
+            start: lineStart,
+            end: _parseTimestamp(matches.first), // 结束时间是下一个时间戳的开始
+          ),
+        );
+      }
+    }
+
+    // 处理匹配到的时间戳及其后的文本
+    for (int i = 0; i < matches.length; i++) {
+      final cur = matches[i];
+      final next = i + 1 < matches.length ? matches[i + 1] : null;
+
+      final start = _parseTimestamp(cur);
+
+      final textStart = cur.end;
+      final textEnd = next?.start ?? rawText.length;
+      final text = rawText.substring(textStart, textEnd);
+
+      // 不使用trim().isEmpty 会丢失单词间的空格
+      if (text.isEmpty) continue;
+
+      tokens.add(
+        LyricToken(
+          text: text,
+          start: start,
+          end: start, // 暂时占位
+        ),
+      );
+    }
+
+    // 补充end时间
+    for (int i = 0; i < tokens.length; i++) {
+      // 如果不是最后一个token，end 就是下一个token的start
+      if (i + 1 < tokens.length) {
+        tokens[i] = LyricToken(
+          text: tokens[i].text,
+          start: tokens[i].start,
+          end: tokens[i + 1].start,
+        );
+      } else {
+        // 最后一个token，使用fallback
+        tokens[i] = LyricToken(
+          text: tokens[i].text,
+          start: tokens[i].start,
+          end: _fallbackEndForToken(tokens[i].start),
+        );
+      }
+    }
+
+    // 如果没有匹配到任何内部时间戳，但rawText有内容，直接作为整句处理
+    if (tokens.isEmpty && rawText.isNotEmpty) {
+      tokens.add(
+        LyricToken(
+          text: rawText,
+          start: lineStart,
+          end: _fallbackEndForToken(lineStart),
+        ),
+      );
+    }
+
+    return tokens;
+  }
+
+  // 统一解析 match 中的时间
+  Duration _parseTimestamp(Match match) {
+    final minutes = int.parse(match.group(1)!);
+    final seconds = int.parse(match.group(2)!);
+    final millisecondsStr = match.group(3)!;
+    final milliseconds = int.parse(millisecondsStr.padRight(3, '0'));
+    return Duration(
+      minutes: minutes,
+      seconds: seconds,
+      milliseconds: milliseconds,
+    );
+  }
+
+  // 为token提供一个合理的结束时间fallback
+  Duration _fallbackEndForToken(Duration start) {
+    return start +
+        const Duration(milliseconds: 500); // 使用token开始时间+500ms作为默认持续时间
   }
 
   void updateLyricLine(Duration currentPosition) {

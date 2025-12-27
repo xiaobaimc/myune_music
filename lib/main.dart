@@ -137,6 +137,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with TrayListener {
   late PlaylistContentNotifier _playlistNotifier;
+  bool _taskbarReady = false;
 
   @override
   void initState() {
@@ -144,8 +145,11 @@ class _MyAppState extends State<MyApp> with TrayListener {
     super.initState();
 
     // 确保窗口已经初始化
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (Platform.isWindows) {
+        // 等待窗口完全准备就绪后再初始化任务栏功能
+        await Future.delayed(const Duration(milliseconds: 100));
+        _taskbarReady = true; // 标记任务栏功能已准备就绪
         _initializeThumbnailToolbar();
         _initializeTaskbarProgress();
       }
@@ -167,27 +171,37 @@ class _MyAppState extends State<MyApp> with TrayListener {
   }
 
   void _onSettingsChanged() {
-    final settings = context.read<SettingsProvider>();
-    if (!settings.showTaskbarProgress) {
-      // 当关闭任务栏进度显示时，立即重置进度条状态
-      if (Platform.isWindows) {
-        WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
-      }
-    } else {
-      // 当开启任务栏进度显示时，根据当前播放状态设置进度条模式
-      if (Platform.isWindows) {
-        if (_playlistNotifier.isPlaying) {
-          WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
-        } else {
-          WindowsTaskbar.setProgressMode(TaskbarProgressMode.paused);
+    try {
+      final settings = context.read<SettingsProvider>();
+      if (!settings.showTaskbarProgress) {
+        // 当关闭任务栏进度显示时，立即重置进度条状态
+        if (Platform.isWindows && _taskbarReady) {
+          try {
+            WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+          } catch (_) {}
+        }
+      } else {
+        // 当开启任务栏进度显示时，根据当前播放状态设置进度条模式
+        if (Platform.isWindows && _taskbarReady) {
+          try {
+            if (_playlistNotifier.isPlaying) {
+              WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
+            } else {
+              WindowsTaskbar.setProgressMode(TaskbarProgressMode.paused);
+            }
+          } catch (_) {}
         }
       }
+    } catch (e) {
+      debugPrint('_onSettingsChanged出现错误: $e');
     }
   }
 
   Future<void> _initializeThumbnailToolbar() async {
-    WindowsTaskbar.setWindowTitle('MyuneMusic');
+    if (!_taskbarReady) return;
+
     try {
+      WindowsTaskbar.setWindowTitle('MyuneMusic');
       await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon('assets/images/icon/prev.ico'),
@@ -209,12 +223,13 @@ class _MyAppState extends State<MyApp> with TrayListener {
       // 初始化任务栏进度模式
       await WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
     } catch (e) {
-      // FIXME: 这里有报错，不影响使用（可能的原因是taskbar相关api被调用得太早了，考虑在窗口完全准备好之后再调用）
       debugPrint('_initializeThumbnailToolbar出现错误: $e');
     }
   }
 
   Future<void> _updateThumbnailToolbar() async {
+    if (!_taskbarReady) return;
+
     try {
       final isPlaying = _playlistNotifier.isPlaying;
 
@@ -248,42 +263,59 @@ class _MyAppState extends State<MyApp> with TrayListener {
     final settings = context.read<SettingsProvider>();
 
     // 监听播放进度变化以更新任务栏进度
-    _playlistNotifier.mediaPlayer.stream.position.listen((position) {
-      if (!settings.showTaskbarProgress) return;
+    _playlistNotifier.mediaPlayer.stream.position.listen((position) async {
+      if (!_taskbarReady || !settings.showTaskbarProgress) return;
 
-      final duration = _playlistNotifier.totalDuration;
-      if (duration != Duration.zero) {
-        final progress =
-            (position.inMilliseconds / duration.inMilliseconds * 100).round();
-        WindowsTaskbar.setProgress(progress.clamp(0, 100), 100);
-      }
+      final bool isVisible = await windowManager.isVisible();
+      if (!isVisible) return;
+
+      try {
+        final duration = _playlistNotifier.totalDuration;
+        if (duration != Duration.zero) {
+          final progress =
+              (position.inMilliseconds / duration.inMilliseconds * 100).round();
+          WindowsTaskbar.setProgress(progress.clamp(0, 100), 100);
+        }
+      } catch (_) {}
     });
 
     // 监听播放状态变化
-    _playlistNotifier.mediaPlayer.stream.playing.listen((playing) {
-      if (!settings.showTaskbarProgress) {
+    _playlistNotifier.mediaPlayer.stream.playing.listen((playing) async {
+      if (!_taskbarReady || !settings.showTaskbarProgress) {
         // 当关闭任务栏进度显示时，重置进度条状态
-        WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+        try {
+          WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+        } catch (_) {}
         return;
       }
 
-      if (playing) {
-        WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
-      } else {
-        WindowsTaskbar.setProgressMode(TaskbarProgressMode.paused);
-      }
+      final bool isVisible = await windowManager.isVisible();
+      if (!isVisible) return;
+
+      try {
+        WindowsTaskbar.setProgressMode(
+          playing ? TaskbarProgressMode.normal : TaskbarProgressMode.paused,
+        );
+      } catch (_) {}
     });
 
     // 监听播放完成
-    _playlistNotifier.mediaPlayer.stream.completed.listen((completed) {
-      if (!settings.showTaskbarProgress) {
+    _playlistNotifier.mediaPlayer.stream.completed.listen((completed) async {
+      if (!_taskbarReady || !settings.showTaskbarProgress) {
         // 当关闭任务栏进度显示时，重置进度条状态
-        WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+        try {
+          WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+        } catch (_) {}
         return;
       }
 
+      final bool isVisible = await windowManager.isVisible();
+      if (!isVisible) return;
+
       if (completed) {
-        WindowsTaskbar.setProgress(0, 100);
+        try {
+          WindowsTaskbar.setProgress(0, 100);
+        } catch (_) {}
       }
     });
   }

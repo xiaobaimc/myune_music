@@ -88,7 +88,19 @@ class LyricLine {
   final Duration timestamp;
   final List<String> texts;
 
-  LyricLine({required this.timestamp, required this.texts});
+  final List<List<LyricToken>>? tokens;
+
+  LyricLine({required this.timestamp, required this.texts, this.tokens});
+
+  bool get isKaraoke => tokens != null && tokens!.isNotEmpty;
+}
+
+class LyricToken {
+  final String text;
+  final Duration start;
+  final Duration end;
+
+  LyricToken({required this.text, required this.start, required this.end});
 }
 
 class SongDetails {

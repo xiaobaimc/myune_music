@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'dart:ui' as ui;
 import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+
 import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
@@ -125,6 +128,114 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     }
   }
 
+  // 构建逐字歌词的RichText
+  Widget _buildKaraokeRichText(
+    List<LyricToken> tokens,
+    bool isCurrent,
+    double fontSize,
+    ColorScheme colorScheme,
+  ) {
+    // 获取当前播放位置和播放状态
+    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+      context,
+      listen: false,
+    );
+    final currentPosition = playlistNotifier.currentPosition;
+    final isPlaying = playlistNotifier.isPlaying;
+
+    final List<InlineSpan> children = [];
+
+    for (final token in tokens) {
+      children.add(
+        WidgetSpan(
+          child: AnimatedKaraokeWord(
+            text: token.text,
+            fontSize: fontSize,
+            fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+            startTime: token.start,
+            duration: token.end - token.start,
+            currentTime: currentPosition,
+            baseColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            highlightColor: colorScheme.primary,
+            isPlaying: isPlaying,
+          ),
+        ),
+      );
+    }
+
+    return Text.rich(
+      TextSpan(children: children),
+      textAlign: _lastAlignment ?? TextAlign.center, // 文本对齐
+    );
+  }
+
+  // 处理逐字歌词
+  Widget _buildMultiLineKaraokeRichText(
+    List<List<LyricToken>> multiLineTokens,
+    bool isCurrent,
+    double fontSize,
+    ColorScheme colorScheme,
+  ) {
+    // 获取当前播放位置和播放状态
+    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+      context,
+      listen: false,
+    );
+    final currentPosition = playlistNotifier.currentPosition;
+    final isPlaying = playlistNotifier.isPlaying;
+
+    final List<Widget> lines = [];
+
+    for (int lineIndex = 0; lineIndex < multiLineTokens.length; lineIndex++) {
+      final List<LyricToken> tokens = multiLineTokens[lineIndex];
+      final List<InlineSpan> children = [];
+
+      for (final token in tokens) {
+        children.add(
+          WidgetSpan(
+            child: AnimatedKaraokeWord(
+              text: token.text,
+              fontSize: fontSize,
+              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+              startTime: token.start,
+              duration: token.end - token.start,
+              currentTime: currentPosition,
+              baseColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+              highlightColor: colorScheme.primary,
+              isPlaying: isPlaying,
+            ),
+          ),
+        );
+      }
+
+      lines.add(
+        Text.rich(
+          TextSpan(children: children),
+          textAlign: _lastAlignment ?? TextAlign.center,
+        ),
+      );
+
+      // 如果不是最后一行，添加一些间距
+      if (lineIndex < multiLineTokens.length - 1) {
+        lines.add(const SizedBox(height: 4));
+      }
+    }
+
+    // 根据文本对齐方式设置Column的对齐方式
+    CrossAxisAlignment columnAlignment = CrossAxisAlignment.start;
+    if (_lastAlignment == TextAlign.center) {
+      columnAlignment = CrossAxisAlignment.center;
+    } else if (_lastAlignment == TextAlign.right) {
+      columnAlignment = CrossAxisAlignment.end;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: columnAlignment, // 容器对齐
+      children: lines,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
@@ -217,6 +328,10 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                 final int lyricIndex = index - paddingItemCount;
                 final line = widget.lyrics[lyricIndex];
                 final isCurrent = lyricIndex == widget.currentIndex;
+
+                // 检查是否为卡拉OK歌词行
+                final isKaraokeLine = line.isKaraoke;
+
                 final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
 
                 // 计算当前行与目标行之间的距离
@@ -240,44 +355,118 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
                 final List<Widget> columnChildren = [];
 
-                for (int i = 0; i < visibleTexts.length; i++) {
-                  final textWidget = Text(
-                    visibleTexts.elementAt(i),
-                    textAlign: lyricAlignment,
-                    style: TextStyle(
-                      fontSize: fontSize, // 动态字体大小
-                      height: 1.2,
-                      color: isCurrent
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  );
+                // 如果是当前行且是卡拉OK歌词，则使用逐字高亮
+                if (isKaraokeLine && isCurrent) {
+                  // 检查tokens是List<LyricToken>还是List<List<LyricToken>>
+                  if (line.tokens is List<List<LyricToken>>) {
+                    final allTokens = line.tokens as List<List<LyricToken>>;
+                    // 根据 maxLinesPerLyric 限制 tokens 行数
+                    final tokensToDisplay = allTokens
+                        .take(widget.maxLinesPerLyric)
+                        .toList();
+                    final textWidget = _buildMultiLineKaraokeRichText(
+                      tokensToDisplay,
+                      isCurrent,
+                      fontSize,
+                      colorScheme,
+                    );
 
-                  columnChildren.add(
-                    AnimatedScale(
-                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeInOutSine,
-                      scale: isCurrent ? 1.02 : 1,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        child: isCurrent || !shouldBlur
-                            ? textWidget
-                            : ImageFiltered(
-                                imageFilter: ui.ImageFilter.blur(
-                                  sigmaX: calculateSigma(distance),
-                                  sigmaY: calculateSigma(distance),
+                    columnChildren.add(
+                      AnimatedScale(
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutSine,
+                        scale: isCurrent ? 1.02 : 1,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: isCurrent || !shouldBlur
+                              ? textWidget
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
+                                  ),
+                                  child: textWidget,
                                 ),
-                                child: textWidget,
-                              ),
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } else {
+                    final textWidget = _buildKaraokeRichText(
+                      line.tokens! as List<LyricToken>,
+                      isCurrent,
+                      fontSize,
+                      colorScheme,
+                    );
 
-                  // 在每行歌词之间添加间距（除了最后一行）
-                  if (i < visibleTexts.length - 1) {
-                    columnChildren.add(const SizedBox(height: 10));
+                    columnChildren.add(
+                      AnimatedScale(
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutSine,
+                        scale: isCurrent ? 1.02 : 1,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: isCurrent || !shouldBlur
+                              ? textWidget
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
+                                  ),
+                                  child: textWidget,
+                                ),
+                        ),
+                      ),
+                    );
+                  }
+                } else {
+                  // 非卡拉OK歌词的处理
+                  for (int i = 0; i < visibleTexts.length; i++) {
+                    final Widget textWidget = Text(
+                      visibleTexts.elementAt(i),
+                      textAlign: lyricAlignment, // 文本对齐
+                      style: TextStyle(
+                        fontSize: fontSize, // 动态字体大小
+                        height: 1.2,
+                        color: isCurrent
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.7,
+                              ),
+                        fontWeight: isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
+                    );
+
+                    columnChildren.add(
+                      AnimatedScale(
+                        alignment: _getAlignmentFromTextAlign(
+                          lyricAlignment,
+                        ), // 容器对齐
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutSine,
+                        scale: isCurrent ? 1.02 : 1,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: isCurrent || !shouldBlur
+                              ? textWidget
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
+                                  ),
+                                  child: textWidget,
+                                ),
+                        ),
+                      ),
+                    );
+
+                    // 在每行歌词之间添加间距（除了最后一行）
+                    if (i < visibleTexts.length - 1) {
+                      columnChildren.add(const SizedBox(height: 10));
+                    }
                   }
                 }
 
@@ -376,11 +565,11 @@ class LyricsView extends StatelessWidget {
       listen: true,
     );
 
-    return StreamBuilder<int>(
-      stream: playlistNotifier.lyricLineIndexStream,
-      initialData: playlistNotifier.currentLyricLineIndex,
-      builder: (context, snapshot) {
-        final currentLyricLineIndex = snapshot.data ?? -1;
+    // 使用StreamBuilder监听播放状态变化，但不是用于直接驱动UI动画
+    return StreamBuilder<bool>(
+      stream: playlistNotifier.mediaPlayer.stream.playing,
+      builder: (context, playingSnapshot) {
+        final currentLyricLineIndex = playlistNotifier.currentLyricLineIndex;
         final currentLyrics = playlistNotifier.currentLyrics;
 
         final lyricsWidget = LyricsWidget(
@@ -455,5 +644,164 @@ class LyricsView extends StatelessWidget {
         }
       },
     );
+  }
+}
+
+class AnimatedKaraokeWord extends StatefulWidget {
+  final String text;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final Duration startTime;
+  final Duration duration;
+  final Duration currentTime;
+  final Color baseColor;
+  final Color highlightColor;
+  final bool isPlaying;
+
+  const AnimatedKaraokeWord({
+    super.key,
+    required this.text,
+    required this.fontSize,
+    required this.fontWeight,
+    required this.startTime,
+    required this.duration,
+    required this.currentTime,
+    required this.baseColor,
+    required this.highlightColor,
+    required this.isPlaying,
+  });
+
+  @override
+  State<AnimatedKaraokeWord> createState() => _AnimatedKaraokeWordState();
+}
+
+class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
+    with TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+  Duration _lastAudioTime = Duration.zero;
+  DateTime? _lastAudioUpdateTime;
+  Duration _uiTime = Duration.zero;
+  Ticker? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: widget.duration,
+      vsync: this,
+    );
+    _animation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(_animationController);
+
+    _lastAudioTime = widget.currentTime;
+    _lastAudioUpdateTime = DateTime.now();
+
+    _startTicker();
+  }
+
+  @override
+  void didUpdateWidget(AnimatedKaraokeWord oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // 检查音频时间是否更新
+    if (oldWidget.currentTime != widget.currentTime) {
+      _lastAudioTime = widget.currentTime;
+      _lastAudioUpdateTime = DateTime.now();
+    }
+
+    // 检查播放状态是否变化
+    if (oldWidget.isPlaying != widget.isPlaying) {
+      if (widget.isPlaying) {
+        // 从暂停恢复播放，更新参考时间
+        _lastAudioUpdateTime = DateTime.now();
+      }
+    }
+
+    // 检查动画参数是否变化
+    if (oldWidget.duration != widget.duration) {
+      _animationController.duration = widget.duration;
+    }
+  }
+
+  void _startTicker() {
+    // 创建一个每帧更新的Ticker
+    _ticker = createTicker((elapsed) {
+      if (widget.isPlaying) {
+        // 基于上次音频时间 + 经过的时间
+        if (_lastAudioUpdateTime != null) {
+          final now = DateTime.now();
+          final timeSinceLastUpdate = now.difference(_lastAudioUpdateTime!);
+          _uiTime = _lastAudioTime + timeSinceLastUpdate;
+        }
+      } else {
+        _uiTime = _lastAudioTime;
+      }
+
+      // 更新动画值
+      final progress = _calculateProgress(_uiTime);
+      _animationController.value = progress.clamp(0.0, 1.0);
+
+      // 如果当前时间超出动画范围，停止动画
+      if (progress >= 1.0) {
+        _animationController.stop();
+      }
+    });
+    _ticker!.start();
+  }
+
+  double _calculateProgress(Duration currentTime) {
+    if (currentTime < widget.startTime) {
+      return 0.0;
+    } else if (currentTime >= widget.startTime + widget.duration) {
+      return 1.0;
+    } else {
+      final elapsed = (currentTime - widget.startTime).inMilliseconds
+          .toDouble();
+      final total = widget.duration.inMilliseconds.toDouble();
+      return total > 0 ? elapsed / total : 0.0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (Rect bounds) {
+            return LinearGradient(
+              colors: [
+                widget.highlightColor,
+                widget.highlightColor,
+                widget.baseColor,
+                widget.baseColor,
+              ],
+              stops: [0.0, _animation.value, _animation.value, 1.0],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ).createShader(bounds);
+          },
+          child: Text(
+            widget.text,
+            style: TextStyle(
+              fontSize: widget.fontSize,
+              fontWeight: widget.fontWeight,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _ticker?.stop();
+    _ticker?.dispose();
+    _animationController.dispose();
+    super.dispose();
   }
 }
