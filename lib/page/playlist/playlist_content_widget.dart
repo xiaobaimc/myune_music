@@ -693,7 +693,13 @@ class HeadSongListWidget extends StatelessWidget {
                         onPressed: notifier.stopSearch, // 点击关闭按钮，退出搜索
                       ),
                     ),
-                    onChanged: (keyword) => notifier.search(keyword),
+                    onChanged: (keyword) {
+                      if (notifier.currentDetailViewContext !=
+                          DetailViewContext.playlist) {
+                        notifier.setViewContextForPlaylist();
+                      }
+                      notifier.search(keyword);
+                    },
                   )
                 // --- 正常状态下显示的UI ---
                 : Selector<PlaylistContentNotifier, (String, bool, bool)>(
@@ -823,7 +829,13 @@ class HeadSongListWidget extends StatelessWidget {
                               IconButton(
                                 icon: const Icon(Icons.search),
                                 tooltip: '搜索歌曲',
-                                onPressed: notifier.startSearch, // 点击触发搜索
+                                onPressed: () {
+                                  if (notifier.currentDetailViewContext !=
+                                      DetailViewContext.playlist) {
+                                    notifier.setViewContextForPlaylist();
+                                  }
+                                  notifier.startSearch(); // 点击触发搜索
+                                },
                               ),
                             // 为基于文件夹的播放列表添加刷新按钮
                             if (isPlaylistSelected &&

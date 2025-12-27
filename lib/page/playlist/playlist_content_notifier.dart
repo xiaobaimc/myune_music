@@ -3478,6 +3478,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // --- 搜索相关 ---
+
+  void setViewContextForPlaylist() {
+    _currentDetailViewContext = DetailViewContext.playlist;
+  }
+
   void startSearch() {
     if (_isSearching) return;
     _isSearching = true;
