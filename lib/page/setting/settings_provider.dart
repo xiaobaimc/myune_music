@@ -30,6 +30,7 @@ class SettingsProvider with ChangeNotifier {
   static const _audioDeviceNameKey = 'audio_device_name';
   static const _audioDeviceDescKey = 'audio_device_desc';
   static const _audioDeviceIsAutoKey = 'audio_device_is_auto';
+  static const _ignorePlaybackErrorsKey = 'ignorePlaybackErrors';
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 20.0; // 默认字体大小
@@ -47,6 +48,7 @@ class SettingsProvider with ChangeNotifier {
   bool _audioDeviceIsAuto = true; // 默认音频设备为自动
   String? _audioDeviceName; // 音频设备名称
   String? _audioDeviceDesc; // 音频设备描述
+  bool _ignorePlaybackErrors = false; // 默认不忽略播放错误
 
   bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
@@ -85,6 +87,7 @@ class SettingsProvider with ChangeNotifier {
   bool get audioDeviceIsAuto => _audioDeviceIsAuto;
   String? get audioDeviceName => _audioDeviceName;
   String? get audioDeviceDesc => _audioDeviceDesc;
+  bool get ignorePlaybackErrors => _ignorePlaybackErrors;
 
   SettingsProvider() {
     _loadFromPrefs();
@@ -120,6 +123,7 @@ class SettingsProvider with ChangeNotifier {
     _audioDeviceIsAuto = prefs.getBool(_audioDeviceIsAutoKey) ?? true;
     _audioDeviceName = prefs.getString(_audioDeviceNameKey);
     _audioDeviceDesc = prefs.getString(_audioDeviceDescKey);
+    _ignorePlaybackErrors = prefs.getBool(_ignorePlaybackErrorsKey) ?? false;
 
     // 加载隐藏页面设置
     final hiddenPagesList = prefs.getStringList(_hiddenPagesKey);
@@ -304,5 +308,12 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setBool(_audioDeviceIsAutoKey, true);
     await prefs.remove(_audioDeviceNameKey);
     await prefs.remove(_audioDeviceDescKey);
+  }
+
+  void setIgnorePlaybackErrors(bool value) async {
+    _ignorePlaybackErrors = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_ignorePlaybackErrorsKey, value);
   }
 }

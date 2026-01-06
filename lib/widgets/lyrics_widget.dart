@@ -1,3 +1,18 @@
+/* 
+FIXME: 假设以下格式
+`
+[00:08.220]First [00:08.412]things [00:08.882]first[00:09.378]
+[00:08.220]最初的最初
+`
+在 _parseLrcContent 方法中 会将第1行检测为卡拉OK格式；
+
+而对于 `[00:08.220]最初的最初` 他没有内部时间戳 解析出"最初的最初"并添加到 groupedLyrics 中
+
+在 LyricsWidget 中 当显示高亮行时，如果检测到该行是卡拉OK格式 即isKaraokeLine为true
+则只显示卡拉OK效果 而不会显示同一时间戳下的标准LRC格式译文
+
+当同一时间戳有多种格式的歌词时 会优先处理卡拉OK格式，导致标准LRC格式的译文在高亮行时无法显示
+*/
 import 'dart:ui' as ui;
 import 'dart:async';
 

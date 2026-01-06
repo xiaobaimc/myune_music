@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
 import '../widgets/app_window_title_bar.dart';
@@ -37,6 +38,26 @@ class _AppShellState extends State<AppShell> {
                     const Icon(Icons.error, color: Colors.white),
                     const SizedBox(width: 8),
                     Expanded(child: Text(errorMessage)),
+                    TextButton(
+                      onPressed: () =>
+                          Clipboard.setData(ClipboardData(text: errorMessage)),
+                      child: Text(
+                        '复制',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onError,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+                      child: Text(
+                        '关闭',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onError,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -47,12 +68,6 @@ class _AppShellState extends State<AppShell> {
                 borderRadius: BorderRadius.circular(8),
               ),
               margin: const EdgeInsets.only(bottom: 80, left: 12, right: 12),
-              action: SnackBarAction(
-                label: '关闭',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                },
-              ),
               // TODO: 暂时使用3.35，直到 https://github.com/media-kit/media-kit/issues/1314 解决
               // persist: false,
             ),

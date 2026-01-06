@@ -733,6 +733,29 @@ class _SettingPageState extends State<SettingPage>
                       context.read<SettingsProvider>().setMinimizeToTray(value);
                     },
                   ),
+                  // 忽略某些播放错误
+                  SwitchListTile(
+                    title: const Row(
+                      children: [
+                        Text('忽略某些播放错误'),
+                        SizedBox(width: 4),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(),
+                          icon: Icon(Icons.info_outline, size: 20),
+                          tooltip:
+                              '某些音频文件可能内部出现了损坏或者格式错误\n但可能不影响播放，可以通过启用该选项来忽略这些错误\n启用后仍然会记录到日志中\n通常情况下，请不要开启该选项',
+                          onPressed: null,
+                        ),
+                      ],
+                    ),
+                    value: settings.ignorePlaybackErrors,
+                    onChanged: (value) {
+                      context.read<SettingsProvider>().setIgnorePlaybackErrors(
+                        value,
+                      );
+                    },
+                  ),
                 ],
               ),
             ],

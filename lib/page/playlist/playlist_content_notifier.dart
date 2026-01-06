@@ -215,6 +215,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Stream<String> get errorStream => _errorStreamController.stream;
   Stream<String> get infoStream => _infoStreamController.stream;
 
+  DateTime? _lastAudioDeviceErrorLogged;
+  // 限制日志写入间隔
+  static const Duration _audioDeviceErrorInterval = Duration(seconds: 5);
+
   PlaylistContentNotifier(this._settingsProvider, this._themeProvider) {
     _setupMediaPlayerListeners(); // 设置 media-kit 的监听器
     _initLogFile();
@@ -249,6 +253,21 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   Future<void> _writeErrorToLog(String message, Object error) async {
     if (_logFile == null) return;
+
+    final errorString = error.toString();
+    if (errorString.contains('Could not open/initialize audio device')) {
+      // 检查上次记录该错误的时间
+      final now = DateTime.now();
+      if (_lastAudioDeviceErrorLogged != null) {
+        final timeSinceLastLog = now.difference(_lastAudioDeviceErrorLogged!);
+        if (timeSinceLastLog < _audioDeviceErrorInterval) {
+          // 距离上次记录少于5秒不记录
+          return;
+        }
+      }
+      // 更新最后记录时间
+      _lastAudioDeviceErrorLogged = now;
+    }
 
     try {
       final timestamp = DateTime.now().toString();
@@ -365,13 +384,21 @@ class PlaylistContentNotifier extends ChangeNotifier {
     });
 
     _mediaPlayer.stream.error.listen((error) {
+      final errorString = error.toString();
+      final shouldNotifyUI =
+          !(_settingsProvider.ignorePlaybackErrors &&
+              (errorString.contains('Error decoding audio') ||
+                  errorString.contains('Failed to recognize file format')));
+
       if (_currentSong != null) {
         final errorMessage =
-            '无法播放${p.basename(_currentSong!.filePath)}，可能文件已经损坏';
-        _errorStreamController.add(errorMessage);
+            '播放 ${p.basename(_currentSong!.filePath)} 出错: $error';
+        if (shouldNotifyUI) {
+          _errorStreamController.add(errorMessage);
+        }
         // 记录详细错误信息到日志文件
         _writeErrorToLog(errorMessage, error);
-        debugPrint('播放出错: $error');
+        debugPrint('播放${p.basename(_currentSong!.filePath)}出错: $error');
       } else {
         final errorMessage = '播放出错: $error';
         _errorStreamController.add(errorMessage);
