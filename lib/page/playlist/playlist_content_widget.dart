@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1108,7 +1110,9 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     final RenderBox overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
 
-    final iconColor = Theme.of(context).colorScheme.primary;
+    final iconColor = Theme.of(
+      context,
+    ).colorScheme.primary.withValues(alpha: 0.8);
 
     // 检查是否是基于文件夹的播放列表
     final isFolderBasedPlaylist =
@@ -1171,8 +1175,22 @@ class _SongTileWidgetState extends State<SongTileWidget> {
             ],
           ),
         ),
-        // TODO：在文件管理器中显示
-
+        PopupMenuItem<String>(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          value: 'showInExplorer',
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.folder_outlined, color: iconColor),
+                  const SizedBox(width: 5),
+                  const Text('显示文件'),
+                ],
+              ),
+            ],
+          ),
+        ),
         // 只有非基于文件夹的播放列表才允许删除歌曲
         if (!isFolderBasedPlaylist)
           PopupMenuItem<String>(
@@ -1236,6 +1254,21 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       }
 
       // messenger.showSnackBar(SnackBar(content: Text('已删除歌曲：$songTitle')));
+    } else if (result == 'showInExplorer') {
+      try {
+        final directory = File(widget.song.filePath).parent.path;
+
+        if (Platform.isWindows) {
+          await Process.run('explorer', ['/select,', widget.song.filePath]);
+        } else if (Platform.isMacOS) {
+          // 对于MacOS的支持
+          await Process.run('open', ['-R', widget.song.filePath]);
+        } else if (Platform.isLinux) {
+          await Process.run('xdg-open', [directory]);
+        }
+      } catch (e) {
+        notifier.postError('打开文件位置失败');
+      }
     }
   }
 

@@ -1709,6 +1709,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // firstWhere 没找到会抛出异常，说明上次保存的设备当前不可用
       // 此时不做任何操作，保持auto即可
       _errorStreamController.add('恢复音频设备失败: $e');
+      _settingsProvider.setAudioDeviceToAuto();
     }
   }
 
@@ -2053,6 +2054,77 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _lyricLineIndexController.add(-1);
     notifyListeners();
 
+    if (_settingsProvider.preferExternalLyrics) {
+      // 优先读取外置LRC歌词
+      await _loadExternalLyrics(songFilePath);
+      if (_currentLyrics.isNotEmpty) {
+        return;
+      }
+      // 内嵌歌词
+      await _loadEmbeddedLyrics(songFilePath);
+      if (_currentLyrics.isNotEmpty) {
+        return;
+      }
+    } else {
+      // 优先读取内嵌歌词
+      await _loadEmbeddedLyrics(songFilePath);
+      if (_currentLyrics.isNotEmpty) {
+        return;
+      }
+      // 外置歌词
+      await _loadExternalLyrics(songFilePath);
+      if (_currentLyrics.isNotEmpty) {
+        return;
+      }
+    }
+
+    if (_settingsProvider.enableOnlineLyrics && currentSong != null) {
+      _currentLyrics = []; // 清空歌词
+      notifyListeners();
+
+      // 根据设置选择主选歌词源
+      if (_settingsProvider.primaryLyricSource == 'qq') {
+        // 后台异步加载QQ音乐歌词
+        _loadQQLyrics(currentSong!.title);
+      } else if (_settingsProvider.primaryLyricSource == 'netease') {
+        // 后台异步加载网易云音乐歌词
+        _loadOnlineLyrics(currentSong!.title);
+      } else {
+        // 后台异步加载酷狗音乐歌词
+        _loadKugouLyrics(currentSong!.title);
+      }
+    } else {
+      _currentLyrics = []; // 确保在不执行网络请求时清空歌词
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadExternalLyrics(String songFilePath) async {
+    final songDirectory = p.dirname(songFilePath);
+    final songFileNameWithoutExtension = p.basenameWithoutExtension(
+      songFilePath,
+    );
+    final lrcFilePath = p.join(
+      songDirectory,
+      '$songFileNameWithoutExtension.lrc',
+    );
+
+    final lrcFile = File(lrcFilePath);
+
+    if (await lrcFile.exists()) {
+      try {
+        final lines = await lrcFile.readAsLines();
+        _currentLyrics = _parseLrcContent(lines);
+        notifyListeners();
+        return;
+      } catch (e) {
+        // debugPrint('读取.lrc文件失败：$e');
+      }
+    }
+  }
+
+  // 加载内嵌歌词
+  Future<void> _loadEmbeddedLyrics(String songFilePath) async {
     try {
       final normalizedPath = Uri.file(
         songFilePath,
@@ -2083,50 +2155,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
     } catch (e) {
       // _errorStreamController.add('加载歌词失败：${p.basename(songFilePath)}');
       // 未能读取到歌词时不提示错误
-    }
-
-    // 如果没有内嵌歌词，继续查找同目录.lrc
-    final songDirectory = p.dirname(songFilePath);
-    final songFileNameWithoutExtension = p.basenameWithoutExtension(
-      songFilePath,
-    );
-    final lrcFilePath = p.join(
-      songDirectory,
-      '$songFileNameWithoutExtension.lrc',
-    );
-
-    final lrcFile = File(lrcFilePath);
-
-    if (await lrcFile.exists()) {
-      try {
-        final lines = await lrcFile.readAsLines();
-        _currentLyrics = _parseLrcContent(lines);
-        notifyListeners();
-        return;
-      } catch (e) {
-        // debugPrint('读取.lrc文件失败：$e');
-      }
-    }
-
-    // 如果需要从网络获取歌词，改为后台加载，先返回
-    if (_settingsProvider.enableOnlineLyrics && currentSong != null) {
-      _currentLyrics = []; // 清空歌词
-      notifyListeners();
-
-      // 根据设置选择主选歌词源
-      if (_settingsProvider.primaryLyricSource == 'qq') {
-        // 后台异步加载QQ音乐歌词
-        _loadQQLyrics(currentSong!.title);
-      } else if (_settingsProvider.primaryLyricSource == 'netease') {
-        // 后台异步加载网易云音乐歌词
-        _loadOnlineLyrics(currentSong!.title);
-      } else {
-        // 后台异步加载酷狗音乐歌词
-        _loadKugouLyrics(currentSong!.title);
-      }
-    } else {
-      _currentLyrics = []; // 确保在不执行网络请求时清空歌词
-      notifyListeners();
     }
   }
 
@@ -2631,76 +2659,88 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final RegExp inline = RegExp(r'<(\d{2}):(\d{2})\.(\d{2,3})>');
     final RegExp bracket = RegExp(r'\[(\d{2}):(\d{2})\.(\d{2,3})\]');
 
-    final matches = inline.allMatches(rawText).isNotEmpty
-        ? inline.allMatches(rawText).toList()
-        : bracket.allMatches(rawText).toList();
+    final matches = <Match>[
+      ...inline.allMatches(rawText),
+      ...bracket.allMatches(rawText),
+    ]..sort((a, b) => a.start.compareTo(b.start));
 
-    // 处理第一个时间戳之前的文本
-    if (matches.isNotEmpty && matches.first.start > 0) {
-      final firstText = rawText.substring(0, matches.first.start);
-      if (firstText.isNotEmpty) {
-        // 不使用 trim().isEmpty，保留空格
+    // 如果只有一个时间戳，将整行作为一个持续500ms的token
+    if (matches.length == 1) {
+      final displayText = _extractDisplayText(rawText);
+      if (displayText.isNotEmpty) {
         tokens.add(
           LyricToken(
-            text: firstText,
+            text: displayText,
             start: lineStart,
-            end: _parseTimestamp(matches.first), // 结束时间是下一个时间戳的开始
+            end: lineStart + const Duration(milliseconds: 500),
+          ),
+        );
+      }
+      return tokens;
+    }
+
+    Duration? pendingStart = lineStart;
+    int lastIndex = 0;
+
+    for (final match in matches) {
+      final text = rawText.substring(lastIndex, match.start);
+      final time = _parseTimestamp(match);
+
+      if (text.isNotEmpty) {
+        // 前置时间戳：text的start在pendingStart
+        tokens.add(
+          LyricToken(
+            text: text,
+            start: pendingStart!,
+            end: time, // 暂定为end
+          ),
+        );
+        pendingStart = time;
+      } else {
+        // 后置时间戳：给上一个token补end
+        if (tokens.isNotEmpty) {
+          final last = tokens.removeLast();
+          tokens.add(LyricToken(text: last.text, start: last.start, end: time));
+        } else {
+          // 行首时间戳
+          pendingStart = time;
+        }
+      }
+
+      lastIndex = match.end;
+    }
+
+    // 处理最后一段文本
+    if (lastIndex < rawText.length) {
+      final text = rawText.substring(lastIndex);
+      if (text.isNotEmpty) {
+        tokens.add(
+          LyricToken(
+            text: text,
+            start: pendingStart!,
+            end: Duration.zero, // 暂空
           ),
         );
       }
     }
 
-    // 处理匹配到的时间戳及其后的文本
-    for (int i = 0; i < matches.length; i++) {
-      final cur = matches[i];
-      final next = i + 1 < matches.length ? matches[i + 1] : null;
-
-      final start = _parseTimestamp(cur);
-
-      final textStart = cur.end;
-      final textEnd = next?.start ?? rawText.length;
-      final text = rawText.substring(textStart, textEnd);
-
-      // 不使用trim().isEmpty 会丢失单词间的空格
-      if (text.isEmpty) continue;
-
-      tokens.add(
-        LyricToken(
-          text: text,
-          start: start,
-          end: start, // 暂时占位
-        ),
-      );
-    }
-
-    // 补充end时间
+    // 统一补 end
     for (int i = 0; i < tokens.length; i++) {
-      // 如果不是最后一个token，end 就是下一个token的start
-      if (i + 1 < tokens.length) {
-        tokens[i] = LyricToken(
-          text: tokens[i].text,
-          start: tokens[i].start,
-          end: tokens[i + 1].start,
-        );
-      } else {
-        // 最后一个token，使用fallback
-        tokens[i] = LyricToken(
-          text: tokens[i].text,
-          start: tokens[i].start,
-          end: _fallbackEndForToken(tokens[i].start),
-        );
+      if (tokens[i].end == Duration.zero) {
+        if (i + 1 < tokens.length) {
+          tokens[i] = LyricToken(
+            text: tokens[i].text,
+            start: tokens[i].start,
+            end: tokens[i + 1].start,
+          );
+        } else {
+          tokens[i] = LyricToken(
+            text: tokens[i].text,
+            start: tokens[i].start,
+            end: _fallbackEndForToken(tokens[i].start),
+          );
+        }
       }
-    }
-
-    // 如果没有匹配到任何内部时间戳，但rawText有内容，直接作为整句处理
-    if (tokens.isEmpty && rawText.isNotEmpty) {
-      tokens.add(
-        LyricToken(
-          text: rawText,
-          start: lineStart,
-          end: _fallbackEndForToken(lineStart),
-        ),
-      );
     }
 
     return tokens;

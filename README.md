@@ -237,6 +237,11 @@ flutter run
 * 相关许可协议请查阅：[MiSans 字体知识产权使用许可协议](https://hyperos.mi.com/font-download/MiSans%E5%AD%97%E4%BD%93%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf)
 * MiSans 官网：[https://hyperos.mi.com/font/](https://hyperos.mi.com/font/)
 
+## ❤️ 赞助
+如果你喜欢这个项目，觉得它对你有帮助，可以通过以下方式支持我，让我有动力继续维护和更新
+
+* [爱发电](https://afdian.com/a/xiaobaimc)
+
 ## Star History Chart
 
 [![Star History Chart](https://api.star-history.com/svg?repos=xiaobaimc/myune_music&type=Date)](https://star-history.com/#xiaobaimc/myune_music&Date)

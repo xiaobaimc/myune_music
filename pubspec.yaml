@@ -78,6 +78,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   integration_test:
     sdk: flutter
+  inno_bundle: ^0.11.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -143,3 +144,6 @@ flutter:
           weight: 700
         
 
+inno_bundle:
+  id: 66600dd0-ebbe-11f0-8048-3bd47c019e40
+  publisher: asweew

@@ -253,13 +253,8 @@ class _SettingPageState extends State<SettingPage>
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(width: 4),
-                            const IconButton(
-                              icon: Icon(Icons.info_outline, size: 20),
-                              padding: EdgeInsets.zero,
-                              constraints: BoxConstraints(),
-                              tooltip:
-                                  '企鹅：匹配准、支持翻译（推荐）\n网抑：匹配一般，支持翻译\n库狗：匹配高，不支持翻译',
-                              onPressed: null,
+                            const InfoIcon(
+                              '企鹅：匹配准、支持翻译（推荐）\n网抑：匹配一般，支持翻译\n库狗：匹配高，不支持翻译',
                             ),
                           ],
                         ),
@@ -360,6 +355,24 @@ class _SettingPageState extends State<SettingPage>
                       );
                     },
                   ),
+                  // 优先读取外置LRC歌词
+                  SwitchListTile(
+                    title: const Row(
+                      children: [
+                        Text('优先读取外置LRC歌词'),
+                        SizedBox(width: 4),
+                        InfoIcon(
+                          '启用后会优先读取同名.lrc作为歌词，其次内嵌歌词，否则相反\n该选项适用于同时拥有内嵌以及外置歌词的情况',
+                        ),
+                      ],
+                    ),
+                    value: settings.preferExternalLyrics,
+                    onChanged: (value) {
+                      context.read<SettingsProvider>().setPreferExternalLyrics(
+                        value,
+                      );
+                    },
+                  ),
                   // 始终显示专辑名称
                   SwitchListTile(
                     title: const Text('始终显示专辑名称'),
@@ -393,13 +406,7 @@ class _SettingPageState extends State<SettingPage>
                       children: [
                         Text('启用播放页动态背景'),
                         SizedBox(width: 4),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
-                          icon: Icon(Icons.info_outline, size: 20),
-                          tooltip: '未启用模糊背景时不生效',
-                          onPressed: null,
-                        ),
+                        InfoIcon('未启用模糊背景时不生效'),
                       ],
                     ),
                     value: settings.enableDynamicBackground,
@@ -677,13 +684,8 @@ class _SettingPageState extends State<SettingPage>
                             children: [
                               Text('启用独占模式'),
                               SizedBox(width: 4),
-                              IconButton(
-                                padding: EdgeInsets.zero,
-                                constraints: BoxConstraints(),
-                                icon: Icon(Icons.info_outline, size: 20),
-                                tooltip:
-                                    '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这可能会导致其他应用无法播放音频\n仅在播放器处于活跃状态时可用',
-                                onPressed: null,
+                              InfoIcon(
+                                '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这会导致其他应用无法播放音频\n仅在播放器处于活跃状态时可用',
                               ),
                             ],
                           ),
@@ -698,13 +700,8 @@ class _SettingPageState extends State<SettingPage>
                       children: [
                         Text('允许添加任何格式的文件'),
                         SizedBox(width: 4),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
-                          icon: Icon(Icons.info_outline, size: 20),
-                          tooltip:
-                              '启用后可以选择任何格式的文件添加到歌单中\n底层使用 mpv，依赖 FFmpeg 解码，理论上支持播放所有音频格式\n除非确认兼容性，否则请谨慎启用该选项',
-                          onPressed: null,
+                        InfoIcon(
+                          '启用后可以选择任何格式的文件添加到歌单中\n底层使用 MPV，依赖 FFmpeg 解码，理论上支持播放所有音频格式\n除非确认兼容性，否则请谨慎启用该选项',
                         ),
                       ],
                     ),
@@ -719,13 +716,7 @@ class _SettingPageState extends State<SettingPage>
                       children: [
                         Text('允许最小化到托盘'),
                         SizedBox(width: 4),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
-                          icon: Icon(Icons.info_outline, size: 20),
-                          tooltip: '启用后点击最小化按钮将最小化到系统托盘',
-                          onPressed: null,
-                        ),
+                        InfoIcon('启用后点击最小化按钮将最小化到系统托盘'),
                       ],
                     ),
                     value: settings.minimizeToTray,
@@ -739,13 +730,8 @@ class _SettingPageState extends State<SettingPage>
                       children: [
                         Text('忽略某些播放错误'),
                         SizedBox(width: 4),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
-                          icon: Icon(Icons.info_outline, size: 20),
-                          tooltip:
-                              '某些音频文件可能内部出现了损坏或者格式错误\n但可能不影响播放，可以通过启用该选项来忽略这些错误\n启用后仍然会记录到日志中\n通常情况下，请不要开启该选项',
-                          onPressed: null,
+                        InfoIcon(
+                          '某些音频文件可能内部出现了损坏或者格式错误\n但可能不影响播放，可以通过启用该选项来忽略这些错误\n启用后仍然会记录到日志中\n通常情况下，请不要开启该选项',
                         ),
                       ],
                     ),
@@ -762,6 +748,28 @@ class _SettingPageState extends State<SettingPage>
           ),
         ),
       ],
+    );
+  }
+}
+
+class InfoIcon extends StatelessWidget {
+  const InfoIcon(
+    this.message, {
+    super.key,
+    this.size = 20,
+    this.icon = Icons.info_outline,
+  });
+
+  final String message;
+  final double size;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabledColor = Theme.of(context).disabledColor;
+    return Tooltip(
+      message: message,
+      child: Icon(icon, size: size, color: disabledColor),
     );
   }
 }
