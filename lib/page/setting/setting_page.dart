@@ -16,7 +16,7 @@ import 'about.dart';
 import 'page_visibility_settings.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.8.2';
+const String appVersion = '0.8.3';
 
 bool get isLinux => Platform.isLinux;
 
