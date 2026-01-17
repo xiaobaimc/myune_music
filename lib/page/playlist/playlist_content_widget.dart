@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
@@ -192,22 +193,29 @@ class PlaylistListWidget extends StatelessWidget {
             builder: (context, data, _) {
               final (playlists, selectedIndex) = data;
 
-              return ListView.builder(
-                itemCount: playlists.length,
-                itemBuilder: (context, index) {
-                  final playlist = playlists[index];
-                  return PlaylistTileWidget(
-                    key: ValueKey(playlist.name), // 使用唯一Key
-                    index: index,
-                    name: playlist.name,
-                    isDefault: playlist.isDefault,
-                    isSelected: selectedIndex == index,
-                    isFolderBased: playlist.isFolderBased,
-                    onSecondaryTap: (position) {
-                      _showContextMenu(position, index, context);
-                    },
-                  );
-                },
+              final scrollController = ScrollController();
+
+              return SmoothScrollWeb(
+                controller: scrollController,
+                config: SmoothScrollConfig.lenis(),
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: playlists.length,
+                  itemBuilder: (context, index) {
+                    final playlist = playlists[index];
+                    return PlaylistTileWidget(
+                      key: ValueKey(playlist.name), // 使用唯一Key
+                      index: index,
+                      name: playlist.name,
+                      isDefault: playlist.isDefault,
+                      isSelected: selectedIndex == index,
+                      isFolderBased: playlist.isFolderBased,
+                      onSecondaryTap: (position) {
+                        _showContextMenu(position, index, context);
+                      },
+                    );
+                  },
+                ),
               );
             },
           ),
@@ -900,64 +908,74 @@ class HeadSongListWidget extends StatelessWidget {
                       );
                     }
 
+                    final scrollController = ScrollController();
                     // 列表本身
-                    return ReorderableListView.builder(
-                      proxyDecorator: (child, index, animation) => Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(12),
-                        clipBehavior: Clip.antiAlias,
-                        child: child,
-                      ),
-                      buildDefaultDragHandles: false,
-                      itemCount: songs.length,
-                      itemBuilder: (context, index) {
-                        final song = songs[index];
-                        final currentPlaylist =
-                            notifier.playlists[notifier.selectedIndex];
+                    return SmoothScrollWeb(
+                      controller: scrollController,
+                      child: CustomScrollView(
+                        controller: scrollController,
+                        slivers: [
+                          SliverReorderableList(
+                            proxyDecorator: (child, index, animation) =>
+                                Material(
+                                  elevation: 4,
+                                  borderRadius: BorderRadius.circular(12),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: child,
+                                ),
+                            itemCount: songs.length,
+                            itemBuilder: (context, index) {
+                              final song = songs[index];
+                              final currentPlaylist =
+                                  notifier.playlists[notifier.selectedIndex];
 
-                        // 播放和排序时，需要找到它在原始列表中的索引
-                        final originalIndex = notifier.currentPlaylistSongs
-                            .indexOf(song);
-                        return SongTileWidget(
-                          key: ValueKey(song.filePath),
-                          song: song,
-                          index: index,
-                          contextPlaylist: currentPlaylist,
-                          onTap: () {
-                            if (isMultiSelectMode) {
-                              notifier.toggleSongSelection(song);
-                            } else {
-                              if (originalIndex != -1) {
-                                notifier.playSongAtIndex(
-                                  originalIndex,
-                                ); // 使用原始索引播放
+                              // 播放和排序时，需要找到它在原始列表中的索引
+                              final originalIndex = notifier
+                                  .currentPlaylistSongs
+                                  .indexOf(song);
+                              return SongTileWidget(
+                                key: ValueKey(song.filePath),
+                                song: song,
+                                index: index,
+                                contextPlaylist: currentPlaylist,
+                                onTap: () {
+                                  if (isMultiSelectMode) {
+                                    notifier.toggleSongSelection(song);
+                                  } else {
+                                    if (originalIndex != -1) {
+                                      notifier.playSongAtIndex(
+                                        originalIndex,
+                                      ); // 使用原始索引播放
+                                    }
+                                  }
+                                },
+                                enableContextMenu:
+                                    !isMultiSelectMode, // 多选模式下禁用右键菜单
+                              );
+                            },
+                            // 在搜索时禁用拖拽排序功能
+                            onReorder: (oldIndex, newIndex) {
+                              final isSearching = context
+                                  .read<PlaylistContentNotifier>()
+                                  .isSearching;
+                              final isMultiSelectMode = context
+                                  .read<PlaylistContentNotifier>()
+                                  .isMultiSelectMode;
+
+                              // 如果正在搜索或多选模式，则不做任何事，直接返回
+                              if (isSearching || isMultiSelectMode) {
+                                return;
                               }
-                            }
-                          },
-                          enableContextMenu: !isMultiSelectMode, // 多选模式下禁用右键菜单
-                        );
-                      },
-                      // 在搜索时禁用拖拽排序功能
-                      onReorder: (oldIndex, newIndex) {
-                        final isSearching = context
-                            .read<PlaylistContentNotifier>()
-                            .isSearching;
-                        final isMultiSelectMode = context
-                            .read<PlaylistContentNotifier>()
-                            .isMultiSelectMode;
 
-                        // 如果正在搜索或多选模式，则不做任何事，直接返回
-                        if (isSearching || isMultiSelectMode) {
-                          return;
-                        }
-
-                        // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
-                        // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
-                        context.read<PlaylistContentNotifier>().reorderSong(
-                          oldIndex,
-                          newIndex,
-                        );
-                      },
+                              // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
+                              // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
+                              context
+                                  .read<PlaylistContentNotifier>()
+                                  .reorderSong(oldIndex, newIndex);
+                            },
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),

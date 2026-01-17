@@ -2550,6 +2550,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 解析歌词
   List<LyricLine> _parseLrcContent(List<String> lines) {
+    // 检查是否有awlrc标签，如果有则优先使用awlrc解析的结果
+    final awlrcResult = _checkAndParseAwlrcFirst(lines);
+    if (awlrcResult != null) {
+      return awlrcResult;
+    }
+
     final Map<Duration, List<String>> groupedLyrics = {};
     final Map<Duration, List<List<LyricToken>>> karaokeTokenMap = {};
 
@@ -2632,6 +2638,280 @@ class PlaylistContentNotifier extends ChangeNotifier {
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
     return parsedLyrics;
+  }
+
+  List<LyricLine>? _checkAndParseAwlrcFirst(List<String> lines) {
+    for (final line in lines) {
+      if (line.startsWith('[awlrc:')) {
+        final RegExp awlrcRegExp = RegExp(r'\[awlrc:(.*?)\]');
+        final match = awlrcRegExp.firstMatch(line);
+        if (match != null) {
+          final content = match.group(1)!;
+          final parts = content.split(',');
+
+          for (final part in parts) {
+            if (part.startsWith('awlrc:')) {
+              // 包含awlrc.awlrc字段才进入LX的歌词解析逻辑
+              // 因为不包含的已经有普通的lrc 没必要再解析一次
+              return _parseAwlrcContent(lines);
+            }
+          }
+        }
+      }
+    }
+    // 返回null表示继续使用普通解析逻辑
+    return null;
+  }
+
+  // 解析包含awlrc标签的歌词内容
+  List<LyricLine> _parseAwlrcContent(List<String> lines) {
+    final Map<Duration, List<String>> groupedLyrics = {};
+    final Map<Duration, List<List<LyricToken>>> karaokeTokenMap = {};
+
+    final List<String> processedLines = _preprocessLrcLines(lines);
+
+    // 兼容不带毫秒的时间戳格式（到底是谁在用这种）
+    final RegExp timeStampRegExp = RegExp(
+      r'\[(\d{1,2}):(\d{2})[.:](\d{1,3})\](.*)',
+    );
+
+    for (final line in processedLines) {
+      final matches = timeStampRegExp.allMatches(line);
+
+      // 跳过无时间戳的行
+      if (matches.isEmpty) {
+        continue;
+      }
+
+      // 只处理每行的第一个时间戳作为该行的起始时间
+      // 行内后续的时间戳会被 _parseKaraokeTokens 识别为逐字标记
+      final match = matches.first;
+
+      try {
+        final int minutes = int.parse(match.group(1)!);
+        final int seconds = int.parse(match.group(2)!);
+        // 处理可选的毫秒部分
+        final int milliseconds = match.group(3) != null
+            ? int.parse(match.group(3)!.padRight(3, '0'))
+            : 0;
+        final Duration timestamp = Duration(
+          minutes: minutes,
+          seconds: seconds,
+          milliseconds: milliseconds,
+        );
+
+        // 获取歌词内容
+        final String rawText = match.group(4)!.trim();
+
+        // 检查是否为逐字歌词格式
+        if (_isKaraokeLyric(rawText)) {
+          final tokens = _parseKaraokeTokens(rawText, timestamp);
+          final displayText = _extractDisplayText(rawText);
+
+          if (displayText.isNotEmpty) {
+            // 添加到对应时间戳的文本列表中
+            groupedLyrics.putIfAbsent(timestamp, () => []).add(displayText);
+          }
+
+          // 将当前行的tokens添加到列表中，而不是覆盖
+          // 这样可以支持多行共享同一时间戳的逐字歌词
+          if (tokens.isNotEmpty) {
+            karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
+          }
+        } else {
+          // 清除普通歌词里的时间标记（ <> [] () ）
+          // 这里是为了解析逐字歌词失败时不被时间标记所污染
+          final String cleanedText = rawText.replaceAll(
+            RegExp(
+              r'(<\d{2}:\d{2}\.\d{2,3}>|\[\d{2}:\d{2}\.\d{2,3}\]|\(\d{2}:\d{2}\.\d{2,3}\))',
+            ),
+            '',
+          );
+
+          if (cleanedText.isEmpty) continue;
+          groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
+        }
+      } catch (e) {
+        _errorStreamController.add('无法解析当前歌词');
+      }
+    }
+
+    final List<LyricLine> parsedLyrics =
+        groupedLyrics.entries
+            .map(
+              (entry) => LyricLine(
+                timestamp: entry.key,
+                texts: entry.value,
+                tokens: karaokeTokenMap[entry.key],
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    return parsedLyrics;
+  }
+
+  // 预处理LRC行，处理awlrc标签
+  List<String> _preprocessLrcLines(List<String> lines) {
+    final List<String> result = [];
+    final List<String> awlrcLines = [];
+
+    for (final line in lines) {
+      if (line.startsWith('[awlrc:')) {
+        awlrcLines.addAll(_parseAwlrcTag(line));
+      } else {
+        // 普通行直接跳过（因为awlrc优先级最高，会替换其他歌词）
+        continue;
+      }
+    }
+
+    // 将awlrc解析后的内容添加到结果中
+    result.addAll(awlrcLines);
+
+    return result;
+  }
+
+  // 解析awlrc标签
+  List<String> _parseAwlrcTag(String tagLine) {
+    final List<String> result = [];
+
+    // 匹配awlrc标签格式
+    final RegExp awlrcRegExp = RegExp(r'\[awlrc:(.*?)\]');
+    final match = awlrcRegExp.firstMatch(tagLine);
+
+    if (match != null) {
+      final content = match.group(1)!;
+      final parts = content.split(',');
+
+      final Map<String, String> partsMap = {};
+      for (final part in parts) {
+        final colonIndex = part.indexOf(':');
+        if (colonIndex > 0) {
+          final key = part.substring(0, colonIndex);
+          final value = part.substring(colonIndex + 1);
+          partsMap[key] = value;
+        }
+      }
+
+      // 处理LX的逐字歌词(awlrc.awlrc)
+      if (partsMap.containsKey('awlrc')) {
+        final awlrcContent = partsMap['awlrc']!;
+        try {
+          final decodedContent = utf8.decode(base64Decode(awlrcContent));
+          result.addAll(_convertLxLyricsToStandardFormat(decodedContent));
+        } catch (e) {
+          //
+        }
+      }
+
+      // 处理翻译歌词(awlrc.tlrc)
+      if (partsMap.containsKey('tlrc')) {
+        final tlrcContent = partsMap['tlrc']!;
+        try {
+          final decodedContent = utf8.decode(base64Decode(tlrcContent));
+          result.addAll(decodedContent.split('\n'));
+        } catch (e) {
+          //
+        }
+      }
+
+      // 处理罗马音歌词(awlrc.rlrc)
+      if (partsMap.containsKey('rlrc')) {
+        final rlrcContent = partsMap['rlrc']!;
+        try {
+          final decodedContent = utf8.decode(base64Decode(rlrcContent));
+          result.addAll(decodedContent.split('\n'));
+        } catch (e) {
+          //
+        }
+      }
+    }
+
+    // 不需要普通歌词(awlrc.lrc) 因为LX的逐字歌词(awlrc.awlrc)已经包含了
+    // 对于没有LX的逐字歌词(awlrc.awlrc)的情况 仍然不需要普通歌词(awlrc.lrc)
+    // 因为普通lrc已经包含了歌词
+
+    return result;
+  }
+
+  // 将LX格式的歌词转换为标准格式
+  List<String> _convertLxLyricsToStandardFormat(String lxLyrics) {
+    final List<String> result = [];
+    final lines = lxLyrics.split('\n');
+
+    for (final line in lines) {
+      // 格式：[分钟:秒.毫秒]<开始时间（基于该句）,持续时间>歌词文字
+      // 例如：[00:10.124]<0,248>嫌<248,313>菜<561,288>煮<849,296>了
+      final RegExp lxLyricsRegExp = RegExp(
+        r'\[(\d{2}):(\d{2})\.(\d{1,3})\](.*)',
+      );
+      final match = lxLyricsRegExp.firstMatch(line);
+
+      if (match != null) {
+        final minutes = int.parse(match.group(1)!);
+        final seconds = int.parse(match.group(2)!);
+        // 处理不足3位的毫秒数，例如 40->400
+        final millisecondsStr = match.group(3)!.padRight(3, '0');
+        final milliseconds = int.parse(millisecondsStr);
+        final content = match.group(4)!;
+
+        final baseTimestamp = Duration(
+          minutes: minutes,
+          seconds: seconds,
+          milliseconds: milliseconds,
+        );
+
+        // 解析歌词内容部分，格式为<开始时间,持续时间>文字
+        final RegExp timeTagRegExp = RegExp(r'<(\d+),(\d+)>');
+        final timeMatches = timeTagRegExp.allMatches(content).toList();
+
+        if (timeMatches.isNotEmpty) {
+          // 生成转换后的时间戳格式，用于逐字歌词
+          String convertedLine = '[${_formatTime(baseTimestamp)}]';
+
+          for (final timeMatch in timeMatches) {
+            final relativeStart = int.parse(timeMatch.group(1)!);
+            int.parse(timeMatch.group(2)!);
+
+            final absoluteStart =
+                baseTimestamp + Duration(milliseconds: relativeStart);
+
+            final textStart = timeMatch.end;
+            int textEnd = content.length;
+
+            // 下一个时间标记的开始位置作为当前文字的结束位置
+            for (final nextMatch in timeMatches) {
+              if (nextMatch.start > timeMatch.start) {
+                textEnd = nextMatch.start;
+                break;
+              }
+            }
+
+            final String text = content.substring(textStart, textEnd);
+
+            convertedLine += '<${_formatTime(absoluteStart)}>$text';
+          }
+
+          result.add(convertedLine);
+        } else {
+          result.add(line);
+        }
+      } else {
+        result.add(line);
+      }
+    }
+
+    return result;
+  }
+
+  // 格式化时间为[mm:ss.mmm]格式
+  String _formatTime(Duration duration) {
+    final int totalSeconds = duration.inSeconds;
+    final int minutes = totalSeconds ~/ 60;
+    final int seconds = totalSeconds % 60;
+    final int milliseconds = duration.inMilliseconds % 1000;
+
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}.${milliseconds.toString().padLeft(3, '0')}';
   }
 
   // 检测是否为逐字歌词格式

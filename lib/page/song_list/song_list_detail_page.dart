@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/sort_dialog.dart';
@@ -130,43 +131,55 @@ class SongListDetailWidget extends StatelessWidget {
               if (songs.isEmpty) {
                 return Center(child: Text(isSearching ? '未找到匹配的歌曲' : '没有歌曲'));
               }
+              final scrollController = ScrollController();
 
               return Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                child: ReorderableListView.builder(
-                  buildDefaultDragHandles: false,
-                  itemCount: songs.length,
-                  onReorder: (oldIndex, newIndex) {
-                    // 在搜索时，禁用拖拽排序功能
-                    if (isSearching) return;
+                child: SmoothScrollWeb(
+                  controller: scrollController,
+                  config: SmoothScrollConfig.lenis(),
 
-                    notifier.reorderActiveSongList(oldIndex, newIndex);
-                  },
-                  itemBuilder: (context, index) {
-                    final song = songs[index];
-                    return SongTileWidget(
-                      key: ValueKey(song.filePath),
-                      song: song,
-                      index: index,
-                      enableContextMenu: false, // 禁用右键菜单
-                      contextPlaylist:
-                          notifier.playingPlaylist ??
-                          Playlist(id: 'dummy', name: 'dummy'),
-                      onTap: () {
-                        final listToPlay = isSearching
-                            ? notifier.filteredSongs
-                            : notifier.activeSongList;
-                        final originalIndexInList = listToPlay.indexOf(song);
+                  child: CustomScrollView(
+                    controller: scrollController,
+                    slivers: [
+                      SliverReorderableList(
+                        itemCount: songs.length,
+                        onReorder: (oldIndex, newIndex) {
+                          // 在搜索时，禁用拖拽排序功能
+                          if (isSearching) return;
 
-                        if (originalIndexInList != -1) {
-                          notifier.playFromDynamicList(
-                            listToPlay,
-                            originalIndexInList,
+                          notifier.reorderActiveSongList(oldIndex, newIndex);
+                        },
+                        itemBuilder: (context, index) {
+                          final song = songs[index];
+                          return SongTileWidget(
+                            key: ValueKey(song.filePath),
+                            song: song,
+                            index: index,
+                            enableContextMenu: false, // 禁用右键菜单
+                            contextPlaylist:
+                                notifier.playingPlaylist ??
+                                Playlist(id: 'dummy', name: 'dummy'),
+                            onTap: () {
+                              final listToPlay = isSearching
+                                  ? notifier.filteredSongs
+                                  : notifier.activeSongList;
+                              final originalIndexInList = listToPlay.indexOf(
+                                song,
+                              );
+
+                              if (originalIndexInList != -1) {
+                                notifier.playFromDynamicList(
+                                  listToPlay,
+                                  originalIndexInList,
+                                );
+                              }
+                            },
                           );
-                        }
-                      },
-                    );
-                  },
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               );
             },

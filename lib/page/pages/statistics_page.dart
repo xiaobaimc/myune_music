@@ -23,7 +23,7 @@ class StatisticsPage extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: EdgeInsets.only(right: 4),
-              child: SingleChildScrollView(child: Statistics()),
+              child: Statistics(),
             ),
           ),
         ],

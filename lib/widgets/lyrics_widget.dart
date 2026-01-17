@@ -12,6 +12,21 @@ FIXME: 假设以下格式
 则只显示卡拉OK效果 而不会显示同一时间戳下的标准LRC格式译文
 
 当同一时间戳有多种格式的歌词时 会优先处理卡拉OK格式，导致标准LRC格式的译文在高亮行时无法显示
+
+---
+
+2026.1.13 修复了一部分 但仍然治标不治本 但保证了上述的案例可以正常显示
+`
+[00:00.940]悲[00:01.380]し[00:01.750]み
+[00:00.940]沉入悲伤之海的我
+[00:00.940]ka na shi mi [00:02.000]no u mi ni shi zu n da wa ta shi 假设这里有时间戳
+`
+1、3行有时间戳
+第2行没有，仍然会导致显示异常
+
+texts列表里有3行，但tokens列表里只有2个元素（因为只有第 1、3 行有时间戳）
+如果简单的用循环索引去取，第2行就会错误地去抓取第3行的逐字数据
+
 */
 import 'dart:ui' as ui;
 import 'dart:async';
@@ -143,47 +158,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     }
   }
 
-  // 构建逐字歌词的RichText
-  Widget _buildKaraokeRichText(
-    List<LyricToken> tokens,
-    bool isCurrent,
-    double fontSize,
-    ColorScheme colorScheme,
-  ) {
-    // 获取当前播放位置和播放状态
-    final playlistNotifier = Provider.of<PlaylistContentNotifier>(
-      context,
-      listen: false,
-    );
-    final currentPosition = playlistNotifier.currentPosition;
-    final isPlaying = playlistNotifier.isPlaying;
-
-    final List<InlineSpan> children = [];
-
-    for (final token in tokens) {
-      children.add(
-        WidgetSpan(
-          child: AnimatedKaraokeWord(
-            text: token.text,
-            fontSize: fontSize,
-            fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-            startTime: token.start,
-            duration: token.end - token.start,
-            currentTime: currentPosition,
-            baseColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-            highlightColor: colorScheme.primary,
-            isPlaying: isPlaying,
-          ),
-        ),
-      );
-    }
-
-    return Text.rich(
-      TextSpan(children: children),
-      textAlign: _lastAlignment ?? TextAlign.center, // 文本对齐
-    );
-  }
-
   // 处理逐字歌词
   Widget _buildMultiLineKaraokeRichText(
     List<List<LyricToken>> multiLineTokens,
@@ -227,12 +201,16 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         Text.rich(
           TextSpan(children: children),
           textAlign: _lastAlignment ?? TextAlign.center,
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
         ),
       );
 
       // 如果不是最后一行，添加一些间距
       if (lineIndex < multiLineTokens.length - 1) {
-        lines.add(const SizedBox(height: 4));
+        lines.add(const SizedBox(height: 8));
       }
     }
 
@@ -344,10 +322,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                 final line = widget.lyrics[lyricIndex];
                 final isCurrent = lyricIndex == widget.currentIndex;
 
-                // 检查是否为卡拉OK歌词行
-                final isKaraokeLine = line.isKaraoke;
-
-                final visibleTexts = line.texts.take(widget.maxLinesPerLyric);
+                line.texts.take(widget.maxLinesPerLyric);
 
                 // 计算当前行与目标行之间的距离
                 final int distance = (lyricIndex - widget.currentIndex).abs();
@@ -369,80 +344,75 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                 }
 
                 final List<Widget> columnChildren = [];
+                int renderedLines = 0;
+                final int maxAllowed = widget.maxLinesPerLyric;
 
-                // 如果是当前行且是卡拉OK歌词，则使用逐字高亮
-                if (isKaraokeLine && isCurrent) {
-                  // 检查tokens是List<LyricToken>还是List<List<LyricToken>>
-                  if (line.tokens is List<List<LyricToken>>) {
-                    final allTokens = line.tokens as List<List<LyricToken>>;
-                    // 根据 maxLinesPerLyric 限制 tokens 行数
-                    final tokensToDisplay = allTokens
-                        .take(widget.maxLinesPerLyric)
-                        .toList();
-                    final textWidget = _buildMultiLineKaraokeRichText(
-                      tokensToDisplay,
-                      isCurrent,
-                      fontSize,
-                      colorScheme,
-                    );
+                // 确定有多少行属于卡拉OK原文（如：日语原文+罗马音）
+                final int karaokeCount = (line.tokens != null)
+                    ? line.tokens!.length
+                    : 0;
 
-                    columnChildren.add(
-                      AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutSine,
-                        scale: isCurrent ? 1.02 : 1,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: isCurrent || !shouldBlur
-                              ? textWidget
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: textWidget,
+                if (isCurrent && line.isKaraoke) {
+                  // 限制卡拉OK显示的行数，不能超过总限制
+                  final int linesToTake = (karaokeCount > maxAllowed)
+                      ? maxAllowed
+                      : karaokeCount;
+                  final List<List<LyricToken>> tokensToRender = line.tokens!
+                      .take(linesToTake)
+                      .toList();
+
+                  renderedLines += linesToTake;
+
+                  columnChildren.add(
+                    AnimatedScale(
+                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOutSine,
+                      scale: isCurrent ? 1.02 : 1,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        child: isCurrent || !shouldBlur
+                            ? _buildMultiLineKaraokeRichText(
+                                tokensToRender,
+                                isCurrent,
+                                fontSize,
+                                colorScheme,
+                              )
+                            : ImageFiltered(
+                                imageFilter: ui.ImageFilter.blur(
+                                  sigmaX: calculateSigma(distance),
+                                  sigmaY: calculateSigma(distance),
                                 ),
-                        ),
-                      ),
-                    );
-                  } else {
-                    final textWidget = _buildKaraokeRichText(
-                      line.tokens! as List<LyricToken>,
-                      isCurrent,
-                      fontSize,
-                      colorScheme,
-                    );
-
-                    columnChildren.add(
-                      AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutSine,
-                        scale: isCurrent ? 1.02 : 1,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: isCurrent || !shouldBlur
-                              ? textWidget
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: textWidget,
+                                child: _buildMultiLineKaraokeRichText(
+                                  tokensToRender,
+                                  isCurrent,
+                                  fontSize,
+                                  colorScheme,
                                 ),
-                        ),
+                              ),
                       ),
-                    );
-                  }
+                    ),
+                  );
                 } else {
-                  // 非卡拉OK歌词的处理
-                  for (int i = 0; i < visibleTexts.length; i++) {
-                    final Widget textWidget = Text(
-                      visibleTexts.elementAt(i),
-                      textAlign: lyricAlignment, // 文本对齐
+                  final int mainLinesLimit = (karaokeCount > 0
+                      ? karaokeCount
+                      : 1);
+                  final int linesToTake = (mainLinesLimit > maxAllowed)
+                      ? maxAllowed
+                      : mainLinesLimit;
+
+                  for (
+                    int i = 0;
+                    i < linesToTake && i < line.texts.length;
+                    i++
+                  ) {
+                    renderedLines++;
+
+                    final Widget staticText = Text(
+                      line.texts[i],
+                      textAlign: lyricAlignment,
                       style: TextStyle(
-                        fontSize: fontSize, // 动态字体大小
+                        fontSize: fontSize,
                         height: 1.2,
                         color: isCurrent
                             ? colorScheme.primary
@@ -453,34 +423,99 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                             ? FontWeight.w700
                             : FontWeight.w500,
                       ),
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
                     );
 
                     columnChildren.add(
                       AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(
-                          lyricAlignment,
-                        ), // 容器对齐
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutSine,
+                        scale: isCurrent ? 1.02 : 1.0,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: isCurrent || !shouldBlur
+                              ? staticText
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
+                                  ),
+                                  child: staticText,
+                                ),
+                        ),
+                      ),
+                    );
+                    if (i < linesToTake - 1) {
+                      columnChildren.add(const SizedBox(height: 6));
+                    }
+                  }
+                }
+
+                final int translationStartIndex = (karaokeCount > 0
+                    ? karaokeCount
+                    : 1);
+
+                if (renderedLines < maxAllowed &&
+                    line.texts.length > translationStartIndex) {
+                  columnChildren.add(const SizedBox(height: 6));
+
+                  for (
+                    int i = translationStartIndex;
+                    i < line.texts.length && renderedLines < maxAllowed;
+                    i++
+                  ) {
+                    renderedLines++;
+
+                    final Widget translationWidget = Text(
+                      line.texts[i],
+                      textAlign: lyricAlignment,
+                      style: TextStyle(
+                        fontSize: fontSize * 0.88,
+                        height: 1.2,
+                        color: isCurrent
+                            ? colorScheme.primary.withValues(alpha: 0.88)
+                            : colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.58,
+                              ),
+                        fontWeight: isCurrent
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                    );
+
+                    columnChildren.add(
+                      AnimatedScale(
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
                         duration: const Duration(milliseconds: 180),
                         curve: Curves.easeInOutSine,
                         scale: isCurrent ? 1.02 : 1,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           child: isCurrent || !shouldBlur
-                              ? textWidget
+                              ? translationWidget
                               : ImageFiltered(
                                   imageFilter: ui.ImageFilter.blur(
                                     sigmaX: calculateSigma(distance),
                                     sigmaY: calculateSigma(distance),
                                   ),
-                                  child: textWidget,
+                                  child: translationWidget,
                                 ),
                         ),
                       ),
                     );
 
-                    // 在每行歌词之间添加间距（除了最后一行）
-                    if (i < visibleTexts.length - 1) {
-                      columnChildren.add(const SizedBox(height: 10));
+                    // 如果还有下一行且没达到上限，添加间距
+                    if (i < line.texts.length - 1 &&
+                        renderedLines < maxAllowed) {
+                      columnChildren.add(const SizedBox(height: 6));
                     }
                   }
                 }
@@ -805,6 +840,11 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
             style: TextStyle(
               fontSize: widget.fontSize,
               fontWeight: widget.fontWeight,
+              height: 1.2,
+            ),
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
             ),
           ),
         );

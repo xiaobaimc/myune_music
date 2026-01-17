@@ -1,9 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../song_details/song_details_page.dart';
 import '../../widgets/single_line_lyrics.dart';
 
-class SongDetails extends StatelessWidget {
+class SongDetails extends StatefulWidget {
   const SongDetails({super.key});
+
+  @override
+  State<SongDetails> createState() => _SongDetailsState();
+}
+
+class _SongDetailsState extends State<SongDetails> {
+  late final ScrollController scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    scrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,10 +37,19 @@ class SongDetails extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
       ),
-      body: const Column(
+      body: Column(
         children: [
-          Divider(height: 1, thickness: 1),
-          Expanded(child: SingleChildScrollView(child: SongDetailsPage())),
+          const Divider(height: 1, thickness: 1),
+          Expanded(
+            child: SmoothScrollWeb(
+              controller: scrollController,
+              config: SmoothScrollConfig.lenis(),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: const SongDetailsPage(),
+              ),
+            ),
+          ),
         ],
       ),
     );

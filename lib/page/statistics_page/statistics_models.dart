@@ -195,4 +195,9 @@ class StatisticsData extends ChangeNotifier {
     final songsJson = _songStats.values.map((stat) => stat.toJson()).toList();
     return jsonEncode({'songs': songsJson});
   }
+
+  void clearStats() {
+    _songStats.clear();
+    notifyListeners();
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pinyin/pinyin.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_notifier.dart';
 import 'song_list_detail_page.dart';
 
@@ -134,42 +135,49 @@ class _ArtistListState extends State<ArtistList> {
                     );
                   }
 
-                  return ListView.builder(
-                    itemCount: artistNames.length,
-                    itemBuilder: (context, index) {
-                      final artistName = artistNames[index];
-                      final songs = artists[artistName]!;
-                      final representativeArt = songs
-                          .firstWhere(
-                            (s) => s.albumArt != null,
-                            orElse: () => songs.first,
-                          )
-                          .albumArt;
+                  final scrollController = ScrollController();
 
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage: representativeArt != null
-                              ? MemoryImage(representativeArt)
-                              : null,
-                          child: representativeArt == null
-                              ? const Icon(Icons.person)
-                              : null,
-                        ),
-                        title: Text(artistName),
-                        subtitle: Text('共 ${songs.length} 首歌曲'),
-                        onTap: () {
-                          notifier.setActiveArtistView(artistName);
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const SongListDetailPage(),
-                            ),
-                          );
-                        },
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.0),
-                        ),
-                      );
-                    },
+                  return SmoothScrollWeb(
+                    controller: scrollController,
+                    config: SmoothScrollConfig.lenis(),
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: artistNames.length,
+                      itemBuilder: (context, index) {
+                        final artistName = artistNames[index];
+                        final songs = artists[artistName]!;
+                        final representativeArt = songs
+                            .firstWhere(
+                              (s) => s.albumArt != null,
+                              orElse: () => songs.first,
+                            )
+                            .albumArt;
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: representativeArt != null
+                                ? MemoryImage(representativeArt)
+                                : null,
+                            child: representativeArt == null
+                                ? const Icon(Icons.person)
+                                : null,
+                          ),
+                          title: Text(artistName),
+                          subtitle: Text('共 ${songs.length} 首歌曲'),
+                          onTap: () {
+                            notifier.setActiveArtistView(artistName);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SongListDetailPage(),
+                              ),
+                            );
+                          },
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                          ),
+                        );
+                      },
+                    ),
                   );
                 },
               ),

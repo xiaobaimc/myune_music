@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../theme/theme_provider.dart';
 
 class FontSelectorRow extends StatefulWidget {
@@ -32,6 +33,8 @@ class _FontSelectorRowState extends State<FontSelectorRow> {
 
     String? selectedFont = currentFontFamily;
 
+    final scrollController = ScrollController();
+
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -60,16 +63,22 @@ class _FontSelectorRowState extends State<FontSelectorRow> {
                       }
                     }
                   },
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: uniqueFonts.length,
-                    itemBuilder: (context, index) {
-                      final fontFamily = uniqueFonts[index];
-                      return RadioListTile<String>.adaptive(
-                        title: Text(index == 0 ? '默认字体' : fontFamily),
-                        value: fontFamily,
-                      );
-                    },
+
+                  child: SmoothScrollWeb(
+                    controller: scrollController,
+                    config: SmoothScrollConfig.lenis(),
+                    child: ListView.builder(
+                      controller: scrollController,
+                      shrinkWrap: true,
+                      itemCount: uniqueFonts.length,
+                      itemBuilder: (context, index) {
+                        final fontFamily = uniqueFonts[index];
+                        return RadioListTile<String>.adaptive(
+                          title: Text(index == 0 ? '默认字体' : fontFamily),
+                          value: fontFamily,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),

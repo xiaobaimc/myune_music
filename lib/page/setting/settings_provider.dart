@@ -34,7 +34,7 @@ class SettingsProvider with ChangeNotifier {
   static const _preferExternalLyricsKey = 'preferExternalLyrics';
 
   int _maxLinesPerLyric = 2;
-  double _fontSize = 20.0; // 默认字体大小
+  double _fontSize = 22.0; // 默认字体大小
   TextAlign _lyricAlignment = TextAlign.center; // 默认居中对齐
   bool _useBlurBackground = true; // 默认启用模糊背景
   bool _useDynamicColor = true; // 默认启用动态颜色

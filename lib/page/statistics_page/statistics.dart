@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 
 import '../playlist/playlist_content_notifier.dart';
 import '../setting/settings_provider.dart';
@@ -22,10 +23,19 @@ class _StatisticsState extends State<Statistics> {
   bool _showAllArtists = false;
   bool _showAllAlbums = false;
 
+  late final ScrollController scrollController;
+
   @override
   void initState() {
     super.initState();
     _statsManager = StatisticsManager();
+    scrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -57,123 +67,172 @@ class _StatisticsState extends State<Statistics> {
       }
     }
 
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('统计信息', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
+    return SmoothScrollWeb(
+      controller: scrollController,
+      config: SmoothScrollConfig.lenis(),
+      child: SingleChildScrollView(
+        controller: scrollController,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('统计信息', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: const Text('确认重置'),
+                            content: const Text('此操作将清空所有播放记录，且无法撤销'),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: const Text('取消'),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                child: const Text('确定'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
 
-            // 基本统计信息
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    SizedBox(
-                      width: (constraints.maxWidth - 32 - 16) / 2,
-                      child: _buildStatCard(
-                        icon: Icons.music_note,
-                        label: '总歌曲数',
-                        value: allSongs.length.toString(),
-                      ),
-                    ),
-                    SizedBox(
-                      width: (constraints.maxWidth - 32 - 16) / 2,
-                      child: _buildStatCard(
-                        icon: Icons.album,
-                        label: '总专辑数',
-                        value: uniqueAlbums.length.toString(),
-                      ),
-                    ),
-                    SizedBox(
-                      width: (constraints.maxWidth - 32 - 16) / 2,
-                      child: _buildStatCard(
-                        icon: Icons.person,
-                        label: '总歌手数',
-                        value: uniqueArtists.length.toString(),
-                      ),
-                    ),
-                    SizedBox(
-                      width: (constraints.maxWidth - 32 - 16) / 2,
-                      child: _buildStatCard(
-                        icon: Icons.access_time,
-                        label: '总时长',
-                        value:
-                            '${(totalDuration.inHours).toString().padLeft(2, '0')}:${(totalDuration.inMinutes % 60).toString().padLeft(2, '0')}:${(totalDuration.inSeconds % 60).toString().padLeft(2, '0')}',
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            const SizedBox(height: 24),
-
-            // 歌曲播放排行榜
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('歌曲播放排行', style: Theme.of(context).textTheme.titleLarge),
-                if (_statsManager.getTopPlayedSongs(5).length >= 5)
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showAllSongs = !_showAllSongs;
-                      });
+                      if (confirm == true) {
+                        await _statsManager.clearAllStats();
+                        setState(() {
+                          // 刷新UI
+                        });
+                      }
                     },
-                    child: Text(_showAllSongs ? '收起' : '查看更多'),
+                    tooltip: '重置统计数据',
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildTopSongsList(playlistNotifier.allSongs),
+                ],
+              ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-            // 艺术家播放排行榜
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('艺术家播放排行', style: Theme.of(context).textTheme.titleLarge),
-                if (_statsManager.getTopArtists(5, separators).length >= 5)
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showAllArtists = !_showAllArtists;
-                      });
-                    },
-                    child: Text(_showAllArtists ? '收起' : '查看更多'),
+              // 基本统计信息
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      SizedBox(
+                        width: (constraints.maxWidth - 32 - 16) / 2,
+                        child: _buildStatCard(
+                          icon: Icons.music_note,
+                          label: '总歌曲数',
+                          value: allSongs.length.toString(),
+                        ),
+                      ),
+                      SizedBox(
+                        width: (constraints.maxWidth - 32 - 16) / 2,
+                        child: _buildStatCard(
+                          icon: Icons.album,
+                          label: '总专辑数',
+                          value: uniqueAlbums.length.toString(),
+                        ),
+                      ),
+                      SizedBox(
+                        width: (constraints.maxWidth - 32 - 16) / 2,
+                        child: _buildStatCard(
+                          icon: Icons.person,
+                          label: '总歌手数',
+                          value: uniqueArtists.length.toString(),
+                        ),
+                      ),
+                      SizedBox(
+                        width: (constraints.maxWidth - 32 - 16) / 2,
+                        child: _buildStatCard(
+                          icon: Icons.access_time,
+                          label: '总时长',
+                          value:
+                              '${(totalDuration.inHours).toString().padLeft(2, '0')}:${(totalDuration.inMinutes % 60).toString().padLeft(2, '0')}:${(totalDuration.inSeconds % 60).toString().padLeft(2, '0')}',
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+
+              const SizedBox(height: 24),
+
+              // 歌曲播放排行榜
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('歌曲播放排行', style: Theme.of(context).textTheme.titleLarge),
+                  if (_statsManager.getTopPlayedSongs(5).length >= 5)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _showAllSongs = !_showAllSongs;
+                        });
+                      },
+                      child: Text(_showAllSongs ? '收起' : '查看更多'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildTopSongsList(playlistNotifier.allSongs),
+
+              const SizedBox(height: 24),
+
+              // 艺术家播放排行榜
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '艺术家播放排行',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildTopArtistsList(separators),
+                  if (_statsManager.getTopArtists(5, separators).length >= 5)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _showAllArtists = !_showAllArtists;
+                        });
+                      },
+                      child: Text(_showAllArtists ? '收起' : '查看更多'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildTopArtistsList(separators),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 专辑播放排行榜
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('专辑播放排行', style: Theme.of(context).textTheme.titleLarge),
-                if (_statsManager.getTopAlbums(5).length >= 5)
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showAllAlbums = !_showAllAlbums;
-                      });
-                    },
-                    child: Text(_showAllAlbums ? '收起' : '查看更多'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildTopAlbumsList(),
-          ],
+              // 专辑播放排行榜
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('专辑播放排行', style: Theme.of(context).textTheme.titleLarge),
+                  if (_statsManager.getTopAlbums(5).length >= 5)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _showAllAlbums = !_showAllAlbums;
+                        });
+                      },
+                      child: Text(_showAllAlbums ? '收起' : '查看更多'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildTopAlbumsList(),
+            ],
+          ),
         ),
       ),
     );

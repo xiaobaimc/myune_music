@@ -81,4 +81,10 @@ class StatisticsManager {
 
   // 总播放次数
   int get totalPlays => _statisticsData.totalPlays;
+
+  // 清空所有统计数据
+  Future<void> clearAllStats() async {
+    _statisticsData.clearStats();
+    await _saveStatistics();
+  }
 }

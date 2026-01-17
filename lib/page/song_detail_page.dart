@@ -66,37 +66,38 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
         return Stack(
           fit: StackFit.expand,
           children: [
+            // 直接使用模糊的图像,而不是使用 BackdropFilter
             AnimatedBuilder(
               animation: _rotationAnimation,
-              child: Image.memory(
-                currentSong!.albumArt!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Theme.of(context).colorScheme.surface,
-                  );
-                },
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(
+                  sigmaX: 40,
+                  sigmaY: 40,
+                  tileMode: TileMode.decal, // 避免边缘问题
+                ),
+                child: Image.memory(
+                  currentSong!.albumArt!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Theme.of(context).colorScheme.surface,
+                    );
+                  },
+                ),
               ),
-              builder: (context, child) {
+              builder: (context, imageChild) {
                 return Transform.rotate(
                   angle: enableDynamicBackground ? _rotationAnimation.value : 0,
-                  child: child,
+                  child: imageChild,
                 );
               },
             ),
-            // BackdropFilter 应该在 Image 上方，并对其进行模糊
-            Positioned.fill(
-              // 使用 Positioned.fill 确保 BackdropFilter 填充整个 Stack
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                child: Container(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surface.withValues(alpha: 0.8),
-                  child: child,
-                ),
-              ),
+            Container(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.8),
             ),
+            child!,
           ],
         );
       },

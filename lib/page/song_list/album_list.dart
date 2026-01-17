@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_notifier.dart';
 import 'song_list_detail_page.dart';
 import 'package:pinyin/pinyin.dart';
@@ -134,80 +135,88 @@ class _AlbumListState extends State<AlbumList> {
                       child: Text(_isSearching ? '未找到匹配的专辑' : '没有找到任何专辑'),
                     );
                   }
+                  final scrollController = ScrollController();
 
-                  return GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 200,
-                          childAspectRatio: 0.8,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                    itemCount: albumNames.length,
-                    itemBuilder: (context, index) {
-                      final albumName = albumNames[index];
-                      final songs = albums[albumName]!;
-                      final albumArt = songs.first.albumArt;
-
-                      return InkWell(
-                        onTap: () {
-                          notifier.setActiveAlbumView(albumName);
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const SongListDetailPage(),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(12.0),
-                        child: Card(
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  width: double.infinity,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.secondaryContainer,
-                                  child: albumArt != null
-                                      ? Image.memory(
-                                          albumArt,
-                                          fit: BoxFit.cover,
-                                          gaplessPlayback: true,
-                                        )
-                                      : const Icon(Icons.album, size: 50),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  albumName,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8.0,
-                                ),
-                                child: Text(
-                                  '共 ${songs.length} 首歌曲',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                            ],
+                  return SmoothScrollWeb(
+                    controller: scrollController,
+                    config: SmoothScrollConfig.lenis(),
+                    child: GridView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 200,
+                            childAspectRatio: 0.8,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
                           ),
-                        ),
-                      );
-                    },
+                      itemCount: albumNames.length,
+                      itemBuilder: (context, index) {
+                        final albumName = albumNames[index];
+                        final songs = albums[albumName]!;
+                        final albumArt = songs.first.albumArt;
+
+                        return InkWell(
+                          onTap: () {
+                            notifier.setActiveAlbumView(albumName);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SongListDetailPage(),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12.0),
+                          child: Card(
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    width: double.infinity,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.secondaryContainer,
+                                    child: albumArt != null
+                                        ? Image.memory(
+                                            albumArt,
+                                            fit: BoxFit.cover,
+                                            gaplessPlayback: true,
+                                          )
+                                        : const Icon(Icons.album, size: 50),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    albumName,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8.0,
+                                  ),
+                                  child: Text(
+                                    '共 ${songs.length} 首歌曲',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   );
                 },
               ),
