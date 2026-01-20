@@ -68,8 +68,7 @@ class _AppShellState extends State<AppShell> {
                 borderRadius: BorderRadius.circular(8),
               ),
               margin: const EdgeInsets.only(bottom: 80, left: 12, right: 12),
-              // TODO: 暂时使用3.35，直到 https://github.com/media-kit/media-kit/issues/1314 解决
-              // persist: false,
+              persist: false,
             ),
           );
         }
@@ -102,7 +101,7 @@ class _AppShellState extends State<AppShell> {
                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 },
               ),
-              // persist: false,
+              persist: false,
             ),
           );
         }

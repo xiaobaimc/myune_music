@@ -193,7 +193,7 @@ sudo apt install libmpv-dev mpv
 ### 环境要求
 
 * 安装 **Rust** 环境
-* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.9.0，**Flutter** 版本需 ≥ 3.35.0
+* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.10.0，**Flutter** 版本需 ≥ 3.38.0
 
 ### 安装依赖
 
