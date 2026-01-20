@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 0.8.3
 
 environment:
-  sdk: ^3.9.0
+  sdk: ^3.10.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -44,7 +44,7 @@ dependencies:
   window_manager: ^0.5.1
   scrollable_positioned_list: ^0.3.8
   url_launcher: ^6.3.1
-  media_kit: ^1.2.2 
+  media_kit: ^1.2.6 
   media_kit_libs_audio: ^1.0.7
   media_kit_libs_windows_audio: ^1.0.9
   media_kit_libs_linux: ^1.2.1
