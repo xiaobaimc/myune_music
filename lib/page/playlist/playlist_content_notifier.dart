@@ -342,10 +342,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _lyricLineIndexController.close();
     _errorStreamController.close();
     _exclusiveModeSubscription?.cancel(); // 取消独占模式订阅
-    _mediaPlayer.dispose(); // 释放播放器资源
+    _safeDispose(); // 释放播放器资源
     _cleanupSmtc();
     savePlaybackState();
     super.dispose();
+  }
+
+  void _safeDispose() {
+    _mediaPlayer.stop();
+    // 延迟500毫秒销毁播放器
+    // 这是为了解决更新到 Flutter 3.38+ 之后某些情况下的崩溃问题
+    // 参考https://github.com/media-kit/media-kit/issues/1340
+    Future.delayed(const Duration(milliseconds: 500));
+    _mediaPlayer.dispose();
   }
 
   void _setupMediaPlayerListeners() {
