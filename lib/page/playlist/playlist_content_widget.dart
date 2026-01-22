@@ -1118,6 +1118,46 @@ class SongTileWidget extends StatefulWidget {
 
 class _SongTileWidgetState extends State<SongTileWidget> {
   bool _isHovered = false;
+  String? _requestedCoverPath;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _requestCover(widget.song.filePath);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant SongTileWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song.filePath != widget.song.filePath) {
+      _releaseCover(oldWidget.song.filePath);
+      _requestCover(widget.song.filePath);
+    }
+  }
+
+  @override
+  void dispose() {
+    _releaseCover(widget.song.filePath);
+    super.dispose();
+  }
+
+  void _requestCover(String filePath) {
+    _requestedCoverPath = filePath;
+    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+  }
+
+  void _releaseCover(String filePath) {
+    if (_requestedCoverPath == null) {
+      return;
+    }
+    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _requestedCoverPath = null;
+  }
 
   void _showSongContextMenu(
     Offset position,

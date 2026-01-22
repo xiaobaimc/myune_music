@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:math';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -53,6 +54,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   List<Song> _allSongs = []; // 所有不重复歌曲的集合
   List<Song> get allSongs => _allSongs;
+
+  // --- 元数据缓存 ---
+  final Map<String, SongMetadataCacheEntry> _songMetadataCache = {};
+  Timer? _metadataCacheSaveTimer;
+
+  // --- 封面加载队列 ---
+  final Set<String> _visibleCoverPaths = {};
+  final Set<String> _pendingCoverRequests = {};
+  final ListQueue<String> _coverQueue = ListQueue<String>();
+  bool _coverWorkerRunning = false;
 
   // --- 播放器相关 ---
   final Player _mediaPlayer = Player(
@@ -282,6 +293,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 先加载歌手和专辑排序，避免初始化过程中被覆盖
     _artistSortOrders = await _playlistManager.loadArtistSortOrders();
     _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
+    await _loadSongMetadataCache();
 
     // 加载现有的播放列表
     await _loadPlaylists();
@@ -291,6 +303,66 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _loadVolumeSetting();
     // 恢复播放状态
     await _restorePlaybackState();
+  }
+
+  String _normalizePath(String path) {
+    return p.normalize(path);
+  }
+
+  Future<void> _loadSongMetadataCache() async {
+    try {
+      final cacheFile = await _playlistManager.getSongMetadataCacheFile();
+      if (!await cacheFile.exists()) {
+        return;
+      }
+      final contents = await cacheFile.readAsString();
+      final decoded = jsonDecode(contents);
+      if (decoded is Map<String, dynamic>) {
+        _songMetadataCache.clear();
+        decoded.forEach((key, value) {
+          if (value is Map<String, dynamic>) {
+            _songMetadataCache[_normalizePath(key)] =
+                SongMetadataCacheEntry.fromJson(value);
+          }
+        });
+      }
+    } catch (e) {
+      _songMetadataCache.clear();
+    }
+  }
+
+  void _scheduleMetadataCacheSave() {
+    _metadataCacheSaveTimer?.cancel();
+    _metadataCacheSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      _saveSongMetadataCache();
+    });
+  }
+
+  Future<void> _saveSongMetadataCache() async {
+    try {
+      final cacheFile = await _playlistManager.getSongMetadataCacheFile();
+      final data = <String, dynamic>{};
+      _songMetadataCache.forEach((key, entry) {
+        data[key] = entry.toJson();
+      });
+      await cacheFile.writeAsString(jsonEncode(data));
+    } catch (e) {
+      //
+    }
+  }
+
+  void _pruneMetadataCache(Set<String> validPaths) {
+    final normalizedValidPaths = validPaths.map(_normalizePath).toSet();
+    final removedKeys = _songMetadataCache.keys
+        .where((key) => !normalizedValidPaths.contains(key))
+        .toList();
+    if (removedKeys.isEmpty) {
+      return;
+    }
+    for (final key in removedKeys) {
+      _songMetadataCache.remove(key);
+    }
+    _scheduleMetadataCacheSave();
   }
 
   double _sanitizeVolume(double? value, double fallback) {
@@ -344,6 +416,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _exclusiveModeSubscription?.cancel(); // 取消独占模式订阅
     _safeDispose(); // 释放播放器资源
     _cleanupSmtc();
+    _metadataCacheSaveTimer?.cancel();
+    _saveSongMetadataCache();
     savePlaybackState();
     super.dispose();
   }
@@ -474,6 +548,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 确保当前播放列表的歌曲已被解析且与文件路径列表一致
     await _ensurePlaylistSongs(currentPlaylist);
     _currentPlaylistSongs = currentPlaylist.songs!;
+    unawaited(
+      _verifySongMetadataInBackground(currentPlaylist.songFilePaths),
+    );
 
     _isLoadingSongs = false;
     if (_isSearching) {
@@ -484,11 +561,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 解析单个歌曲文件的元数据
   Future<Song> _parseSongMetadata(String filePath) async {
+    final cacheKey = _normalizePath(filePath);
+    final cached = _songMetadataCache[cacheKey];
+
+    if (cached != null) {
+      return Song(
+        title: cached.title,
+        artist: cached.artist,
+        album: cached.album,
+        filePath: filePath,
+        albumArt: null,
+        duration: cached.durationMs != null
+            ? Duration(milliseconds: cached.durationMs!)
+            : null,
+      );
+    }
+
     String title = p.basenameWithoutExtension(filePath);
     String artist = '未知歌手';
     String album = '未知专辑';
     Duration? duration;
-    Uint8List? albumArt;
 
     final normalizedPath = Uri.file(
       filePath,
@@ -510,11 +602,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
       final metadata = await readAudioInfo(
         path: normalizedPath,
         options: const AudioInfoOptions(
-          needCover: true,
+          needCover: false,
           needLyrics: false,
           needAudioProps: true,
         ),
       );
+      final stat = await file.stat();
 
       if (metadata.title != null && metadata.title!.isNotEmpty) {
         title = metadata.title!;
@@ -530,10 +623,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
         duration = Duration(milliseconds: metadata.durationMs!.toInt());
       }
 
-      albumArt = metadata.cover;
+      _songMetadataCache[cacheKey] = SongMetadataCacheEntry(
+        title: title,
+        artist: artist,
+        album: album,
+        durationMs: metadata.durationMs?.toInt(),
+        modifiedMs: stat.modified.millisecondsSinceEpoch,
+      );
+      _scheduleMetadataCacheSave();
     } catch (e) {
       artist = '未知歌手 (解析失败)';
-      albumArt = null;
     }
 
     return Song(
@@ -541,9 +640,247 @@ class PlaylistContentNotifier extends ChangeNotifier {
       artist: artist,
       album: album,
       filePath: filePath,
-      albumArt: albumArt,
+      albumArt: null,
       duration: duration,
     );
+  }
+
+  void _updateSongInCollections(
+    String filePath,
+    Song Function(Song song) updater,
+  ) {
+    final targetPath = _normalizePath(filePath);
+    bool updated = false;
+
+    void updateList(List<Song> songs) {
+      for (int i = 0; i < songs.length; i++) {
+        if (_normalizePath(songs[i].filePath) == targetPath) {
+          songs[i] = updater(songs[i]);
+          updated = true;
+        }
+      }
+    }
+
+    for (final playlist in _playlists) {
+      if (playlist.songs != null) {
+        updateList(playlist.songs!);
+      }
+    }
+    updateList(_allSongs);
+    updateList(_currentPlaylistSongs);
+    updateList(_activeSongList);
+
+    if (_currentSong != null &&
+        _normalizePath(_currentSong!.filePath) == targetPath) {
+      _currentSong = updater(_currentSong!);
+      updated = true;
+    }
+
+    if (updated) {
+      notifyListeners();
+    }
+  }
+
+  void _applyCachedMetadata(String filePath, SongMetadataCacheEntry entry) {
+    _updateSongInCollections(filePath, (song) {
+      return Song(
+        title: entry.title,
+        artist: entry.artist,
+        album: entry.album,
+        filePath: song.filePath,
+        albumArt: song.albumArt,
+        duration: entry.durationMs != null
+            ? Duration(milliseconds: entry.durationMs!)
+            : song.duration,
+      );
+    });
+  }
+
+  Song _markSongMissing(Song song) {
+    return Song(
+      title: song.title,
+      artist: '文件不存在 (解析失败)',
+      album: song.album,
+      filePath: song.filePath,
+      albumArt: null,
+      duration: song.duration,
+    );
+  }
+
+  Future<void> _verifySongMetadataInBackground(
+    Iterable<String> filePaths,
+  ) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    for (final filePath in filePaths) {
+      final cacheKey = _normalizePath(filePath);
+      final cached = _songMetadataCache[cacheKey];
+      final normalizedPath = Uri.file(
+        filePath,
+      ).toFilePath(windows: Platform.isWindows);
+      final file = File(normalizedPath);
+
+      try {
+        final stat = await file.stat();
+        final modifiedMs = stat.modified.millisecondsSinceEpoch;
+
+        if (cached != null && cached.modifiedMs == modifiedMs) {
+          continue;
+        }
+
+        final metadata = await readAudioInfo(
+          path: normalizedPath,
+          options: const AudioInfoOptions(
+            needCover: false,
+            needLyrics: false,
+            needAudioProps: true,
+          ),
+        );
+
+        final title = (metadata.title != null && metadata.title!.isNotEmpty)
+            ? metadata.title!
+            : p.basenameWithoutExtension(filePath);
+        final artist =
+            (metadata.artist != null && metadata.artist!.isNotEmpty)
+                ? metadata.artist!
+                : '未知歌手';
+        final album = (metadata.album != null && metadata.album!.isNotEmpty)
+            ? metadata.album!
+            : '未知专辑';
+
+        final entry = SongMetadataCacheEntry(
+          title: title,
+          artist: artist,
+          album: album,
+          durationMs: metadata.durationMs?.toInt(),
+          modifiedMs: modifiedMs,
+        );
+        _songMetadataCache[cacheKey] = entry;
+        _scheduleMetadataCacheSave();
+        _applyCachedMetadata(filePath, entry);
+      } catch (e) {
+        if (_songMetadataCache.remove(cacheKey) != null) {
+          _scheduleMetadataCacheSave();
+        }
+        _updateSongInCollections(filePath, _markSongMissing);
+      }
+    }
+  }
+
+  void requestSongCover(String filePath) {
+    final cacheKey = _normalizePath(filePath);
+    _visibleCoverPaths.add(cacheKey);
+
+    if (_pendingCoverRequests.contains(cacheKey)) {
+      return;
+    }
+    final song = _findSongByPath(filePath);
+    if (song?.albumArt != null) {
+      return;
+    }
+
+    _pendingCoverRequests.add(cacheKey);
+    _coverQueue.add(cacheKey);
+    _processCoverQueue();
+  }
+
+  void releaseSongCover(String filePath) {
+    final cacheKey = _normalizePath(filePath);
+    _visibleCoverPaths.remove(cacheKey);
+    _pendingCoverRequests.remove(cacheKey);
+    _removeFromCoverQueue(cacheKey);
+    if (_currentSong != null &&
+        _normalizePath(_currentSong!.filePath) == cacheKey) {
+      return;
+    }
+    _updateSongInCollections(filePath, (song) {
+      return Song(
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        filePath: song.filePath,
+        albumArt: null,
+        duration: song.duration,
+      );
+    });
+  }
+
+  Song? _findSongByPath(String filePath) {
+    final target = _normalizePath(filePath);
+    for (final song in _currentPlaylistSongs) {
+      if (_normalizePath(song.filePath) == target) {
+        return song;
+      }
+    }
+    for (final song in _allSongs) {
+      if (_normalizePath(song.filePath) == target) {
+        return song;
+      }
+    }
+    return null;
+  }
+
+  void _removeFromCoverQueue(String cacheKey) {
+    if (_coverQueue.isEmpty) {
+      return;
+    }
+    final remaining = ListQueue<String>();
+    while (_coverQueue.isNotEmpty) {
+      final item = _coverQueue.removeFirst();
+      if (item != cacheKey) {
+        remaining.add(item);
+      }
+    }
+    _coverQueue.addAll(remaining);
+  }
+
+  void _processCoverQueue() {
+    if (_coverWorkerRunning) {
+      return;
+    }
+    _coverWorkerRunning = true;
+    unawaited(_coverWorker());
+  }
+
+  Future<void> _coverWorker() async {
+    while (_coverQueue.isNotEmpty) {
+      final cacheKey = _coverQueue.removeFirst();
+      if (!_visibleCoverPaths.contains(cacheKey)) {
+        _pendingCoverRequests.remove(cacheKey);
+        continue;
+      }
+      final filePath = cacheKey;
+      try {
+        final normalizedPath = Uri.file(
+          filePath,
+        ).toFilePath(windows: Platform.isWindows);
+        final metadata = await readAudioInfo(
+          path: normalizedPath,
+          options: const AudioInfoOptions(
+            needCover: true,
+            needLyrics: false,
+            needAudioProps: false,
+          ),
+        );
+
+        if (metadata.cover != null && metadata.cover!.isNotEmpty) {
+          _updateSongInCollections(filePath, (song) {
+            return Song(
+              title: song.title,
+              artist: song.artist,
+              album: song.album,
+              filePath: song.filePath,
+              albumArt: metadata.cover,
+              duration: song.duration,
+            );
+          });
+        }
+      } catch (e) {
+        //
+      } finally {
+        _pendingCoverRequests.remove(cacheKey);
+      }
+    }
+    _coverWorkerRunning = false;
   }
 
   Future<bool> pickAndAddSongs() async {
@@ -3675,6 +4012,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     for (final playlist in _playlists) {
       allAvailablePaths.addAll(playlist.songFilePaths);
     }
+    _pruneMetadataCache(allAvailablePaths);
 
     // 加载旧顺序并合并新路径
     final List<String> savedOrder = await _playlistManager.loadAllSongsOrder();
@@ -3724,6 +4062,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _allSongsVirtualPlaylist.songFilePaths = _allSongs
         .map((s) => s.filePath)
         .toList();
+    unawaited(
+      _verifySongMetadataInBackground(_allSongsVirtualPlaylist.songFilePaths),
+    );
     // if (_isSearching) {
     //   _updateFilteredSongs(searchInAllSongs: true); // 如果正在搜索，同步更新结果
     // }
