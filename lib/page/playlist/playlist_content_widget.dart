@@ -1118,6 +1118,36 @@ class SongTileWidget extends StatefulWidget {
 
 class _SongTileWidgetState extends State<SongTileWidget> {
   bool _isHovered = false;
+  PlaylistContentNotifier? _playlistNotifier;
+  bool _hasNotifier = false;
+  String? _requestedCoverPath;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasNotifier) {
+      _playlistNotifier = context.read<PlaylistContentNotifier>();
+      _hasNotifier = true;
+      _playlistNotifier?.requestSongCover(widget.song);
+      _requestedCoverPath = widget.song.filePath;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant SongTileWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song.filePath != widget.song.filePath) {
+      _playlistNotifier?.releaseSongCover(oldWidget.song.filePath);
+      _playlistNotifier?.requestSongCover(widget.song);
+      _requestedCoverPath = widget.song.filePath;
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestedCoverPath = null;
+    super.dispose();
+  }
 
   void _showSongContextMenu(
     Offset position,

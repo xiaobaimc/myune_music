@@ -6,7 +6,7 @@ class Song {
   final String artist;
   final String album;
   final String filePath;
-  final Uint8List? albumArt;
+  Uint8List? albumArt;
   final Duration? duration;
 
   Song({
