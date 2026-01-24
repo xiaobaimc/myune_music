@@ -12,6 +12,7 @@ class PlaylistManager {
   static const String _allSongsOrderFileName = 'all_songs_order.json';
   static const String _artistSortOrderFileName = 'artist_sort_order.json';
   static const String _albumSortOrderFileName = 'album_sort_order.json';
+  static const String _songMetadataCacheFileName = 'song_metadata_cache.json';
   static const String _migrationFlagKey = 'data_migrated_to_app_support';
 
   Future<String> _getLocalPath() async {
@@ -247,6 +248,12 @@ class PlaylistManager {
   Future<File> _getAllSongsOrderFile() async {
     final path = await _getLocalPath();
     return File('$path/$_allSongsOrderFileName');
+  }
+
+  // 获取歌曲元数据缓存文件
+  Future<File> getSongMetadataCacheFile() async {
+    final path = await _getLocalPath();
+    return File('$path/$_songMetadataCacheFileName');
   }
 
   // 加载全部歌曲的顺序（一个文件路径列表）

@@ -13,6 +13,13 @@ class ArtistList extends StatefulWidget {
 }
 
 class _ArtistListState extends State<ArtistList> {
+  late final ScrollController _scrollController = ScrollController();
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   bool _isSearching = false;
   String _searchKeyword = '';
   bool _hideSingleSongArtists = false;
@@ -38,6 +45,16 @@ class _ArtistListState extends State<ArtistList> {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
+
+    // 在构建界面时请求所有艺术家歌曲的封面
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final allArtists = notifier.songsByArtist;
+      for (final songs in allArtists.values) {
+        for (final song in songs) {
+          notifier.requestSongCover(song.filePath);
+        }
+      }
+    });
 
     return Column(
       children: [
@@ -135,13 +152,11 @@ class _ArtistListState extends State<ArtistList> {
                     );
                   }
 
-                  final scrollController = ScrollController();
-
                   return SmoothScrollWeb(
-                    controller: scrollController,
+                    controller: _scrollController,
                     config: SmoothScrollConfig.lenis(),
                     child: ListView.builder(
-                      controller: scrollController,
+                      controller: _scrollController,
                       itemCount: artistNames.length,
                       itemBuilder: (context, index) {
                         final artistName = artistNames[index];

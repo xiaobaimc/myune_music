@@ -6,8 +6,21 @@ import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/sort_dialog.dart';
 import '../playlist/playlist_models.dart';
 
-class AllSongsPage extends StatelessWidget {
+class AllSongsPage extends StatefulWidget {
   const AllSongsPage({super.key});
+
+  @override
+  State<AllSongsPage> createState() => _AllSongsPageState();
+}
+
+class _AllSongsPageState extends State<AllSongsPage> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _showSortDialog(BuildContext context) async {
     final notifier = context.read<PlaylistContentNotifier>();
@@ -127,13 +140,11 @@ class AllSongsPage extends StatelessWidget {
                           );
                         }
 
-                        final scrollController = ScrollController();
-
                         return SmoothScrollWeb(
-                          controller: scrollController,
+                          controller: _scrollController,
                           config: SmoothScrollConfig.lenis(),
                           child: CustomScrollView(
-                            controller: scrollController,
+                            controller: _scrollController,
                             slivers: [
                               SliverReorderableList(
                                 proxyDecorator: (child, index, animation) =>

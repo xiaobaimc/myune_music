@@ -270,6 +270,13 @@ class _StatisticsState extends State<Statistics> {
   }
 
   Widget _buildTopSongsList(List<Song> allSongs) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final notifier = context.read<PlaylistContentNotifier>();
+      for (final song in allSongs) {
+        notifier.requestSongCover(song.filePath);
+      }
+    });
+
     final topSongs = _statsManager.getTopPlayedSongs(_showAllSongs ? 100 : 5);
 
     if (topSongs.isEmpty) {
@@ -353,6 +360,14 @@ class _StatisticsState extends State<Statistics> {
   }
 
   Widget _buildTopArtistsList(List<String> separators) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final notifier = context.read<PlaylistContentNotifier>();
+      final allSongs = notifier.allSongs;
+      for (final song in allSongs) {
+        notifier.requestSongCover(song.filePath);
+      }
+    });
+
     final topArtists = _statsManager.getTopArtists(
       _showAllArtists ? 100 : 5,
       separators,
@@ -430,6 +445,13 @@ class _StatisticsState extends State<Statistics> {
   }
 
   Widget _buildTopAlbumsList() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final notifier = context.read<PlaylistContentNotifier>();
+      final allSongs = notifier.allSongs;
+      for (final song in allSongs) {
+        notifier.requestSongCover(song.filePath);
+      }
+    });
     final topAlbums = _statsManager.getTopAlbums(_showAllAlbums ? 100 : 5);
 
     if (topAlbums.isEmpty) {

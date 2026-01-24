@@ -13,6 +13,14 @@ class AlbumList extends StatefulWidget {
 }
 
 class _AlbumListState extends State<AlbumList> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   bool _isSearching = false;
   String _searchKeyword = '';
   bool _hideSingleSongAlbums = false;
@@ -38,6 +46,16 @@ class _AlbumListState extends State<AlbumList> {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
+
+    // 在构建界面时请求所有专辑歌曲的封面
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final allAlbums = notifier.songsByAlbum;
+      for (final songs in allAlbums.values) {
+        for (final song in songs) {
+          notifier.requestSongCover(song.filePath);
+        }
+      }
+    });
 
     return Column(
       children: [
@@ -135,13 +153,12 @@ class _AlbumListState extends State<AlbumList> {
                       child: Text(_isSearching ? '未找到匹配的专辑' : '没有找到任何专辑'),
                     );
                   }
-                  final scrollController = ScrollController();
 
                   return SmoothScrollWeb(
-                    controller: scrollController,
+                    controller: _scrollController,
                     config: SmoothScrollConfig.lenis(),
                     child: GridView.builder(
-                      controller: scrollController,
+                      controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(

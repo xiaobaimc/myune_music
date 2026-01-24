@@ -347,8 +347,11 @@ class _MyAppState extends State<MyApp> with TrayListener {
     if (menuItem.key == 'show_window') {
       windowManager.show();
     } else if (menuItem.key == 'exit_app') {
-      trayManager.destroy();
-      windowManager.destroy();
+      windowManager.close();
+
+      // exit是为了确保即使有后台任务，进程也能立即结束
+      // 如果close已经让进程自毁了，这一行就不会执行
+      exit(0);
     }
   }
 

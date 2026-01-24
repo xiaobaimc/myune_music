@@ -31,6 +31,43 @@ class Song {
   }
 }
 
+// 歌单歌曲元数据缓存
+class SongMetadataCacheEntry {
+  final String title;
+  final String artist;
+  final String album;
+  final int? durationMs;
+  final int modifiedMs;
+
+  const SongMetadataCacheEntry({
+    required this.title,
+    required this.artist,
+    required this.album,
+    required this.modifiedMs,
+    this.durationMs,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'artist': artist,
+      'album': album,
+      'durationMs': durationMs,
+      'modifiedMs': modifiedMs,
+    };
+  }
+
+  factory SongMetadataCacheEntry.fromJson(Map<String, dynamic> json) {
+    return SongMetadataCacheEntry(
+      title: json['title'] ?? '',
+      artist: json['artist'] ?? '',
+      album: json['album'] ?? '',
+      durationMs: json['durationMs'],
+      modifiedMs: json['modifiedMs'] ?? 0,
+    );
+  }
+}
+
 class Playlist {
   final String id;
   String name;

@@ -44,8 +44,21 @@ class PlaylistContentWidget extends StatelessWidget {
   }
 }
 
-class PlaylistListWidget extends StatelessWidget {
+class PlaylistListWidget extends StatefulWidget {
   const PlaylistListWidget({super.key});
+
+  @override
+  State<PlaylistListWidget> createState() => _PlaylistListWidgetState();
+}
+
+class _PlaylistListWidgetState extends State<PlaylistListWidget> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _showAddPlaylistDialog(
     BuildContext context,
@@ -193,13 +206,11 @@ class PlaylistListWidget extends StatelessWidget {
             builder: (context, data, _) {
               final (playlists, selectedIndex) = data;
 
-              final scrollController = ScrollController();
-
               return SmoothScrollWeb(
-                controller: scrollController,
+                controller: _scrollController,
                 config: SmoothScrollConfig.lenis(),
                 child: ListView.builder(
-                  controller: scrollController,
+                  controller: _scrollController,
                   itemCount: playlists.length,
                   itemBuilder: (context, index) {
                     final playlist = playlists[index];
@@ -654,8 +665,21 @@ class _PlaylistTileWidgetState extends State<PlaylistTileWidget> {
   }
 }
 
-class HeadSongListWidget extends StatelessWidget {
+class HeadSongListWidget extends StatefulWidget {
   const HeadSongListWidget({super.key});
+
+  @override
+  State<HeadSongListWidget> createState() => _HeadSongListWidgetState();
+}
+
+class _HeadSongListWidgetState extends State<HeadSongListWidget> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _showSortDialog(BuildContext context) async {
     final notifier = context.read<PlaylistContentNotifier>();
@@ -908,12 +932,11 @@ class HeadSongListWidget extends StatelessWidget {
                       );
                     }
 
-                    final scrollController = ScrollController();
                     // 列表本身
                     return SmoothScrollWeb(
-                      controller: scrollController,
+                      controller: _scrollController,
                       child: CustomScrollView(
-                        controller: scrollController,
+                        controller: _scrollController,
                         slivers: [
                           SliverReorderableList(
                             proxyDecorator: (child, index, animation) =>
@@ -1118,6 +1141,46 @@ class SongTileWidget extends StatefulWidget {
 
 class _SongTileWidgetState extends State<SongTileWidget> {
   bool _isHovered = false;
+  String? _requestedCoverPath;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _requestCover(widget.song.filePath);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant SongTileWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song.filePath != widget.song.filePath) {
+      _releaseCover(oldWidget.song.filePath);
+      _requestCover(widget.song.filePath);
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestedCoverPath = null;
+    super.dispose();
+  }
+
+  void _requestCover(String filePath) {
+    _requestedCoverPath = filePath;
+    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+  }
+
+  void _releaseCover(String filePath) {
+    if (_requestedCoverPath == null) {
+      return;
+    }
+    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _requestedCoverPath = null;
+  }
 
   void _showSongContextMenu(
     Offset position,
