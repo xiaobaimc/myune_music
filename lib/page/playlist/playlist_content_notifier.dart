@@ -611,6 +611,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needCover: false,
           needLyrics: false,
           needAudioProps: true,
+          needExtraTags: false,
         ),
       );
       final stat = await file.stat();
@@ -668,6 +669,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needCover: true,
             needLyrics: false,
             needAudioProps: true,
+            needExtraTags: false,
           ),
         );
 
@@ -814,6 +816,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needCover: false,
             needLyrics: false,
             needAudioProps: true,
+            needExtraTags: false,
           ),
         );
 
@@ -943,6 +946,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needCover: true,
             needLyrics: false,
             needAudioProps: false,
+            needExtraTags: false,
           ),
         );
 
@@ -2572,6 +2576,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needCover: false,
           needLyrics: true,
           needAudioProps: false,
+          needExtraTags: false,
         ),
       );
 
@@ -3021,6 +3026,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
         // 获取歌词内容
         final String rawText = match.group(4)!.trim();
 
+        // 跳过双斜杠
+        if (rawText == '//' || rawText.replaceAll(RegExp(r'\s+'), '') == '//') {
+          continue;
+        }
+
         // 检查是否为逐字歌词格式
         if (_isKaraokeLyric(rawText)) {
           final tokens = _parseKaraokeTokens(rawText, timestamp);
@@ -3131,6 +3141,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
         // 获取歌词内容
         final String rawText = match.group(4)!.trim();
+
+        // 跳过双斜杠
+        if (rawText == '//' || rawText.replaceAll(RegExp(r'\s+'), '') == '//') {
+          continue;
+        }
 
         // 检查是否为逐字歌词格式
         if (_isKaraokeLyric(rawText)) {
@@ -3414,14 +3429,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
         );
         pendingStart = time;
       } else {
-        // 后置时间戳：给上一个token补end
-        if (tokens.isNotEmpty) {
-          final last = tokens.removeLast();
-          tokens.add(LyricToken(text: last.text, start: last.start, end: time));
-        } else {
-          // 行首时间戳
-          pendingStart = time;
+        if (tokens.isNotEmpty && pendingStart != null && time > pendingStart) {
+          tokens.add(
+            LyricToken(
+              // 假设以下歌词格式：
+              // [01:05.493]believer [01:06.380][01:07.461]believer[01:08.285]
+              // 有两个时间戳中间没有任何内容
+              // 等价于[01:05.493]believer[01:06.380] [01:07.461]believer[01:08.285]
+              // 本质上是为了让ui渲染完后第1个believer停顿一下再渲染下一个believer
+              // 但是由于ui是连续的，所以这里添加一个不可见的字符给ui来模拟停顿
+              text: '\u200B', // 不可见字符
+              start: pendingStart,
+              end: time,
+            ),
+          );
         }
+        pendingStart = time;
       }
 
       lastIndex = match.end;
@@ -3543,7 +3566,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _playingPlaylist?.id == currentPlaylist.id) {
       await stop(); // 直接停止
     }
-    _infoStreamController.add('已删除歌曲：${songToRemove.title}');
+    _infoStreamController.add('已移除歌曲：${songToRemove.title}');
     await _loadCurrentPlaylistSongs();
 
     await _updateAllSongsList();
@@ -3571,7 +3594,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _savePlaylists();
 
     await _updateAllSongsList();
-    _infoStreamController.add('已删除歌曲：$songTitle');
+    _infoStreamController.add('已移除歌曲：$songTitle');
     await _loadCurrentPlaylistSongs();
 
     notifyListeners();
@@ -3666,7 +3689,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
     }
 
-    _infoStreamController.add('已删除 ${selectedSongs.length} 首歌曲');
+    _infoStreamController.add('已移除 ${selectedSongs.length} 首歌曲');
 
     // 清空选中状态
     _selectedSongPaths.clear();
@@ -3793,6 +3816,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needCover: true,
           needLyrics: false,
           needAudioProps: true,
+          needExtraTags: true,
         ),
       );
       final stat = await file.stat();
@@ -3812,6 +3836,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
         filePath: filePath,
         created: stat.type == FileSystemEntityType.file ? stat.changed : null,
         modified: stat.type == FileSystemEntityType.file ? stat.modified : null,
+        year: metadata.year,
+        genre: metadata.genre,
+        albumArtist: metadata.albumArtist,
       );
     } catch (e) {
       _errorStreamController.add('读取歌曲详情失败：${p.basename(filePath)}');

@@ -1,3 +1,5 @@
+// 音频可视化:https://pub.dev/packages/sonix
+
 import 'dart:ui' as ui;
 import 'dart:math';
 

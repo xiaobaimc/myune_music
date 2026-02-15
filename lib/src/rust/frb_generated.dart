@@ -63,7 +63,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.10.0';
 
   @override
-  int get rustContentHash => -1476044100;
+  int get rustContentHash => -541531855;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -100,6 +100,8 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 position,
     required PlatformInt64 duration,
   });
+
+  Future<AudioInfoOptions> crateApiAudioInfoAudioInfoOptionsDefault();
 
   Future<AudioInfo> crateApiAudioInfoReadAudioInfo({
     required String path,
@@ -341,6 +343,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<AudioInfoOptions> crateApiAudioInfoAudioInfoOptionsDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_audio_info_options,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiAudioInfoAudioInfoOptionsDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAudioInfoAudioInfoOptionsDefaultConstMeta =>
+      const TaskConstMeta(
+        debugName: "audio_info_options_default",
+        argNames: [],
+      );
+
+  @override
   Future<AudioInfo> crateApiAudioInfoReadAudioInfo({
     required String path,
     required AudioInfoOptions options,
@@ -354,7 +386,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -434,8 +466,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AudioInfo dco_decode_audio_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return AudioInfo(
       title: dco_decode_opt_String(arr[0]),
       artist: dco_decode_opt_String(arr[1]),
@@ -445,6 +477,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       durationMs: dco_decode_opt_box_autoadd_u_64(arr[5]),
       bitrate: dco_decode_opt_box_autoadd_u_32(arr[6]),
       sampleRate: dco_decode_opt_box_autoadd_u_32(arr[7]),
+      year: dco_decode_opt_box_autoadd_u_32(arr[8]),
+      genre: dco_decode_opt_String(arr[9]),
+      albumArtist: dco_decode_opt_String(arr[10]),
     );
   }
 
@@ -452,12 +487,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AudioInfoOptions dco_decode_audio_info_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return AudioInfoOptions(
       needCover: dco_decode_bool(arr[0]),
       needLyrics: dco_decode_bool(arr[1]),
       needAudioProps: dco_decode_bool(arr[2]),
+      needExtraTags: dco_decode_bool(arr[3]),
     );
   }
 
@@ -638,6 +674,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_durationMs = sse_decode_opt_box_autoadd_u_64(deserializer);
     final var_bitrate = sse_decode_opt_box_autoadd_u_32(deserializer);
     final var_sampleRate = sse_decode_opt_box_autoadd_u_32(deserializer);
+    final var_year = sse_decode_opt_box_autoadd_u_32(deserializer);
+    final var_genre = sse_decode_opt_String(deserializer);
+    final var_albumArtist = sse_decode_opt_String(deserializer);
     return AudioInfo(
       title: var_title,
       artist: var_artist,
@@ -647,6 +686,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       durationMs: var_durationMs,
       bitrate: var_bitrate,
       sampleRate: var_sampleRate,
+      year: var_year,
+      genre: var_genre,
+      albumArtist: var_albumArtist,
     );
   }
 
@@ -656,10 +698,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_needCover = sse_decode_bool(deserializer);
     final var_needLyrics = sse_decode_bool(deserializer);
     final var_needAudioProps = sse_decode_bool(deserializer);
+    final var_needExtraTags = sse_decode_bool(deserializer);
     return AudioInfoOptions(
       needCover: var_needCover,
       needLyrics: var_needLyrics,
       needAudioProps: var_needAudioProps,
+      needExtraTags: var_needExtraTags,
     );
   }
 
@@ -877,6 +921,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_64(self.durationMs, serializer);
     sse_encode_opt_box_autoadd_u_32(self.bitrate, serializer);
     sse_encode_opt_box_autoadd_u_32(self.sampleRate, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.year, serializer);
+    sse_encode_opt_String(self.genre, serializer);
+    sse_encode_opt_String(self.albumArtist, serializer);
   }
 
   @protected
@@ -888,6 +935,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.needCover, serializer);
     sse_encode_bool(self.needLyrics, serializer);
     sse_encode_bool(self.needAudioProps, serializer);
+    sse_encode_bool(self.needExtraTags, serializer);
   }
 
   @protected

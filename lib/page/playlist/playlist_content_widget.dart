@@ -810,7 +810,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                                 .isFolderBased)
                               IconButton(
                                 icon: const Icon(Icons.delete),
-                                tooltip: '删除选中歌曲',
+                                tooltip: '从列表中移除歌曲',
                                 onPressed: () =>
                                     _showDeleteConfirmationDialog(context),
                               ),
@@ -1019,8 +1019,8 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('确认删除'),
-          content: Text('确定要删除选中的 ${notifier.selectedSongs.length} 首歌曲吗？'),
+          title: const Text('移除歌曲'),
+          content: Text('确定要从列表中移除选中的 ${notifier.selectedSongs.length} 首歌曲吗？'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -1031,7 +1031,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                 notifier.removeSelectedSongs();
                 Navigator.of(context).pop();
               },
-              child: const Text('删除'),
+              child: const Text('移除'),
             ),
           ],
         );
@@ -1282,7 +1282,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
               children: [
                 Icon(Icons.delete_outline_outlined, color: iconColor),
                 const SizedBox(width: 5),
-                const Text('删除歌曲'),
+                const Text('移除歌曲'),
               ],
             ),
           ),

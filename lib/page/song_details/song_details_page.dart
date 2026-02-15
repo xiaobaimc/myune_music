@@ -124,6 +124,27 @@ class SongDetailsPage extends StatelessWidget {
                               iconSize: 18,
                             ),
                           ),
+                          if (details.year != null)
+                            _infoCard(
+                              context: context,
+                              icon: Icons.calendar_today,
+                              label: '年份',
+                              value: details.year.toString(),
+                            ),
+                          if (details.genre != null)
+                            _infoCard(
+                              context: context,
+                              icon: Icons.category,
+                              label: '流派',
+                              value: details.genre ?? '未知',
+                            ),
+                          if (details.albumArtist != null)
+                            _infoCard(
+                              context: context,
+                              icon: Icons.person,
+                              label: '专辑艺术家',
+                              value: details.albumArtist ?? '未知',
+                            ),
                           _infoCard(
                             context: context,
                             icon: Icons.create,

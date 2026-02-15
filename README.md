@@ -1,6 +1,6 @@
 # 🎵 Myune Music
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.35%2B-blue?logo=flutter)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.38%2B-blue?logo=flutter)](https://flutter.dev/)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux-brightgreen)](#)
 ![Rust](https://img.shields.io/badge/lang-Rust-orange)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)

@@ -175,22 +175,55 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
     final List<Widget> lines = [];
 
+    final double secondaryFontSize = fontSize * 0.88;
+    final Color primaryColor = colorScheme.primary;
+
+    // 这里通常应该保持与普通Text的颜色一致
+    // 但是在AnimatedKaraokeWord.build里，Stack里两层Text 而且两层颜色都是半透明
+    // 这会导致 alpha 被叠加混合，而普通歌词只画了一次
+    // 这里简单粗暴计算 alpha_eff = 1 - (1 - alpha_new) * (1 - alpha_new) ≈ 0.88
+    // 得出alpha_new大约为0.6536
+    final Color secondaryPrimaryColor = colorScheme.primary.withValues(
+      alpha: 0.65,
+    );
+    final Color secondarySurfaceVariantColor = colorScheme.onSurfaceVariant
+        .withValues(alpha: 0.58);
+
+    final Color surfaceVariantColor = colorScheme.onSurfaceVariant.withValues(
+      alpha: 0.7,
+    );
+
     for (int lineIndex = 0; lineIndex < multiLineTokens.length; lineIndex++) {
       final List<LyricToken> tokens = multiLineTokens[lineIndex];
       final List<InlineSpan> children = [];
+
+      final bool isSecondaryLine = lineIndex > 0;
+
+      final double lineFontSize = isSecondaryLine
+          ? secondaryFontSize
+          : fontSize;
+      final FontWeight lineFontWeight = isCurrent
+          ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
+          : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+      final Color lineBaseColor = isSecondaryLine
+          ? secondarySurfaceVariantColor
+          : surfaceVariantColor;
+      final Color lineHighlightColor = isSecondaryLine
+          ? secondaryPrimaryColor
+          : primaryColor;
 
       for (final token in tokens) {
         children.add(
           WidgetSpan(
             child: AnimatedKaraokeWord(
               text: token.text,
-              fontSize: fontSize,
-              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+              fontSize: lineFontSize,
+              fontWeight: lineFontWeight,
               startTime: token.start,
               duration: token.end - token.start,
               currentTime: currentPosition,
-              baseColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-              highlightColor: colorScheme.primary,
+              baseColor: lineBaseColor,
+              highlightColor: lineHighlightColor,
               isPlaying: isPlaying,
             ),
           ),
@@ -210,7 +243,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
       // 如果不是最后一行，添加一些间距
       if (lineIndex < multiLineTokens.length - 1) {
-        lines.add(const SizedBox(height: 8));
+        lines.add(const SizedBox(height: 6));
       }
     }
 
@@ -401,6 +434,17 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                       ? maxAllowed
                       : mainLinesLimit;
 
+                  // 预计算样式变量
+                  final double secondaryFontSize = fontSize * 0.88;
+                  final Color primaryColor = colorScheme.primary;
+                  final Color secondaryPrimaryColor = colorScheme.primary
+                      .withValues(alpha: 0.88);
+                  final Color surfaceVariantColor = colorScheme.onSurfaceVariant
+                      .withValues(alpha: 0.7);
+                  final Color secondarySurfaceVariantColor = colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.58);
+
                   for (
                     int i = 0;
                     i < linesToTake && i < line.texts.length;
@@ -408,20 +452,30 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                   ) {
                     renderedLines++;
 
+                    final bool isSecondaryLine = i > 0;
+
+                    final double lineFontSize = isSecondaryLine
+                        ? secondaryFontSize
+                        : fontSize;
+                    final FontWeight lineFontWeight = isCurrent
+                        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
+                        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+                    final Color lineColor = isCurrent
+                        ? (isSecondaryLine
+                              ? secondaryPrimaryColor
+                              : primaryColor)
+                        : (isSecondaryLine
+                              ? secondarySurfaceVariantColor
+                              : surfaceVariantColor);
+
                     final Widget staticText = Text(
                       line.texts[i],
                       textAlign: lyricAlignment,
                       style: TextStyle(
-                        fontSize: fontSize,
+                        fontSize: lineFontSize,
                         height: 1.2,
-                        color: isCurrent
-                            ? colorScheme.primary
-                            : colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.7,
-                              ),
-                        fontWeight: isCurrent
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                        color: lineColor,
+                        fontWeight: lineFontWeight,
                       ),
                       textHeightBehavior: const TextHeightBehavior(
                         applyHeightToFirstAscent: false,
@@ -727,8 +781,7 @@ class AnimatedKaraokeWord extends StatefulWidget {
 
 class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
     with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _animation;
+  late ValueNotifier<double> _progressNotifier;
   Duration _lastAudioTime = Duration.zero;
   DateTime? _lastAudioUpdateTime;
   Duration _uiTime = Duration.zero;
@@ -737,14 +790,7 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    _animation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(_animationController);
+    _progressNotifier = ValueNotifier<double>(0.0);
 
     _lastAudioTime = widget.currentTime;
     _lastAudioUpdateTime = DateTime.now();
@@ -769,11 +815,6 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
         _lastAudioUpdateTime = DateTime.now();
       }
     }
-
-    // 检查动画参数是否变化
-    if (oldWidget.duration != widget.duration) {
-      _animationController.duration = widget.duration;
-    }
   }
 
   void _startTicker() {
@@ -790,14 +831,9 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
         _uiTime = _lastAudioTime;
       }
 
-      // 更新动画值
-      final progress = _calculateProgress(_uiTime);
-      _animationController.value = progress.clamp(0.0, 1.0);
-
-      // 如果当前时间超出动画范围，停止动画
-      if (progress >= 1.0) {
-        _animationController.stop();
-      }
+      // 更新进度值
+      final progress = _calculateProgress(_uiTime).clamp(0.0, 1.0);
+      _progressNotifier.value = progress;
     });
     _ticker!.start();
   }
@@ -817,36 +853,43 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return ShaderMask(
-          blendMode: BlendMode.srcIn,
-          shaderCallback: (Rect bounds) {
-            return LinearGradient(
-              colors: [
-                widget.highlightColor,
-                widget.highlightColor,
-                widget.baseColor,
-                widget.baseColor,
-              ],
-              stops: [0.0, _animation.value, _animation.value, 1.0],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ).createShader(bounds);
-          },
-          child: Text(
-            widget.text,
-            style: TextStyle(
-              fontSize: widget.fontSize,
-              fontWeight: widget.fontWeight,
-              height: 1.2,
+    return ValueListenableBuilder(
+      valueListenable: _progressNotifier,
+      builder: (context, progress, child) {
+        return Stack(
+          children: [
+            // 基础颜色文字
+            Text(
+              widget.text,
+              style: TextStyle(
+                fontSize: widget.fontSize,
+                fontWeight: widget.fontWeight,
+                color: widget.baseColor,
+                height: 1.2,
+              ),
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+              ),
             ),
-            textHeightBehavior: const TextHeightBehavior(
-              applyHeightToFirstAscent: false,
-              applyHeightToLastDescent: false,
+            // 高亮颜色文字
+            ClipRect(
+              clipper: _TextClipper(progress),
+              child: Text(
+                widget.text,
+                style: TextStyle(
+                  fontSize: widget.fontSize,
+                  fontWeight: widget.fontWeight,
+                  color: widget.highlightColor,
+                  height: 1.2,
+                ),
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
+              ),
             ),
-          ),
+          ],
         );
       },
     );
@@ -856,7 +899,23 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
   void dispose() {
     _ticker?.stop();
     _ticker?.dispose();
-    _animationController.dispose();
+    _progressNotifier.dispose();
     super.dispose();
+  }
+}
+
+class _TextClipper extends CustomClipper<Rect> {
+  final double progress;
+
+  _TextClipper(this.progress);
+
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTWH(0, 0, size.width * progress, size.height);
+  }
+
+  @override
+  bool shouldReclip(_TextClipper oldClipper) {
+    return oldClipper.progress != progress;
   }
 }

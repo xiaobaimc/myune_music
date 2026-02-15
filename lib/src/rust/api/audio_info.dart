@@ -26,6 +26,9 @@ class AudioInfo {
   final BigInt? durationMs;
   final int? bitrate;
   final int? sampleRate;
+  final int? year;
+  final String? genre;
+  final String? albumArtist;
 
   const AudioInfo({
     this.title,
@@ -36,6 +39,9 @@ class AudioInfo {
     this.durationMs,
     this.bitrate,
     this.sampleRate,
+    this.year,
+    this.genre,
+    this.albumArtist,
   });
 
   @override
@@ -47,7 +53,10 @@ class AudioInfo {
       lyrics.hashCode ^
       durationMs.hashCode ^
       bitrate.hashCode ^
-      sampleRate.hashCode;
+      sampleRate.hashCode ^
+      year.hashCode ^
+      genre.hashCode ^
+      albumArtist.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -61,23 +70,34 @@ class AudioInfo {
           lyrics == other.lyrics &&
           durationMs == other.durationMs &&
           bitrate == other.bitrate &&
-          sampleRate == other.sampleRate;
+          sampleRate == other.sampleRate &&
+          year == other.year &&
+          genre == other.genre &&
+          albumArtist == other.albumArtist;
 }
 
 class AudioInfoOptions {
   final bool needCover;
   final bool needLyrics;
   final bool needAudioProps;
+  final bool needExtraTags;
 
   const AudioInfoOptions({
     required this.needCover,
     required this.needLyrics,
     required this.needAudioProps,
+    required this.needExtraTags,
   });
+
+  static Future<AudioInfoOptions> default_() =>
+      RustLib.instance.api.crateApiAudioInfoAudioInfoOptionsDefault();
 
   @override
   int get hashCode =>
-      needCover.hashCode ^ needLyrics.hashCode ^ needAudioProps.hashCode;
+      needCover.hashCode ^
+      needLyrics.hashCode ^
+      needAudioProps.hashCode ^
+      needExtraTags.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -86,5 +106,6 @@ class AudioInfoOptions {
           runtimeType == other.runtimeType &&
           needCover == other.needCover &&
           needLyrics == other.needLyrics &&
-          needAudioProps == other.needAudioProps;
+          needAudioProps == other.needAudioProps &&
+          needExtraTags == other.needExtraTags;
 }

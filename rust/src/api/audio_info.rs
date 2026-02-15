@@ -10,12 +10,13 @@ use lofty::probe::Probe;
 use lofty::read_from_path;
 use lofty::tag::{Accessor, ItemKey};
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 #[frb(non_opaque)]
 pub struct AudioInfoOptions {
     pub need_cover: bool,
     pub need_lyrics: bool,
     pub need_audio_props: bool,
+    pub need_extra_tags: bool, // 包含:专辑艺术家、流派、年份
 }
 
 #[derive(Debug, Serialize)]
@@ -29,6 +30,9 @@ pub struct AudioInfo {
     pub duration_ms: Option<u64>,
     pub bitrate: Option<u32>,
     pub sample_rate: Option<u32>,
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub album_artist: Option<String>,
 }
 
 fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFile, String> {
@@ -77,6 +81,9 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
         duration_ms: None,
         bitrate: None,
         sample_rate: None,
+        year: None,
+        genre: None,
+        album_artist: None,
     };
 
     // 处理标签信息
@@ -97,6 +104,18 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
 
         if options.need_lyrics {
             info.lyrics = tag.get_string(&ItemKey::Lyrics).map(|s| s.to_string());
+        }
+
+        if options.need_extra_tags {
+            info.year = tag.year();
+
+            if let Some(genre_str) = tag.genre() {
+                info.genre = Some(genre_str.to_string());
+            }
+
+            if let Some(album_artist_str) = tag.get_string(&ItemKey::AlbumArtist) {
+                info.album_artist = Some(album_artist_str.to_string());
+            }
         }
     }
 

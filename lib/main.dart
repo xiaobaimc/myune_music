@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -360,6 +361,14 @@ class _MyAppState extends State<MyApp> with TrayListener {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh', 'CH'), Locale('en', 'US')],
+          locale: const Locale('zh', 'CH'),
+
           debugShowCheckedModeBanner: false,
           title: 'MyuneMusic',
           theme: themeProvider.lightThemeData,

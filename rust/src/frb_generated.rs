@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.10.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1476044100;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -541531855;
 
 // Section: executor
 
@@ -338,6 +338,39 @@ fn wire__crate__api__smtc__SmtcFlutter_update_timeline_impl(
         },
     )
 }
+fn wire__crate__api__audio_info__audio_info_options_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "audio_info_options_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::audio_info::AudioInfoOptions::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__audio_info__read_audio_info_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -439,6 +472,9 @@ impl SseDecode for crate::api::audio_info::AudioInfo {
         let mut var_durationMs = <Option<u64>>::sse_decode(deserializer);
         let mut var_bitrate = <Option<u32>>::sse_decode(deserializer);
         let mut var_sampleRate = <Option<u32>>::sse_decode(deserializer);
+        let mut var_year = <Option<u32>>::sse_decode(deserializer);
+        let mut var_genre = <Option<String>>::sse_decode(deserializer);
+        let mut var_albumArtist = <Option<String>>::sse_decode(deserializer);
         return crate::api::audio_info::AudioInfo {
             title: var_title,
             artist: var_artist,
@@ -448,6 +484,9 @@ impl SseDecode for crate::api::audio_info::AudioInfo {
             duration_ms: var_durationMs,
             bitrate: var_bitrate,
             sample_rate: var_sampleRate,
+            year: var_year,
+            genre: var_genre,
+            album_artist: var_albumArtist,
         };
     }
 }
@@ -458,10 +497,12 @@ impl SseDecode for crate::api::audio_info::AudioInfoOptions {
         let mut var_needCover = <bool>::sse_decode(deserializer);
         let mut var_needLyrics = <bool>::sse_decode(deserializer);
         let mut var_needAudioProps = <bool>::sse_decode(deserializer);
+        let mut var_needExtraTags = <bool>::sse_decode(deserializer);
         return crate::api::audio_info::AudioInfoOptions {
             need_cover: var_needCover,
             need_lyrics: var_needLyrics,
             need_audio_props: var_needAudioProps,
+            need_extra_tags: var_needExtraTags,
         };
     }
 }
@@ -634,7 +675,13 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        7 => wire__crate__api__audio_info__read_audio_info_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__audio_info__audio_info_options_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        8 => wire__crate__api__audio_info__read_audio_info_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -681,6 +728,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::audio_info::AudioInfo {
             self.duration_ms.into_into_dart().into_dart(),
             self.bitrate.into_into_dart().into_dart(),
             self.sample_rate.into_into_dart().into_dart(),
+            self.year.into_into_dart().into_dart(),
+            self.genre.into_into_dart().into_dart(),
+            self.album_artist.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -703,6 +753,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::audio_info::AudioInfoOptions 
             self.need_cover.into_into_dart().into_dart(),
             self.need_lyrics.into_into_dart().into_dart(),
             self.need_audio_props.into_into_dart().into_dart(),
+            self.need_extra_tags.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -813,6 +864,9 @@ impl SseEncode for crate::api::audio_info::AudioInfo {
         <Option<u64>>::sse_encode(self.duration_ms, serializer);
         <Option<u32>>::sse_encode(self.bitrate, serializer);
         <Option<u32>>::sse_encode(self.sample_rate, serializer);
+        <Option<u32>>::sse_encode(self.year, serializer);
+        <Option<String>>::sse_encode(self.genre, serializer);
+        <Option<String>>::sse_encode(self.album_artist, serializer);
     }
 }
 
@@ -822,6 +876,7 @@ impl SseEncode for crate::api::audio_info::AudioInfoOptions {
         <bool>::sse_encode(self.need_cover, serializer);
         <bool>::sse_encode(self.need_lyrics, serializer);
         <bool>::sse_encode(self.need_audio_props, serializer);
+        <bool>::sse_encode(self.need_extra_tags, serializer);
     }
 }
 

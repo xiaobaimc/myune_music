@@ -151,6 +151,9 @@ class SongDetails {
   final String filePath;
   final DateTime? created;
   final DateTime? modified;
+  final int? year;
+  final String? genre;
+  final String? albumArtist;
 
   SongDetails({
     this.title,
@@ -163,6 +166,9 @@ class SongDetails {
     required this.filePath,
     this.created,
     this.modified,
+    this.year,
+    this.genre,
+    this.albumArtist,
   });
 }
 
