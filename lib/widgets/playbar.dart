@@ -383,6 +383,11 @@ class _PlaybarState extends State<Playbar> {
                       BalanceRateControl(player: player, iconColor: onBarColor),
                       // 播放列表
                       IconButton(
+                        style: const ButtonStyle(
+                          mouseCursor: WidgetStatePropertyAll(
+                            SystemMouseCursors.click,
+                          ),
+                        ),
                         icon: const Icon(Icons.lyrics_outlined),
                         iconSize: 23,
                         tooltip: '播放列表',

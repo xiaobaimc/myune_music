@@ -55,7 +55,13 @@ dependencies:
   windows_taskbar: ^1.1.2
   flutter_single_instance: ^1.6.1
   pinyin: ^3.3.0
-  flutter_web_scroll: ^1.0.1
+  # flutter_web_scroll: ^1.0.1
+  markdown_widget: ^2.3.2+8
+
+  flutter_web_scroll:
+    git:
+      url: https://github.com/xiaobaimc/flutter_web_scroll.git
+      ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
 
   # audiotags:
   #   git:

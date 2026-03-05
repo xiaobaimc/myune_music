@@ -88,13 +88,16 @@ class WindowsMediaService implements PlatformMediaService {
     _lastDuration = durationMs;
 
     if (_timelineUpdateTimer?.isActive ?? false) return;
-    _timelineUpdateTimer = Timer(const Duration(milliseconds: 500), () async {
-      try {
-        // SmtcFlutter 需要的是 int，这里要做转换
-        await _smtc.updateTimeline(position: positionMs, duration: durationMs);
-      } catch (e) {
-        debugPrint('更新SMTC时间轴失败: $e');
-      }
+
+    try {
+      // SmtcFlutter 需要的是 int，这里要做转换
+      await _smtc.updateTimeline(position: positionMs, duration: durationMs);
+    } catch (e) {
+      debugPrint('更新SMTC时间轴失败: $e');
+    }
+
+    _timelineUpdateTimer = Timer(const Duration(milliseconds: 500), () {
+      // 定时器只是为了防止过于频繁的更新，不需要执行任何操作
     });
   }
 

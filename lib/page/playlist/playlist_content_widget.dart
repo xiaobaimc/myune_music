@@ -200,32 +200,40 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
           ),
         ),
         Expanded(
-          // 使用 Selector 精确订阅歌单列表和选中索引的变化
-          child: Selector<PlaylistContentNotifier, (List<Playlist>, int)>(
-            selector: (_, n) => (n.playlists, n.selectedIndex),
+          child: Selector<PlaylistContentNotifier, (String, int)>(
+            selector: (_, n) =>
+                (n.playlists.map((e) => e.id).join(','), n.selectedIndex),
             builder: (context, data, _) {
-              final (playlists, selectedIndex) = data;
+              final playlists = notifier.playlists;
+              final selectedIndex = notifier.selectedIndex;
 
               return SmoothScrollWeb(
                 controller: _scrollController,
                 config: SmoothScrollConfig.lenis(),
-                child: ListView.builder(
-                  controller: _scrollController,
-                  itemCount: playlists.length,
-                  itemBuilder: (context, index) {
-                    final playlist = playlists[index];
-                    return PlaylistTileWidget(
-                      key: ValueKey(playlist.name), // 使用唯一Key
-                      index: index,
-                      name: playlist.name,
-                      isDefault: playlist.isDefault,
-                      isSelected: selectedIndex == index,
-                      isFolderBased: playlist.isFolderBased,
-                      onSecondaryTap: (position) {
-                        _showContextMenu(position, index, context);
-                      },
-                    );
+                child: ReorderableListView(
+                  onReorder: (oldIndex, newIndex) {
+                    notifier.reorderPlaylist(oldIndex, newIndex);
                   },
+                  buildDefaultDragHandles: false,
+                  scrollController: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    for (int index = 0; index < playlists.length; index++)
+                      ReorderableDragStartListener(
+                        key: ValueKey(playlists[index].id),
+                        index: index,
+                        child: PlaylistTileWidget(
+                          index: index,
+                          name: playlists[index].name,
+                          isDefault: playlists[index].isDefault,
+                          isSelected: selectedIndex == index,
+                          isFolderBased: playlists[index].isFolderBased,
+                          onSecondaryTap: (position) {
+                            _showContextMenu(position, index, context);
+                          },
+                        ),
+                      ),
+                  ],
                 ),
               );
             },

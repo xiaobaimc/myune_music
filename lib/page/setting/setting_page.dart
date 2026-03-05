@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:markdown_widget/markdown_widget.dart';
 
 import '../playlist/playlist_content_notifier.dart';
 import './theme_selection_screen.dart';
@@ -16,7 +17,7 @@ import 'about.dart';
 import 'page_visibility_settings.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.8.5';
+const String appVersion = '0.8.4';
 
 bool get isLinux => Platform.isLinux;
 
@@ -79,7 +80,23 @@ class _SettingPageState extends State<SettingPage>
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('发现新版本 ${updateInfo.latestVersion}'),
-          content: SingleChildScrollView(child: Text(updateInfo.releaseNotes)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.65,
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsetsGeometry.all(12),
+                  child: MarkdownWidget(
+                    data: (updateInfo.releaseNotes),
+                    shrinkWrap: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () {
@@ -189,15 +206,61 @@ class _SettingPageState extends State<SettingPage>
                         ),
                       ),
                     ),
-                  // 深色模式
-                  SwitchListTile(
-                    title: Text(
-                      '深色模式',
-                      style: Theme.of(context).textTheme.titleMedium,
+                  // 主题模式
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    value: context.watch<ThemeProvider>().isDarkMode,
-                    onChanged: (value) =>
-                        context.read<ThemeProvider>().toggleDarkMode(),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '主题模式',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Consumer<ThemeProvider>(
+                          builder: (context, themeProvider, child) {
+                            return SegmentedButton<ThemeMode>(
+                              style: ButtonStyle(
+                                padding: WidgetStateProperty.all(
+                                  EdgeInsets.zero,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                minimumSize: WidgetStateProperty.all(
+                                  const Size(0, 0),
+                                ),
+                              ),
+                              segments: const [
+                                ButtonSegment(
+                                  value: ThemeMode.light,
+                                  label: Text('浅色'),
+                                ),
+                                ButtonSegment(
+                                  value: ThemeMode.dark,
+                                  label: Text('深色'),
+                                ),
+                                ButtonSegment(
+                                  value: ThemeMode.system,
+                                  label: Text('自动'),
+                                ),
+                              ],
+                              selected: {themeProvider.themeMode},
+                              onSelectionChanged:
+                                  (Set<ThemeMode> newSelection) {
+                                    if (newSelection.isNotEmpty) {
+                                      final selectedMode = newSelection.first;
+                                      context
+                                          .read<ThemeProvider>()
+                                          .setThemeMode(selectedMode);
+                                    }
+                                  },
+                              showSelectedIcon: false,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                   // 启用动态获取颜色
                   SwitchListTile(

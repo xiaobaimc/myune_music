@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:system_fonts/system_fonts.dart';
+import 'package:flutter/foundation.dart';
 
 class ThemeProvider with ChangeNotifier {
   static const TextStyle defaultStyle = TextStyle(fontWeight: FontWeight.w400);
@@ -26,7 +27,7 @@ class ThemeProvider with ChangeNotifier {
   static final int _defaultSeedColorValue = Colors.blue.toARGB32(); // 默认蓝色
   Color _currentSeedColor = Color(_defaultSeedColorValue);
 
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
@@ -55,7 +56,7 @@ class ThemeProvider with ChangeNotifier {
     ),
     fontFamily: _currentFontFamily,
     textTheme: misansTextTheme,
-  );
+  ).makeMouseClickable();
 
   ThemeData get darkThemeData => ThemeData(
     useMaterial3: true,
@@ -65,7 +66,7 @@ class ThemeProvider with ChangeNotifier {
     ),
     fontFamily: _currentFontFamily,
     textTheme: misansTextTheme,
-  );
+  ).makeMouseClickable();
 
   void setSeedColor(Color newColor) async {
     if (_currentSeedColor != newColor) {
@@ -90,17 +91,58 @@ class ThemeProvider with ChangeNotifier {
   }
 
   void toggleDarkMode() async {
-    _themeMode = isDarkMode ? ThemeMode.light : ThemeMode.dark;
+    switch (_themeMode) {
+      case ThemeMode.light:
+        _themeMode = ThemeMode.dark;
+        break;
+      case ThemeMode.dark:
+        _themeMode = ThemeMode.system;
+        break;
+      case ThemeMode.system:
+        _themeMode = ThemeMode.light;
+        break;
+    }
+    notifyListeners();
+
+    setThemeMode(_themeMode);
+  }
+
+  void setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('user_dark_mode', _themeMode == ThemeMode.dark);
+    await prefs.setString('user_theme_mode', _themeModeToString(_themeMode));
+  }
+
+  String _themeModeToString(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.system:
+        return 'system';
+    }
+  }
+
+  ThemeMode _stringToThemeMode(String? modeString) {
+    switch (modeString) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+        return ThemeMode.system;
+      default:
+        return ThemeMode.system;
+    }
   }
 
   Future<void> _loadDarkMode() async {
     final prefs = await SharedPreferences.getInstance();
-    final bool isDark = prefs.getBool('user_dark_mode') ?? false;
-    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    final String? modeString = prefs.getString('user_theme_mode');
+    _themeMode = _stringToThemeMode(modeString);
     notifyListeners();
   }
 
@@ -138,5 +180,84 @@ class ThemeProvider with ChangeNotifier {
       await systemFonts.loadFont(_currentFontFamily);
       notifyListeners();
     }
+  }
+}
+
+class DesktopButtonTheme {
+  const DesktopButtonTheme._(); // 防止实例化
+
+  static const WidgetStateProperty<MouseCursor> clickableCursor =
+      WidgetStatePropertyAll(SystemMouseCursors.click);
+
+  static const TextButtonThemeData textButtonTheme = TextButtonThemeData(
+    style: ButtonStyle(mouseCursor: clickableCursor),
+  );
+
+  static const ElevatedButtonThemeData elevatedButtonTheme =
+      ElevatedButtonThemeData(style: ButtonStyle(mouseCursor: clickableCursor));
+
+  static const OutlinedButtonThemeData outlinedButtonTheme =
+      OutlinedButtonThemeData(style: ButtonStyle(mouseCursor: clickableCursor));
+}
+
+// 代码来源: https://github.com/flutter/flutter/issues/182466#issuecomment-3932182424
+// 旨在修复Flutter 3.40+ 鼠标点击光标被移除的问题
+// 参考 https://github.com/flutter/flutter/issues/182466
+// TODO: 请等待Flutter修复该问题
+
+extension on ThemeData {
+  ThemeData makeMouseClickable() {
+    final WidgetStateMouseCursor clickable =
+        defaultTargetPlatform != TargetPlatform.android
+        ? WidgetStateMouseCursor.clickable
+        : WidgetStateMouseCursor.adaptiveClickable;
+    return copyWith(
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: (elevatedButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: (filledButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: (outlinedButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      floatingActionButtonTheme: floatingActionButtonTheme.copyWith(
+        mouseCursor: clickable,
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: (iconButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: (menuButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        submenuIcon: menuTheme.submenuIcon,
+        style: (menuTheme.style ?? const MenuStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      checkboxTheme: checkboxTheme.copyWith(mouseCursor: clickable),
+      popupMenuTheme: popupMenuTheme.copyWith(mouseCursor: clickable),
+      segmentedButtonTheme: segmentedButtonTheme.copyWith(
+        style: (segmentedButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: (textButtonTheme.style ?? const ButtonStyle()).copyWith(
+          mouseCursor: clickable,
+        ),
+      ),
+    );
   }
 }

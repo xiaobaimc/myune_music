@@ -163,6 +163,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_highlight:
+    dependency: transitive
+    description:
+      name: flutter_highlight
+      sha256: "7b96333867aa07e122e245c033b8ad622e4e3a42a1a2372cbb098a2541d8782c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -213,10 +221,11 @@ packages:
   flutter_web_scroll:
     dependency: "direct main"
     description:
-      name: flutter_web_scroll
-      sha256: ecc32b1535d7d08adff460dee35092ddf13b32fe5345082407cc938c94b7fdc8
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
+      resolved-ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
+      url: "https://github.com/xiaobaimc/flutter_web_scroll.git"
+    source: git
     version: "1.0.1"
   freezed_annotation:
     dependency: transitive
@@ -255,6 +264,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
+  highlight:
+    dependency: transitive
+    description:
+      name: highlight
+      sha256: "5353a83ffe3e3eca7df0abfb72dcf3fa66cc56b953728e7113ad4ad88497cf21"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   http:
     dependency: "direct main"
     description:
@@ -356,14 +373,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.0"
+  markdown:
+    dependency: transitive
+    description:
+      name: markdown
+      sha256: "935e23e1ff3bc02d390bad4d4be001208ee92cc217cb5b5a6c19bc14aaa318c1"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.3.0"
+  markdown_widget:
+    dependency: "direct main"
+    description:
+      name: markdown_widget
+      sha256: b52c13d3ee4d0e60c812e15b0593f142a3b8a2003cde1babb271d001a1dbdc1c
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.2+8"
   matcher:
     dependency: transitive
     description:
       name: matcher
-      sha256: "12956d0ad8390bbcc63ca2e1469c0619946ccb52809807067a7020d57e647aa6"
+      sha256: dc0b7dc7651697ea4ff3e69ef44b0407ea32c487a39fff6a4004fa585e901861
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.18"
+    version: "0.12.19"
   material_color_utilities:
     dependency: transitive
     description:
@@ -627,6 +660,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0"
+  scroll_to_index:
+    dependency: transitive
+    description:
+      name: scroll_to_index
+      sha256: b707546e7500d9f070d63e5acf74fd437ec7eeeb68d3412ef7b0afada0b4f176
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.1"
   scrollable_positioned_list:
     dependency: "direct main"
     description:
@@ -780,10 +821,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
+      sha256: "8161c84903fd860b26bfdefb7963b3f0b68fee7adea0f59ef805ecca346f0c7a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.9"
+    version: "0.7.10"
   tray_manager:
     dependency: "direct main"
     description:
@@ -896,6 +937,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  visibility_detector:
+    dependency: transitive
+    description:
+      name: visibility_detector
+      sha256: dd5cc11e13494f432d15939c3aa8ae76844c42b723398643ce9addb88a5ed420
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.0+2"
   vm_service:
     dependency: transitive
     description:

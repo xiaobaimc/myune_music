@@ -73,6 +73,10 @@ class LinuxMediaService implements PlatformMediaService {
   int _trackIdCounter = 0;
   String? _currentArtFilePath; // 存储当前封面文件路径
 
+  Timer? _timelineUpdateTimer;
+  int? _lastPosition;
+  int? _lastDuration;
+
   LinuxMediaService({
     Future<void> Function()? onPlay,
     Future<void> Function()? onPause,
@@ -159,14 +163,32 @@ class LinuxMediaService implements PlatformMediaService {
     required Duration position,
     required Duration duration,
   }) async {
-    // 单独更新位置
-    _mpris.updatePosition(position);
+    // 防抖
+    final positionMs = position.inMilliseconds;
+    final durationMs = duration.inMilliseconds;
+    if (_lastPosition == positionMs && _lastDuration == durationMs) return;
 
-    // 只有在时长变化时才更新，以避免不必要的 D-Bus 调用
-    if (_mpris.metadata.trackLength != duration) {
-      final newMetadata = _mpris.metadata.copyWith(trackLength: duration);
-      _mpris.metadata = newMetadata;
+    _lastPosition = positionMs;
+    _lastDuration = durationMs;
+
+    if (_timelineUpdateTimer?.isActive ?? false) return;
+
+    try {
+      // 立即更新Mpris
+      _mpris.updatePosition(position);
+
+      // 只有在时长变化时才更新，以避免不必要的 D-Bus 调用
+      if (_mpris.metadata.trackLength != duration) {
+        final newMetadata = _mpris.metadata.copyWith(trackLength: duration);
+        _mpris.metadata = newMetadata;
+      }
+    } catch (e) {
+      //
     }
+
+    _timelineUpdateTimer = Timer(const Duration(milliseconds: 500), () {
+      // 定时器只是为了防止过于频繁的更新，不需要执行任何操作
+    });
   }
 
   @override

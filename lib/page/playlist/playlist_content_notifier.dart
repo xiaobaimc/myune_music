@@ -1847,9 +1847,23 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     // 检查歌曲是否已经在队列中
-    if (_currentPlayingQueue!.any((s) => s.filePath == song.filePath)) {
-      _infoStreamController.add('歌曲已在播放队列中：${song.title}');
-      return;
+    int existingIndex = -1;
+    for (int i = 0; i < _currentPlayingQueue!.length; i++) {
+      if (_currentPlayingQueue![i].filePath == song.filePath) {
+        existingIndex = i;
+        break;
+      }
+    }
+
+    if (existingIndex != -1) {
+      _currentPlayingQueue!.removeAt(existingIndex);
+      _currentPlayingQueueFilePaths!.removeAt(existingIndex);
+
+      if (existingIndex < _currentQueueIndex) {
+        _currentQueueIndex--;
+      } else if (existingIndex == _currentQueueIndex) {
+        // 保持当前播放索引不变，因为后续会插入新歌曲
+      }
     }
 
     // 计算下一首播放的位置
@@ -2348,6 +2362,38 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _savePlaylists();
 
     notifyListeners();
+  }
+
+  // 排序歌单
+  Future<void> reorderPlaylist(int oldIndex, int newIndex) async {
+    int targetIndex = newIndex;
+    if (oldIndex < newIndex) {
+      targetIndex -= 1;
+    }
+    if (oldIndex == targetIndex) return;
+
+    if (_playlists[oldIndex].isDefault || _playlists[targetIndex].isDefault) {
+      _infoStreamController.add('默认歌单不能改变顺序');
+      notifyListeners();
+      return;
+    }
+
+    final String? selectedId = _selectedIndex != -1
+        ? _playlists[_selectedIndex].id
+        : null;
+
+    final item = _playlists.removeAt(oldIndex);
+    _playlists.insert(targetIndex, item);
+
+    // 根据id重新找索引
+    // 这样即使歌单位置变了, selectedIndex 也会自动指向挪动后的那个位置
+    if (selectedId != null) {
+      _selectedIndex = _playlists.indexWhere((e) => e.id == selectedId);
+    }
+
+    notifyListeners();
+
+    await _savePlaylists();
   }
 
   // 使用指定方式进行排序

@@ -129,25 +129,31 @@ class _MainViewState extends State<MainView> {
 
   NavigationRailDestination _buildDest(PageEntry entry, int index) {
     return NavigationRailDestination(
-      icon: AnimatedScale(
-        scale: _tappedIndex == index ? 1.1 : 1.0,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeInOut,
-        child: Tooltip(
-          message: entry.label,
-          child: Icon(
-            entry.icon,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+      icon: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedScale(
+          scale: _tappedIndex == index ? 1.1 : 1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          child: Tooltip(
+            message: entry.label,
+            child: Icon(
+              entry.icon,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
-      selectedIcon: AnimatedScale(
-        scale: _currentIndex == index ? 1.1 : 1.0,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeInOut,
-        child: Icon(
-          entry.selectedIcon,
-          color: Theme.of(context).colorScheme.primary,
+      selectedIcon: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedScale(
+          scale: _currentIndex == index ? 1.1 : 1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          child: Icon(
+            entry.selectedIcon,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ),
       ),
       label: Text(entry.label, style: _mainViewTextStyle),
