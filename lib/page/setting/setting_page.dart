@@ -15,6 +15,7 @@ import 'audio_device_selector.dart';
 import 'artist_separator.dart';
 import 'about.dart';
 import 'page_visibility_settings.dart';
+import 'playlist_cleaner.dart';
 
 // 定义应用版本号常量
 const String appVersion = '0.8.6';
@@ -264,9 +265,15 @@ class _SettingPageState extends State<SettingPage>
                   ),
                   // 启用动态获取颜色
                   SwitchListTile(
-                    title: Text(
-                      '提取当前播放的封面图颜色作为主题配色',
-                      style: Theme.of(context).textTheme.titleMedium,
+                    title: Row(
+                      children: [
+                        Text(
+                          '动态主题配色',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(width: 4),
+                        const InfoIcon("启用后将使用当前播放歌曲的封面颜色作为主题配色"),
+                      ],
                     ),
                     value: settings.useDynamicColor, // 使用 settings
                     onChanged: (value) {
@@ -292,7 +299,13 @@ class _SettingPageState extends State<SettingPage>
                   ),
                   // 是否启用从网络获取歌词
                   SwitchListTile(
-                    title: const Text('从网络获取歌词'),
+                    title: const Row(
+                      children: [
+                        Text('从网络获取歌词'),
+                        SizedBox(width: 4),
+                        InfoIcon("启用后将在未读取到内嵌及本地lrc歌词时从网络获取歌词"),
+                      ],
+                    ),
                     value: settings.enableOnlineLyrics,
                     onChanged: (value) {
                       context.read<SettingsProvider>().setEnableOnlineLyrics(
@@ -502,186 +515,186 @@ class _SettingPageState extends State<SettingPage>
                       );
                     },
                   ),
-                  // 播放页同时间戳最大显示歌词行数
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '同时间戳歌词行数',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Consumer<SettingsProvider>(
-                          builder: (context, settings, child) {
-                            return SegmentedButton<int>(
-                              style: ButtonStyle(
-                                padding: WidgetStateProperty.all(
-                                  EdgeInsets.zero,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                minimumSize: WidgetStateProperty.all(
-                                  const Size(0, 0),
-                                ),
-                              ),
-                              segments: List.generate(5, (index) {
-                                final value = index + 1;
-                                return ButtonSegment(
-                                  value: value,
-                                  label: Text('$value'),
-                                );
-                              }),
-                              selected: {
-                                settings.maxLinesPerLyric,
-                              }, // 使用 settings
-                              onSelectionChanged: (newSelection) {
-                                final value = newSelection.first;
-                                context
-                                    .read<SettingsProvider>()
-                                    .setMaxLinesPerLyric(value);
-                              },
-                              showSelectedIcon: false,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  // 播放页歌词字体大小
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '播放页歌词字体大小',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        SizedBox(
-                          width: 320, // 固定宽度
-                          child: Consumer<SettingsProvider>(
-                            builder: (context, settings, child) {
-                              return Slider(
-                                value: settings.fontSize, // 使用 settings
-                                min: 12.0,
-                                max: 32.0,
-                                divisions: 20,
-                                label: settings.fontSize.toStringAsFixed(
-                                  1,
-                                ), // 使用 settings
-                                onChanged: (value) {
-                                  context.read<SettingsProvider>().setFontSize(
-                                    value,
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // 播放页歌词垂直间距
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '播放页歌词垂直间距',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        SizedBox(
-                          width: 320, // 固定宽度
-                          child: Consumer<SettingsProvider>(
-                            builder: (context, settings, child) {
-                              return Slider(
-                                value: settings.lyricVerticalSpacing,
-                                min: 0.0,
-                                max: 20.0,
-                                divisions: 20,
-                                label: settings.lyricVerticalSpacing
-                                    .toStringAsFixed(1),
-                                onChanged: (value) {
-                                  context
-                                      .read<SettingsProvider>()
-                                      .setLyricVerticalSpacing(value);
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // 对齐方式选择
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '播放页歌词对齐方式',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Consumer<SettingsProvider>(
-                          builder: (context, settings, child) {
-                            return SegmentedButton<TextAlign>(
-                              style: ButtonStyle(
-                                padding: WidgetStateProperty.all(
-                                  EdgeInsets.zero,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                minimumSize: WidgetStateProperty.all(
-                                  const Size(0, 0),
-                                ),
-                              ),
-                              segments: const [
-                                ButtonSegment(
-                                  value: TextAlign.left,
-                                  label: Text('居左'),
-                                ),
-                                ButtonSegment(
-                                  value: TextAlign.center,
-                                  label: Text('居中'),
-                                ),
-                                ButtonSegment(
-                                  value: TextAlign.right,
-                                  label: Text('居右'),
-                                ),
-                              ],
-                              selected: {
-                                settings.lyricAlignment,
-                              }, // 使用 settings
-                              onSelectionChanged:
-                                  (Set<TextAlign> newSelection) {
-                                    if (newSelection.isNotEmpty) {
-                                      context
-                                          .read<SettingsProvider>()
-                                          .setLyricAlignment(
-                                            newSelection.first,
-                                          );
-                                    }
-                                  },
-                              showSelectedIcon: false,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                  // // 播放页同时间戳最大显示歌词行数
+                  // Padding(
+                  //   padding: const EdgeInsets.symmetric(
+                  //     horizontal: 16,
+                  //     vertical: 8,
+                  //   ),
+                  //   child: Row(
+                  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //     children: [
+                  //       Text(
+                  //         '同时间戳歌词行数',
+                  //         style: Theme.of(context).textTheme.titleMedium,
+                  //       ),
+                  //       Consumer<SettingsProvider>(
+                  //         builder: (context, settings, child) {
+                  //           return SegmentedButton<int>(
+                  //             style: ButtonStyle(
+                  //               padding: WidgetStateProperty.all(
+                  //                 EdgeInsets.zero,
+                  //               ),
+                  //               visualDensity: VisualDensity.compact,
+                  //               minimumSize: WidgetStateProperty.all(
+                  //                 const Size(0, 0),
+                  //               ),
+                  //             ),
+                  //             segments: List.generate(5, (index) {
+                  //               final value = index + 1;
+                  //               return ButtonSegment(
+                  //                 value: value,
+                  //                 label: Text('$value'),
+                  //               );
+                  //             }),
+                  //             selected: {
+                  //               settings.maxLinesPerLyric,
+                  //             }, // 使用 settings
+                  //             onSelectionChanged: (newSelection) {
+                  //               final value = newSelection.first;
+                  //               context
+                  //                   .read<SettingsProvider>()
+                  //                   .setMaxLinesPerLyric(value);
+                  //             },
+                  //             showSelectedIcon: false,
+                  //           );
+                  //         },
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
+                  // // 播放页歌词字体大小
+                  // Padding(
+                  //   padding: const EdgeInsets.symmetric(
+                  //     horizontal: 16,
+                  //     vertical: 0,
+                  //   ),
+                  //   child: Row(
+                  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //     children: [
+                  //       Text(
+                  //         '播放页歌词字体大小',
+                  //         style: Theme.of(context).textTheme.titleMedium,
+                  //       ),
+                  //       SizedBox(
+                  //         width: 320, // 固定宽度
+                  //         child: Consumer<SettingsProvider>(
+                  //           builder: (context, settings, child) {
+                  //             return Slider(
+                  //               value: settings.fontSize, // 使用 settings
+                  //               min: 12.0,
+                  //               max: 32.0,
+                  //               divisions: 20,
+                  //               label: settings.fontSize.toStringAsFixed(
+                  //                 1,
+                  //               ), // 使用 settings
+                  //               onChanged: (value) {
+                  //                 context.read<SettingsProvider>().setFontSize(
+                  //                   value,
+                  //                 );
+                  //               },
+                  //             );
+                  //           },
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
+                  // // 播放页歌词垂直间距
+                  // Padding(
+                  //   padding: const EdgeInsets.symmetric(
+                  //     horizontal: 16,
+                  //     vertical: 0,
+                  //   ),
+                  //   child: Row(
+                  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //     children: [
+                  //       Text(
+                  //         '播放页歌词垂直间距',
+                  //         style: Theme.of(context).textTheme.titleMedium,
+                  //       ),
+                  //       SizedBox(
+                  //         width: 320, // 固定宽度
+                  //         child: Consumer<SettingsProvider>(
+                  //           builder: (context, settings, child) {
+                  //             return Slider(
+                  //               value: settings.lyricVerticalSpacing,
+                  //               min: 0.0,
+                  //               max: 20.0,
+                  //               divisions: 20,
+                  //               label: settings.lyricVerticalSpacing
+                  //                   .toStringAsFixed(1),
+                  //               onChanged: (value) {
+                  //                 context
+                  //                     .read<SettingsProvider>()
+                  //                     .setLyricVerticalSpacing(value);
+                  //               },
+                  //             );
+                  //           },
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
+                  // // 对齐方式选择
+                  // Padding(
+                  //   padding: const EdgeInsets.symmetric(
+                  //     horizontal: 16,
+                  //     vertical: 8,
+                  //   ),
+                  //   child: Row(
+                  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //     children: [
+                  //       Text(
+                  //         '播放页歌词对齐方式',
+                  //         style: Theme.of(context).textTheme.titleMedium,
+                  //       ),
+                  //       Consumer<SettingsProvider>(
+                  //         builder: (context, settings, child) {
+                  //           return SegmentedButton<TextAlign>(
+                  //             style: ButtonStyle(
+                  //               padding: WidgetStateProperty.all(
+                  //                 EdgeInsets.zero,
+                  //               ),
+                  //               visualDensity: VisualDensity.compact,
+                  //               minimumSize: WidgetStateProperty.all(
+                  //                 const Size(0, 0),
+                  //               ),
+                  //             ),
+                  //             segments: const [
+                  //               ButtonSegment(
+                  //                 value: TextAlign.left,
+                  //                 label: Text('居左'),
+                  //               ),
+                  //               ButtonSegment(
+                  //                 value: TextAlign.center,
+                  //                 label: Text('居中'),
+                  //               ),
+                  //               ButtonSegment(
+                  //                 value: TextAlign.right,
+                  //                 label: Text('居右'),
+                  //               ),
+                  //             ],
+                  //             selected: {
+                  //               settings.lyricAlignment,
+                  //             }, // 使用 settings
+                  //             onSelectionChanged:
+                  //                 (Set<TextAlign> newSelection) {
+                  //                   if (newSelection.isNotEmpty) {
+                  //                     context
+                  //                         .read<SettingsProvider>()
+                  //                         .setLyricAlignment(
+                  //                           newSelection.first,
+                  //                         );
+                  //                   }
+                  //                 },
+                  //             showSelectedIcon: false,
+                  //           );
+                  //         },
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
                 ],
               ),
 
@@ -698,7 +711,7 @@ class _SettingPageState extends State<SettingPage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '手动指定音频输出设备',
+                          '更改音频输出设备',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         ElevatedButton.icon(
@@ -716,6 +729,18 @@ class _SettingPageState extends State<SettingPage>
                       ],
                     ),
                   ),
+                  // 清理无效歌曲
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    child: Consumer<PlaylistContentNotifier>(
+                      builder: (context, notifier, child) {
+                        return PlaylistCleaner(notifier: notifier);
+                      },
+                    ),
+                  ),
                   // 自定义艺术家分隔符
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -726,7 +751,7 @@ class _SettingPageState extends State<SettingPage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '自定义艺术家分隔符',
+                          '更改艺术家分隔符',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         ElevatedButton.icon(

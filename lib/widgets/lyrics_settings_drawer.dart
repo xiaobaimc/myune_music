@@ -88,6 +88,24 @@ class LyricsSettingsDrawer extends StatelessWidget {
               ),
               const Divider(),
 
+              // Text('歌词高亮位置', style: Theme.of(context).textTheme.titleMedium),
+              // Slider(
+              //   value: settings.lyricHighlightPosition,
+              //   min: 0.0,
+              //   max: 1.0,
+              //   divisions: 10,
+              //   label: settings.lyricHighlightPosition.toStringAsFixed(1),
+              //   onChanged: (value) {
+              //     context.read<SettingsProvider>().setLyricHighlightPosition(
+              //       value,
+              //     );
+              //   },
+              // ),
+              // Text(
+              //   '当前位置: ${settings.lyricHighlightPosition.toStringAsFixed(1)}',
+              //   style: Theme.of(context).textTheme.bodyMedium,
+              // ),
+
               // 歌词对齐方式设置
               Text('歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),

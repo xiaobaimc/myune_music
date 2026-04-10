@@ -116,6 +116,9 @@ void main() async {
             context.read<ThemeProvider>(),
           ),
         ),
+        ChangeNotifierProvider<StatisticsManager>(
+          create: (context) => StatisticsManager(),
+        ),
       ],
       child: const MyApp(),
     ),

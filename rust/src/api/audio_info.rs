@@ -103,17 +103,22 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
         }
 
         if options.need_lyrics {
-            info.lyrics = tag.get_string(&ItemKey::Lyrics).map(|s| s.to_string());
+            info.lyrics = std::panic::catch_unwind(|| {
+                tag.get_string(ItemKey::UnsyncLyrics).map(|s| s.to_string())
+            })
+            .unwrap_or(None);
         }
 
         if options.need_extra_tags {
-            info.year = tag.year();
+            info.year = tag
+                .get_string(ItemKey::Year)
+                .and_then(|y| y.parse::<u32>().ok());
 
             if let Some(genre_str) = tag.genre() {
                 info.genre = Some(genre_str.to_string());
             }
 
-            if let Some(album_artist_str) = tag.get_string(&ItemKey::AlbumArtist) {
+            if let Some(album_artist_str) = tag.get_string(ItemKey::AlbumArtist) {
                 info.album_artist = Some(album_artist_str.to_string());
             }
         }

@@ -1466,6 +1466,60 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
+  // 查找歌单中不存在的文件
+  Future<Map<String, List<String>>> findInvalidFiles() async {
+    final Map<String, List<String>> invalidFiles = {};
+
+    for (final playlist in _playlists) {
+      // 跳过基于文件夹的歌单
+      if (playlist.isFolderBased) continue;
+
+      final invalidPaths = <String>[];
+
+      for (final path in playlist.songFilePaths) {
+        final file = File(path);
+        if (!await file.exists()) {
+          invalidPaths.add(path);
+        }
+      }
+
+      if (invalidPaths.isNotEmpty) {
+        invalidFiles[playlist.name] = invalidPaths;
+      }
+    }
+
+    return invalidFiles;
+  }
+
+  // 清理歌单中不存在的文件
+  Future<int> cleanInvalidFiles() async {
+    int totalRemoved = 0;
+
+    for (final playlist in _playlists) {
+      // 跳过基于文件夹的歌单
+      if (playlist.isFolderBased) continue;
+
+      final originalLength = playlist.songFilePaths.length;
+      final updatedPaths = <String>[];
+      for (final path in playlist.songFilePaths) {
+        final file = File(path);
+        if (await file.exists()) {
+          updatedPaths.add(path);
+        }
+      }
+      playlist.songFilePaths = updatedPaths;
+
+      totalRemoved += originalLength - playlist.songFilePaths.length;
+    }
+
+    await _savePlaylists();
+    await _updateAllSongsList();
+
+    notifyListeners();
+
+    return totalRemoved;
+  }
+
   // --- 播放控制 ---
   Future<void> play() async {
     if (!_isPlaying) {

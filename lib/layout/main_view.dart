@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../page/pages/play_list.dart';
 import '../page/pages/setting.dart';
@@ -38,9 +37,6 @@ class MainView extends StatefulWidget {
 
 class _MainViewState extends State<MainView> {
   int _currentIndex = 0;
-  bool _isManuallyExpanded = false;
-  bool _hasUserToggled = false;
-  bool _isExpanded = true;
 
   final int _tappedIndex = -1;
 
@@ -51,28 +47,9 @@ class _MainViewState extends State<MainView> {
     fontWeight: FontWeight.w400,
   );
 
-  // 加载保存的展开状态
-  Future<void> _loadExpandedState() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isExpanded = prefs.getBool('isNavigationRailExpanded') ?? true;
-      // 如果从未手动切换过，则使用保存的状态
-      if (!_hasUserToggled) {
-        _isManuallyExpanded = _isExpanded;
-      }
-    });
-  }
-
-  // 保存展开状态
-  Future<void> _saveExpandedState(bool isExpanded) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isNavigationRailExpanded', isExpanded);
-  }
-
   @override
   void initState() {
     super.initState();
-    _loadExpandedState();
 
     _entries = [
       PageEntry(
@@ -179,18 +156,6 @@ class _MainViewState extends State<MainView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // final bool isWideScreen = constraints.maxWidth >= 1000;
-        final aspectRatio = MediaQuery.of(context).size.aspectRatio;
-        final bool isPortrait = aspectRatio <= 1.0; // 竖屏判断
-
-        final bool actualExtended;
-        if (_hasUserToggled) {
-          // 即使手动点击过折叠按钮，在竖屏状态下也要保持折叠
-          actualExtended = isPortrait ? false : _isManuallyExpanded;
-        } else {
-          // 在竖屏状态下始终折叠，否则根据保存的状态决定
-          actualExtended = isPortrait ? false : _isExpanded;
-        }
         return Row(
           children: [
             SafeArea(
@@ -198,7 +163,7 @@ class _MainViewState extends State<MainView> {
                 backgroundColor: Theme.of(
                   context,
                 ).colorScheme.surfaceContainerHighest,
-                extended: actualExtended,
+                extended: false,
                 selectedIndex: _currentIndex,
                 onDestinationSelected: (int index) {
                   switch (visibleEntries[index].page.runtimeType) {
@@ -217,50 +182,11 @@ class _MainViewState extends State<MainView> {
                   for (int i = 0; i < visibleEntries.length; i++)
                     _buildDest(visibleEntries[i], i),
                 ],
-                // 在竖屏状态下隐藏折叠按钮
-                trailing: isPortrait
-                    ? null
-                    : Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                left: 8,
-                                bottom: 16,
-                              ),
-                              child: CircleAvatar(
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.1),
-                                child: IconButton(
-                                  icon: Icon(
-                                    actualExtended
-                                        ? Icons.arrow_back_ios_new
-                                        : Icons.arrow_forward_ios,
-                                  ),
-                                  onPressed: () {
-                                    final newState = !actualExtended;
-                                    setState(() {
-                                      _isManuallyExpanded = newState;
-                                      _hasUserToggled = true;
-                                    });
-                                    // 保存状态
-                                    _saveExpandedState(newState);
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
               ),
             ),
             Expanded(
               child: visibleEntries.isNotEmpty
-                  ? visibleEntries[_currentIndex]
-                        .page // 动态展示页面
+                  ? visibleEntries[_currentIndex].page
                   : const SizedBox.shrink(),
             ),
           ],

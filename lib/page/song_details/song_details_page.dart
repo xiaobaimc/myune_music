@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../playlist/playlist_content_notifier.dart';
 import '../playlist/playlist_models.dart';
+import '../statistics_page/statistics_manager.dart';
 
 class SongDetailsPage extends StatelessWidget {
   const SongDetailsPage({super.key});
@@ -32,6 +33,21 @@ class SongDetailsPage extends StatelessWidget {
             final details = snapshot.data;
             if (details == null) {
               return const Center(child: Text('没有当前歌曲'));
+            }
+
+            // 获取当前歌曲的收听次数
+            int listenCount = 0;
+            if (currentSong != null) {
+              final statisticsManager = Provider.of<StatisticsManager>(
+                context,
+                listen: false,
+              );
+              final songStat = statisticsManager.getSongStatByPath(
+                currentSong.filePath,
+              );
+              if (songStat != null) {
+                listenCount = songStat.playCount;
+              }
             }
 
             return LayoutBuilder(
@@ -145,6 +161,12 @@ class SongDetailsPage extends StatelessWidget {
                               label: '专辑艺术家',
                               value: details.albumArtist ?? '未知',
                             ),
+                          _infoCard(
+                            context: context,
+                            icon: Icons.headphones,
+                            label: '收听次数',
+                            value: '$listenCount 次',
+                          ),
                           _infoCard(
                             context: context,
                             icon: Icons.create,

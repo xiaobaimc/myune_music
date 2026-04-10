@@ -207,6 +207,11 @@ flutter pub get
 flutter run
 ```
 
+### 构建项目
+```bash
+flutter build windows --release # 或对应平台名
+```
+
 ## 🧱 使用的依赖与致谢
 
 | 插件                                                                      | 功能             |
@@ -253,7 +258,7 @@ flutter run
 
 ### ☕ 赞助
 
-* [爱发电](https://afdian.com/a/xiaobaimc)
+* [爱发电](https://ifdian.net/a/xiaobaimc)
 
 ## Star History Chart
 

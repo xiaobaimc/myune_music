@@ -716,7 +716,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
     final isSearching = notifier.isSearching;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

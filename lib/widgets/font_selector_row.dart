@@ -12,7 +12,14 @@ class FontSelectorRow extends StatefulWidget {
 }
 
 class _FontSelectorRowState extends State<FontSelectorRow> {
+  late final scrollController = ScrollController();
   final systemFonts = SystemFonts();
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _showFontSelectionDialog(BuildContext context) async {
     final themeProvider = context.read<ThemeProvider>();
@@ -32,8 +39,6 @@ class _FontSelectorRowState extends State<FontSelectorRow> {
     }
 
     String? selectedFont = currentFontFamily;
-
-    final scrollController = ScrollController();
 
     return showDialog<void>(
       context: context,

@@ -10,8 +10,21 @@ import 'package:media_kit/media_kit.dart';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_notifier.dart';
 
-class AudioDeviceSelector extends StatelessWidget {
+class AudioDeviceSelector extends StatefulWidget {
   const AudioDeviceSelector({super.key});
+
+  @override
+  State<AudioDeviceSelector> createState() => _AudioDeviceSelectorState();
+}
+
+class _AudioDeviceSelectorState extends State<AudioDeviceSelector> {
+  late final scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,8 +32,6 @@ class AudioDeviceSelector extends StatelessWidget {
       builder: (context, playlistNotifier, child) {
         final devices = playlistNotifier.availableAudioDevices;
         final selectedDevice = playlistNotifier.selectedAudioDevice;
-
-        final scrollController = ScrollController();
 
         return AlertDialog(
           title: const Text('选择音频设备'),

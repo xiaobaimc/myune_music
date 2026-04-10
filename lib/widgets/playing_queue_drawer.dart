@@ -6,8 +6,21 @@ import '../page/playlist/playlist_content_notifier.dart';
 import '../page/playlist/playlist_content_widget.dart';
 import '../page/playlist/playlist_models.dart';
 
-class PlayingQueueDrawer extends StatelessWidget {
+class PlayingQueueDrawer extends StatefulWidget {
   const PlayingQueueDrawer({super.key});
+
+  @override
+  State<PlayingQueueDrawer> createState() => PlayingQueueDrawerState();
+}
+
+class PlayingQueueDrawerState extends State<PlayingQueueDrawer> {
+  late final ScrollController scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,8 +29,6 @@ class PlayingQueueDrawer extends StatelessWidget {
         // 获取播放队列
         final queue = notifier.playingQueueSongs;
         final playingPlaylist = notifier.playingPlaylist;
-
-        final scrollController = ScrollController();
 
         return Drawer(
           width: 400,

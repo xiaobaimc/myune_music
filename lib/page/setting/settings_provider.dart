@@ -41,9 +41,9 @@ class SettingsProvider with ChangeNotifier {
   bool _allowAnyFormat = false; // 默认不允许任何格式
   bool _forceSingleLineLyric = false; // 默认不强制单行显示歌词
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
-  bool _addLyricPadding = false; // 默认不启用歌词上下补位
+  bool _addLyricPadding = true; // 默认启用歌词上下补位
   bool _minimizeToTray = false; // 默认不启用最小化到托盘
-  bool _enableLyricBlur = false; // 默认不启用歌词模糊效果
+  bool _enableLyricBlur = true; // 默认启用歌词模糊效果
   bool _showAlbumName = false; // 默认不显示专辑名称
   bool _enableDynamicBackground = false; // 默认不启用动态背景
   bool _audioDeviceIsAuto = true; // 默认音频设备为自动
@@ -110,11 +110,9 @@ class SettingsProvider with ChangeNotifier {
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
     _lyricVerticalSpacing =
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
-    _addLyricPadding =
-        prefs.getBool(_addLyricPaddingKey) ?? false; // 加载歌词上下补位设置
+    _addLyricPadding = prefs.getBool(_addLyricPaddingKey) ?? true; // 加载歌词上下补位设置
     _minimizeToTray = prefs.getBool(_minimizeToTrayKey) ?? false; // 加载最小化到托盘设置
-    _enableLyricBlur =
-        prefs.getBool(_enableLyricBlurKey) ?? false; // 加载歌词模糊效果设置
+    _enableLyricBlur = prefs.getBool(_enableLyricBlurKey) ?? true; // 加载歌词模糊效果设置
     _primaryLyricSource =
         prefs.getString(_primaryLyricSourceKey) ?? 'qq'; // 加载主要歌词源设置
     _secondaryLyricSource =

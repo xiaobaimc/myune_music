@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'package:flutter/material.dart' show ChangeNotifier;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'statistics_models.dart';
 
-class StatisticsManager {
+class StatisticsManager with ChangeNotifier {
   static final StatisticsManager _instance = StatisticsManager._internal();
   factory StatisticsManager() => _instance;
   StatisticsManager._internal();
@@ -86,5 +87,10 @@ class StatisticsManager {
   Future<void> clearAllStats() async {
     _statisticsData.clearStats();
     await _saveStatistics();
+  }
+
+  // 获取指定歌曲的统计信息
+  SongPlayStat? getSongStatByPath(String path) {
+    return _statisticsData.songStats[path];
   }
 }
