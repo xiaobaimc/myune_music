@@ -18,7 +18,7 @@ import 'page_visibility_settings.dart';
 import 'playlist_cleaner.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.8.7';
+const String appVersion = '0.8.8';
 
 bool get isLinux => Platform.isLinux;
 
