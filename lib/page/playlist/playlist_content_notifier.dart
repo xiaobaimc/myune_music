@@ -747,6 +747,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     updateList(_allSongs);
     updateList(_currentPlaylistSongs);
     updateList(_activeSongList);
+    updateList(_filteredSongs);
 
     // 单独处理当前播放歌曲
     if (_currentSong != null &&

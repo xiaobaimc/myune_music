@@ -201,8 +201,10 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
         ),
         Expanded(
           child: Selector<PlaylistContentNotifier, (String, int)>(
-            selector: (_, n) =>
-                (n.playlists.map((e) => e.id).join(','), n.selectedIndex),
+            selector: (_, n) => (
+              n.playlists.map((e) => '${e.id}:${e.name}').join(','),
+              n.selectedIndex,
+            ),
             builder: (context, data, _) {
               final playlists = notifier.playlists;
               final selectedIndex = notifier.selectedIndex;
@@ -960,10 +962,6 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                               final currentPlaylist =
                                   notifier.playlists[notifier.selectedIndex];
 
-                              // 播放和排序时，需要找到它在原始列表中的索引
-                              final originalIndex = notifier
-                                  .currentPlaylistSongs
-                                  .indexOf(song);
                               return SongTileWidget(
                                 key: ValueKey(song.filePath),
                                 song: song,
@@ -973,10 +971,14 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                                   if (isMultiSelectMode) {
                                     notifier.toggleSongSelection(song);
                                   } else {
-                                    if (originalIndex != -1) {
-                                      notifier.playSongAtIndex(
-                                        originalIndex,
-                                      ); // 使用原始索引播放
+                                    if (notifier.isSearching) {
+                                      // 使用当前渲染列表快照
+                                      notifier.playFromDynamicList(
+                                        List<Song>.from(songs),
+                                        index,
+                                      );
+                                    } else {
+                                      notifier.playSongAtIndex(index);
                                     }
                                   }
                                 },
@@ -1167,6 +1169,10 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.song.filePath != widget.song.filePath) {
       _releaseCover(oldWidget.song.filePath);
+      _requestCover(widget.song.filePath);
+      return;
+    }
+    if (oldWidget.song.albumArt != null && widget.song.albumArt == null) {
       _requestCover(widget.song.filePath);
     }
   }

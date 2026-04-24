@@ -103,10 +103,10 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
         }
 
         if options.need_lyrics {
-            info.lyrics = std::panic::catch_unwind(|| {
-                tag.get_string(ItemKey::UnsyncLyrics).map(|s| s.to_string())
-            })
-            .unwrap_or(None);
+            info.lyrics = tag
+                .get_string(ItemKey::Lyrics)
+                .or_else(|| tag.get_string(ItemKey::UnsyncLyrics)) // UnsyncLyrics 应该作为兜底
+                .map(|s| s.to_string());
         }
 
         if options.need_extra_tags {
