@@ -178,19 +178,14 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     final double secondaryFontSize = fontSize * 0.88;
     final Color primaryColor = colorScheme.primary;
 
-    // 这里通常应该保持与普通Text的颜色一致
-    // 但是在AnimatedKaraokeWord.build里，Stack里两层Text 而且两层颜色都是半透明
-    // 这会导致 alpha 被叠加混合，而普通歌词只画了一次
-    // 这里简单粗暴计算 alpha_eff = 1 - (1 - alpha_new) * (1 - alpha_new) ≈ 0.88
-    // 得出alpha_new大约为0.6536
     final Color secondaryPrimaryColor = colorScheme.primary.withValues(
-      alpha: 0.65,
+      alpha: 0.88,
     );
     final Color secondarySurfaceVariantColor = colorScheme.onSurfaceVariant
-        .withValues(alpha: 0.58);
+        .withValues(alpha: 0.55);
 
     final Color surfaceVariantColor = colorScheme.onSurfaceVariant.withValues(
-      alpha: 0.7,
+      alpha: 0.65,
     );
 
     for (int lineIndex = 0; lineIndex < multiLineTokens.length; lineIndex++) {
@@ -853,28 +848,30 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
+    return ValueListenableBuilder<double>(
       valueListenable: _progressNotifier,
       builder: (context, progress, child) {
         return Stack(
           children: [
-            // 基础颜色文字
-            Text(
-              widget.text,
-              style: TextStyle(
-                fontSize: widget.fontSize,
-                fontWeight: widget.fontWeight,
-                color: widget.baseColor,
-                height: 1.2,
-              ),
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
+            ClipRect(
+              clipper: _LyricsClipper(startPercent: progress, endPercent: 1.0),
+              child: Text(
+                widget.text,
+                style: TextStyle(
+                  fontSize: widget.fontSize,
+                  fontWeight: widget.fontWeight,
+                  color: widget.baseColor,
+                  height: 1.2,
+                ),
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
               ),
             ),
-            // 高亮颜色文字
+
             ClipRect(
-              clipper: _TextClipper(progress),
+              clipper: _LyricsClipper(startPercent: 0.0, endPercent: progress),
               child: Text(
                 widget.text,
                 style: TextStyle(
@@ -904,18 +901,25 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
   }
 }
 
-class _TextClipper extends CustomClipper<Rect> {
-  final double progress;
+class _LyricsClipper extends CustomClipper<Rect> {
+  final double startPercent;
+  final double endPercent;
 
-  _TextClipper(this.progress);
+  _LyricsClipper({required this.startPercent, required this.endPercent});
 
   @override
   Rect getClip(Size size) {
-    return Rect.fromLTWH(0, 0, size.width * progress, size.height);
+    return Rect.fromLTRB(
+      size.width * startPercent,
+      0,
+      size.width * endPercent,
+      size.height,
+    );
   }
 
   @override
-  bool shouldReclip(_TextClipper oldClipper) {
-    return oldClipper.progress != progress;
+  bool shouldReclip(_LyricsClipper oldClipper) {
+    return oldClipper.startPercent != startPercent ||
+        oldClipper.endPercent != endPercent;
   }
 }

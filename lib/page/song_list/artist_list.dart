@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pinyin/pinyin.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'dart:typed_data';
 import '../playlist/playlist_content_notifier.dart';
 import 'song_list_detail_page.dart';
 
@@ -45,16 +46,6 @@ class _ArtistListState extends State<ArtistList> {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
-
-    // 在构建界面时请求所有艺术家歌曲的封面
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final allArtists = notifier.songsByArtist;
-      for (final songs in allArtists.values) {
-        for (final song in songs) {
-          notifier.requestSongCover(song.filePath);
-        }
-      }
-    });
 
     return Column(
       children: [
@@ -161,21 +152,16 @@ class _ArtistListState extends State<ArtistList> {
                       itemBuilder: (context, index) {
                         final artistName = artistNames[index];
                         final songs = artists[artistName]!;
-                        final representativeArt = songs
-                            .firstWhere(
-                              (s) => s.albumArt != null,
-                              orElse: () => songs.first,
-                            )
-                            .albumArt;
+                        final representativeSong = songs.firstWhere(
+                          (s) => s.albumArt != null,
+                          orElse: () => songs.first,
+                        );
+                        final representativeArt = representativeSong.albumArt;
 
                         return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: representativeArt != null
-                                ? MemoryImage(representativeArt)
-                                : null,
-                            child: representativeArt == null
-                                ? const Icon(Icons.person)
-                                : null,
+                          leading: _ArtistCoverAvatar(
+                            filePath: representativeSong.filePath,
+                            representativeArt: representativeArt,
                           ),
                           title: Text(artistName),
                           subtitle: Text('共 ${songs.length} 首歌曲'),
@@ -200,6 +186,72 @@ class _ArtistListState extends State<ArtistList> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ArtistCoverAvatar extends StatefulWidget {
+  final String filePath;
+  final Uint8List? representativeArt;
+
+  const _ArtistCoverAvatar({
+    required this.filePath,
+    required this.representativeArt,
+  });
+
+  @override
+  State<_ArtistCoverAvatar> createState() => _ArtistCoverAvatarState();
+}
+
+class _ArtistCoverAvatarState extends State<_ArtistCoverAvatar> {
+  String? _requestedCoverPath;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _requestCover(widget.filePath);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ArtistCoverAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filePath != widget.filePath) {
+      _releaseCover(oldWidget.filePath);
+      _requestCover(widget.filePath);
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestedCoverPath = null;
+    super.dispose();
+  }
+
+  void _requestCover(String filePath) {
+    _requestedCoverPath = filePath;
+    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+  }
+
+  void _releaseCover(String filePath) {
+    if (_requestedCoverPath == null) return;
+    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _requestedCoverPath = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      backgroundImage: widget.representativeArt != null
+          ? ResizeImage(
+              MemoryImage(widget.representativeArt!),
+              width: 100,
+              height: 100,
+            )
+          : null,
+      child: widget.representativeArt == null ? const Icon(Icons.person) : null,
     );
   }
 }

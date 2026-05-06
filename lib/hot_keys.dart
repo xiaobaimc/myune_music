@@ -43,6 +43,64 @@ class SeekBackwardIntent extends Intent {
   const SeekBackwardIntent();
 }
 
+bool _isTextInputFocused() {
+  final primary = FocusManager.instance.primaryFocus;
+  if (primary == null || primary.context == null) return false;
+
+  bool isInput = false;
+  try {
+    final label = primary.debugLabel?.toLowerCase() ?? '';
+    if (label.contains('editable') ||
+        label.contains('textfield') ||
+        label.contains('input')) {
+      return true;
+    }
+
+    final currentWidget = primary.context!.widget;
+    if (currentWidget is TextField ||
+        currentWidget is TextFormField ||
+        currentWidget is EditableText) {
+      return true;
+    }
+
+    primary.context!.visitAncestorElements((element) {
+      final widget = element.widget;
+      if (widget is TextField ||
+          widget is TextFormField ||
+          widget is EditableText) {
+        isInput = true;
+        return false;
+      }
+      // 避免把整棵树遍历完
+      if (widget is Dialog || widget is Scaffold || widget is AlertDialog) {
+        return false;
+      }
+      return true;
+    });
+  } catch (e) {
+    //
+  }
+
+  return isInput;
+}
+
+class PlayerHotkeyAction<T extends Intent> extends Action<T> {
+  final void Function() onInvokeCallback;
+
+  PlayerHotkeyAction(this.onInvokeCallback);
+
+  @override
+  bool isEnabled(T intent) {
+    return !_isTextInputFocused();
+  }
+
+  @override
+  Object? invoke(T intent) {
+    onInvokeCallback();
+    return null;
+  }
+}
+
 class Hotkeys extends StatelessWidget {
   final Widget child;
 
@@ -57,21 +115,17 @@ class Hotkeys extends StatelessWidget {
       return child;
     }
 
-    return FocusableActionDetector(
-      // 绑定快捷键
-      shortcuts: const <SingleActivator, Intent>{
-        // --- 播放/暂停 上/下一首 ---
+    return Shortcuts(
+      shortcuts: const {
         SingleActivator(LogicalKeyboardKey.space): PlayPauseIntent(),
         SingleActivator(LogicalKeyboardKey.arrowRight, control: true):
             NextTrackIntent(),
         SingleActivator(LogicalKeyboardKey.arrowLeft, control: true):
             PreviousTrackIntent(),
 
-        // --- 全屏和退出全屏 ---
         SingleActivator(LogicalKeyboardKey.f11): ToggleFullscreenIntent(),
         SingleActivator(LogicalKeyboardKey.escape): ExitFullscreenIntent(),
 
-        // --- 音量和进度控制 ---
         SingleActivator(LogicalKeyboardKey.arrowRight): SeekForwardIntent(),
         SingleActivator(LogicalKeyboardKey.arrowLeft): SeekBackwardIntent(),
         SingleActivator(LogicalKeyboardKey.arrowUp): VolumeUpIntent(),
@@ -81,87 +135,49 @@ class Hotkeys extends StatelessWidget {
         SingleActivator(LogicalKeyboardKey.numpad4): SeekBackwardIntent(),
         SingleActivator(LogicalKeyboardKey.numpad6): SeekForwardIntent(),
       },
-      actions: {
-        // 绑定意图
-        PlayPauseIntent: CallbackAction<PlayPauseIntent>(
-          onInvoke: (intent) {
-            if (notifier.isPlaying) {
-              notifier.pause();
-            } else {
-              notifier.play();
-            }
-            return null;
-          },
-        ),
-        NextTrackIntent: CallbackAction<NextTrackIntent>(
-          onInvoke: (intent) {
+      child: Actions(
+        actions: {
+          PlayPauseIntent: PlayerHotkeyAction<PlayPauseIntent>(() {
+            notifier.isPlaying ? notifier.pause() : notifier.play();
+          }),
+          NextTrackIntent: PlayerHotkeyAction<NextTrackIntent>(() {
             notifier.playNext();
-            return null;
-          },
-        ),
-        PreviousTrackIntent: CallbackAction<PreviousTrackIntent>(
-          onInvoke: (intent) {
+          }),
+          PreviousTrackIntent: PlayerHotkeyAction<PreviousTrackIntent>(() {
             notifier.playPrevious();
-            return null;
-          },
-        ),
-        SeekForwardIntent: CallbackAction<SeekForwardIntent>(
-          onInvoke: (intent) async {
-            final currentPosition = notifier.currentPosition;
-            final newPosition = currentPosition + const Duration(seconds: 5);
-
-            await notifier.mediaPlayer.seek(newPosition);
-            return null;
-          },
-        ),
-        SeekBackwardIntent: CallbackAction<SeekBackwardIntent>(
-          onInvoke: (intent) async {
-            final currentPosition = notifier.currentPosition;
-            final newPosition = currentPosition - const Duration(seconds: 5);
-
-            await notifier.mediaPlayer.seek(newPosition);
-            return null;
-          },
-        ),
-        VolumeUpIntent: CallbackAction<VolumeUpIntent>(
-          onInvoke: (intent) {
-            double newVolume = notifier.volume + 3;
-            if (newVolume > 100) {
-              newVolume = 100;
-            }
-            notifier.setVolume(newVolume);
-            return null;
-          },
-        ),
-        VolumeDownIntent: CallbackAction<VolumeDownIntent>(
-          onInvoke: (intent) {
-            double newVolume = notifier.volume - 3;
-            if (newVolume < 0) {
-              newVolume = 0;
-            }
-            notifier.setVolume(newVolume);
-            return null;
-          },
-        ),
-        ToggleFullscreenIntent: CallbackAction<ToggleFullscreenIntent>(
-          onInvoke: (intent) async {
-            final bool isFullScreen = await windowManager.isFullScreen();
-            await windowManager.setFullScreen(!isFullScreen);
-            return null;
-          },
-        ),
-        ExitFullscreenIntent: CallbackAction<ExitFullscreenIntent>(
-          onInvoke: (intent) async {
-            final bool isFullScreen = await windowManager.isFullScreen();
-            if (isFullScreen) {
-              await windowManager.setFullScreen(false);
-            }
-            return null;
-          },
-        ),
-      },
-      autofocus: true,
-      child: child,
+          }),
+          SeekForwardIntent: PlayerHotkeyAction<SeekForwardIntent>(() {
+            notifier.mediaPlayer.seek(
+              notifier.currentPosition + const Duration(seconds: 5),
+            );
+          }),
+          SeekBackwardIntent: PlayerHotkeyAction<SeekBackwardIntent>(() {
+            notifier.mediaPlayer.seek(
+              notifier.currentPosition - const Duration(seconds: 5),
+            );
+          }),
+          VolumeUpIntent: PlayerHotkeyAction<VolumeUpIntent>(() {
+            notifier.setVolume((notifier.volume + 3).clamp(0.0, 100.0));
+          }),
+          VolumeDownIntent: PlayerHotkeyAction<VolumeDownIntent>(() {
+            notifier.setVolume((notifier.volume - 3).clamp(0.0, 100.0));
+          }),
+          ToggleFullscreenIntent: PlayerHotkeyAction<ToggleFullscreenIntent>(
+            () async {
+              final isFullScreen = await windowManager.isFullScreen();
+              await windowManager.setFullScreen(!isFullScreen);
+            },
+          ),
+          ExitFullscreenIntent: PlayerHotkeyAction<ExitFullscreenIntent>(
+            () async {
+              if (await windowManager.isFullScreen()) {
+                await windowManager.setFullScreen(false);
+              }
+            },
+          ),
+        },
+        child: child,
+      ),
     );
   }
 }
