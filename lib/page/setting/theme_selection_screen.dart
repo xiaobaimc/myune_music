@@ -19,7 +19,16 @@ class ThemeSelectionScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('更改主题配色', style: Theme.of(context).textTheme.titleMedium),
+              Row(
+                children: [
+                  Text('更改主题配色', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: '优先使用自动获取的封面颜色作为主题配色',
+                    child: Icon(Icons.info_outline, size: 20, color: Theme.of(context).disabledColor),
+                  ),
+                ], // 主题配色提示
+              ),
               ElevatedButton.icon(
                 onPressed: () => _showColorPickerDialog(context, themeProvider),
                 icon: const Icon(Icons.palette_outlined, size: 20),
@@ -62,7 +71,7 @@ class ThemeSelectionScreen extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                themeProvider.setSeedColor(pickerColor);
+                themeProvider.setSeedColor(pickerColor, isManual: true);
                 Navigator.of(context).pop();
               },
               child: const Text('确定'),

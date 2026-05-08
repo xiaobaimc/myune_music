@@ -293,7 +293,7 @@ class _SettingPageState extends State<SettingPage>
                       }
                       // 当关闭动态颜色时，恢复默认颜色
                       if (!value) {
-                        context.read<ThemeProvider>().setSeedColor(Colors.blue);
+                        context.read<ThemeProvider>().restoreLastManualColor();
                       }
                     },
                   ),
