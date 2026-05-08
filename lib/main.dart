@@ -43,6 +43,9 @@ void main() async {
     exit(0); // 退出第二个实例
   }
 
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
   MediaKit.ensureInitialized();
 
   await RustLib.init();
@@ -141,7 +144,12 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with TrayListener {
   late PlaylistContentNotifier _playlistNotifier;
+  SettingsProvider? _settingsProvider;
+  StreamSubscription<Duration>? _taskbarPositionSubscription;
+  StreamSubscription<bool>? _taskbarPlayingSubscription;
+  StreamSubscription<bool>? _taskbarCompletedSubscription;
   bool _taskbarReady = false;
+  bool _listenersBound = false;
 
   @override
   void initState() {
@@ -163,20 +171,35 @@ class _MyAppState extends State<MyApp> with TrayListener {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _playlistNotifier = context.read<PlaylistContentNotifier>();
+    final nextPlaylistNotifier = context.read<PlaylistContentNotifier>();
+    final nextSettingsProvider = context.read<SettingsProvider>();
 
-    // 监听播放状态变化以更新工具栏按钮
+    if (_listenersBound) {
+      if (identical(_playlistNotifier, nextPlaylistNotifier) &&
+          identical(_settingsProvider, nextSettingsProvider)) {
+        return;
+      }
+
+      if (Platform.isWindows) {
+        _playlistNotifier.removeListener(_updateThumbnailToolbar);
+      }
+      _settingsProvider?.removeListener(_onSettingsChanged);
+    }
+
+    _playlistNotifier = nextPlaylistNotifier;
+    _settingsProvider = nextSettingsProvider;
+
     if (Platform.isWindows) {
       _playlistNotifier.addListener(_updateThumbnailToolbar);
     }
 
-    // 监听设置变化以更新任务栏状态
-    context.read<SettingsProvider>().addListener(_onSettingsChanged);
+    _settingsProvider?.addListener(_onSettingsChanged);
+    _listenersBound = true;
   }
 
   void _onSettingsChanged() {
     try {
-      final settings = context.read<SettingsProvider>();
+      final settings = _settingsProvider ?? context.read<SettingsProvider>();
       if (!settings.showTaskbarProgress) {
         // 当关闭任务栏进度显示时，立即重置进度条状态
         if (Platform.isWindows && _taskbarReady) {
@@ -264,71 +287,85 @@ class _MyAppState extends State<MyApp> with TrayListener {
   }
 
   Future<void> _initializeTaskbarProgress() async {
-    final settings = context.read<SettingsProvider>();
+    final settings = _settingsProvider ?? context.read<SettingsProvider>();
 
     // 监听播放进度变化以更新任务栏进度
-    _playlistNotifier.mediaPlayer.stream.position.listen((position) async {
-      if (!_taskbarReady || !settings.showTaskbarProgress) return;
+    _taskbarPositionSubscription = _playlistNotifier.mediaPlayer.stream.position
+        .listen((position) async {
+          if (!_taskbarReady || !settings.showTaskbarProgress) return;
 
-      final bool isVisible = await windowManager.isVisible();
-      if (!isVisible) return;
+          final bool isVisible = await windowManager.isVisible();
+          if (!isVisible) return;
 
-      try {
-        final duration = _playlistNotifier.totalDuration;
-        if (duration != Duration.zero) {
-          final progress =
-              (position.inMilliseconds / duration.inMilliseconds * 100).round();
-          WindowsTaskbar.setProgress(progress.clamp(0, 100), 100);
-        }
-      } catch (_) {}
-    });
+          try {
+            final duration = _playlistNotifier.totalDuration;
+            if (duration != Duration.zero) {
+              final progress =
+                  (position.inMilliseconds / duration.inMilliseconds * 100)
+                      .round();
+              WindowsTaskbar.setProgress(progress.clamp(0, 100), 100);
+            }
+          } catch (_) {}
+        });
 
     // 监听播放状态变化
-    _playlistNotifier.mediaPlayer.stream.playing.listen((playing) async {
-      if (!_taskbarReady || !settings.showTaskbarProgress) {
-        // 当关闭任务栏进度显示时，重置进度条状态
-        try {
-          WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
-        } catch (_) {}
-        return;
-      }
+    _taskbarPlayingSubscription = _playlistNotifier.mediaPlayer.stream.playing
+        .listen((playing) async {
+          if (!_taskbarReady || !settings.showTaskbarProgress) {
+            // 当关闭任务栏进度显示时，重置进度条状态
+            try {
+              WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+            } catch (_) {}
+            return;
+          }
 
-      final bool isVisible = await windowManager.isVisible();
-      if (!isVisible) return;
+          final bool isVisible = await windowManager.isVisible();
+          if (!isVisible) return;
 
-      try {
-        WindowsTaskbar.setProgressMode(
-          playing ? TaskbarProgressMode.normal : TaskbarProgressMode.paused,
-        );
-      } catch (_) {}
-    });
+          try {
+            WindowsTaskbar.setProgressMode(
+              playing ? TaskbarProgressMode.normal : TaskbarProgressMode.paused,
+            );
+          } catch (_) {}
+        });
 
     // 监听播放完成
-    _playlistNotifier.mediaPlayer.stream.completed.listen((completed) async {
-      if (!_taskbarReady || !settings.showTaskbarProgress) {
-        // 当关闭任务栏进度显示时，重置进度条状态
-        try {
-          WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
-        } catch (_) {}
-        return;
-      }
+    _taskbarCompletedSubscription = _playlistNotifier
+        .mediaPlayer
+        .stream
+        .completed
+        .listen((completed) async {
+          if (!_taskbarReady || !settings.showTaskbarProgress) {
+            // 当关闭任务栏进度显示时，重置进度条状态
+            try {
+              WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
+            } catch (_) {}
+            return;
+          }
 
-      final bool isVisible = await windowManager.isVisible();
-      if (!isVisible) return;
+          final bool isVisible = await windowManager.isVisible();
+          if (!isVisible) return;
 
-      if (completed) {
-        try {
-          WindowsTaskbar.setProgress(0, 100);
-        } catch (_) {}
-      }
-    });
+          if (completed) {
+            try {
+              WindowsTaskbar.setProgress(0, 100);
+            } catch (_) {}
+          }
+        });
   }
 
   @override
   void dispose() {
     trayManager.removeListener(this);
-    _playlistNotifier.removeListener(_updateThumbnailToolbar);
-    context.read<SettingsProvider>().removeListener(_onSettingsChanged);
+    _taskbarPositionSubscription?.cancel();
+    _taskbarPlayingSubscription?.cancel();
+    _taskbarCompletedSubscription?.cancel();
+    if (_listenersBound) {
+      if (Platform.isWindows) {
+        _playlistNotifier.removeListener(_updateThumbnailToolbar);
+      }
+      _settingsProvider?.removeListener(_onSettingsChanged);
+    }
     super.dispose();
   }
 

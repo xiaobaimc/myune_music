@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:typed_data';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_notifier.dart';
 import 'song_list_detail_page.dart';
@@ -46,16 +47,6 @@ class _AlbumListState extends State<AlbumList> {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
-
-    // 在构建界面时请求所有专辑歌曲的封面
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final allAlbums = notifier.songsByAlbum;
-      for (final songs in allAlbums.values) {
-        for (final song in songs) {
-          notifier.requestSongCover(song.filePath);
-        }
-      }
-    });
 
     return Column(
       children: [
@@ -171,7 +162,11 @@ class _AlbumListState extends State<AlbumList> {
                       itemBuilder: (context, index) {
                         final albumName = albumNames[index];
                         final songs = albums[albumName]!;
-                        final albumArt = songs.first.albumArt;
+                        final representativeSong = songs.firstWhere(
+                          (s) => s.albumArt != null,
+                          orElse: () => songs.first,
+                        );
+                        final albumArt = representativeSong.albumArt;
 
                         return InkWell(
                           onTap: () {
@@ -189,18 +184,9 @@ class _AlbumListState extends State<AlbumList> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
-                                  child: Container(
-                                    width: double.infinity,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.secondaryContainer,
-                                    child: albumArt != null
-                                        ? Image.memory(
-                                            albumArt,
-                                            fit: BoxFit.cover,
-                                            gaplessPlayback: true,
-                                          )
-                                        : const Icon(Icons.album, size: 50),
+                                  child: _AlbumCoverTile(
+                                    filePath: representativeSong.filePath,
+                                    albumArt: albumArt,
                                   ),
                                 ),
                                 Padding(
@@ -241,6 +227,71 @@ class _AlbumListState extends State<AlbumList> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AlbumCoverTile extends StatefulWidget {
+  final String filePath;
+  final Uint8List? albumArt;
+
+  const _AlbumCoverTile({required this.filePath, required this.albumArt});
+
+  @override
+  State<_AlbumCoverTile> createState() => _AlbumCoverTileState();
+}
+
+class _AlbumCoverTileState extends State<_AlbumCoverTile> {
+  String? _requestedCoverPath;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _requestCover(widget.filePath);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _AlbumCoverTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filePath != widget.filePath) {
+      _releaseCover(oldWidget.filePath);
+      _requestCover(widget.filePath);
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestedCoverPath = null;
+    super.dispose();
+  }
+
+  void _requestCover(String filePath) {
+    _requestedCoverPath = filePath;
+    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+  }
+
+  void _releaseCover(String filePath) {
+    if (_requestedCoverPath == null) return;
+    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _requestedCoverPath = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      child: widget.albumArt != null
+          ? Image.memory(
+              cacheWidth: 200,
+              widget.albumArt!,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            )
+          : const Icon(Icons.album, size: 50),
     );
   }
 }

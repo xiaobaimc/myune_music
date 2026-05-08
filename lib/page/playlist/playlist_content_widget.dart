@@ -1433,6 +1433,7 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: Image.memory(
+                            cacheWidth: 100,
                             widget.song.albumArt!,
                             fit: BoxFit.cover,
                             gaplessPlayback: true,

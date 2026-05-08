@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
@@ -22,6 +20,7 @@ class _StatisticsState extends State<Statistics> {
   bool _showAllSongs = false;
   bool _showAllArtists = false;
   bool _showAllAlbums = false;
+  final Set<String> _trackedCoverPaths = <String>{};
 
   late final ScrollController scrollController;
 
@@ -34,6 +33,11 @@ class _StatisticsState extends State<Statistics> {
 
   @override
   void dispose() {
+    final notifier = context.read<PlaylistContentNotifier>();
+    for (final path in _trackedCoverPaths) {
+      notifier.releaseSongCover(path);
+    }
+    _trackedCoverPaths.clear();
     scrollController.dispose();
     super.dispose();
   }
@@ -66,6 +70,15 @@ class _StatisticsState extends State<Statistics> {
         uniqueAlbums.add(song.album);
       }
     }
+
+    final requiredCoverPaths = _collectRequiredCoverPaths(
+      allSongs: allSongs,
+      separators: separators,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncTrackedCovers(requiredCoverPaths);
+    });
 
     return SmoothScrollWeb(
       controller: scrollController,
@@ -270,13 +283,6 @@ class _StatisticsState extends State<Statistics> {
   }
 
   Widget _buildTopSongsList(List<Song> allSongs) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final notifier = context.read<PlaylistContentNotifier>();
-      for (final song in allSongs) {
-        notifier.requestSongCover(song.filePath);
-      }
-    });
-
     final topSongs = _statsManager.getTopPlayedSongs(_showAllSongs ? 100 : 5);
 
     if (topSongs.isEmpty) {
@@ -313,27 +319,22 @@ class _StatisticsState extends State<Statistics> {
             final statFileName = p.basename(song.path);
             final matchedSongs = songMap[statFileName];
 
-            // 优先选择有封面的歌曲，如果没有则选择第一个
-            Song songWithArt;
-            if (matchedSongs != null && matchedSongs.isNotEmpty) {
-              songWithArt = matchedSongs.firstWhere(
-                (s) => s.albumArt != null,
-                orElse: () => matchedSongs.first,
-              );
-            } else {
-              songWithArt = Song(
+            final songWithArt = _resolveSongForStat(
+              matchedSongs: matchedSongs,
+              fallback: Song(
                 title: song.title,
                 artist: song.artist,
                 album: song.album,
                 filePath: song.path,
-              );
-            }
+              ),
+            );
 
             return ListTile(
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: songWithArt.albumArt != null
                     ? Image.memory(
+                        cacheWidth: 100,
                         songWithArt.albumArt!,
                         width: 40,
                         height: 40,
@@ -360,14 +361,6 @@ class _StatisticsState extends State<Statistics> {
   }
 
   Widget _buildTopArtistsList(List<String> separators) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final notifier = context.read<PlaylistContentNotifier>();
-      final allSongs = notifier.allSongs;
-      for (final song in allSongs) {
-        notifier.requestSongCover(song.filePath);
-      }
-    });
-
     final topArtists = _statsManager.getTopArtists(
       _showAllArtists ? 100 : 5,
       separators,
@@ -387,20 +380,27 @@ class _StatisticsState extends State<Statistics> {
     final allSongs = playlistNotifier.allSongs;
 
     // 为每个艺术家找到一个代表性的专辑封面
-    final artistCoverMap = <String, Uint8List?>{};
+    final artistCoverMap = <String, Song>{};
     for (final artistEntry in topArtists) {
       final artistName = artistEntry.key;
       if (!artistCoverMap.containsKey(artistName)) {
-        // 查找该艺术家的第一首有封面的歌曲
+        Song? fallbackSong;
         for (final song in allSongs) {
-          if (_splitArtists(
-                song.artist,
-                separators,
-              ).map((a) => a.trim()).contains(artistName) &&
-              song.albumArt != null) {
-            artistCoverMap[artistName] = song.albumArt;
+          final containsArtist = _splitArtists(
+            song.artist,
+            separators,
+          ).map((a) => a.trim()).contains(artistName);
+          if (!containsArtist) {
+            continue;
+          }
+          fallbackSong ??= song;
+          if (song.albumArt != null) {
+            artistCoverMap[artistName] = song;
             break;
           }
+        }
+        if (!artistCoverMap.containsKey(artistName) && fallbackSong != null) {
+          artistCoverMap[artistName] = fallbackSong;
         }
       }
     }
@@ -415,7 +415,8 @@ class _StatisticsState extends State<Statistics> {
           separatorBuilder: (_, __) => const Divider(),
           itemBuilder: (context, index) {
             final artist = topArtists[index];
-            final cover = artistCoverMap[artist.key];
+            final coverSong = artistCoverMap[artist.key];
+            final cover = coverSong?.albumArt;
             return ListTile(
               leading: Container(
                 width: 40,
@@ -427,6 +428,7 @@ class _StatisticsState extends State<Statistics> {
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(100),
                         child: Image.memory(
+                          cacheWidth: 100,
                           cover,
                           width: 40,
                           height: 40,
@@ -445,13 +447,6 @@ class _StatisticsState extends State<Statistics> {
   }
 
   Widget _buildTopAlbumsList() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final notifier = context.read<PlaylistContentNotifier>();
-      final allSongs = notifier.allSongs;
-      for (final song in allSongs) {
-        notifier.requestSongCover(song.filePath);
-      }
-    });
     final topAlbums = _statsManager.getTopAlbums(_showAllAlbums ? 100 : 5);
 
     if (topAlbums.isEmpty) {
@@ -468,16 +463,23 @@ class _StatisticsState extends State<Statistics> {
     final allSongs = playlistNotifier.allSongs;
 
     // 为每个专辑找到一个代表性的专辑封面
-    final albumCoverMap = <String, Uint8List?>{};
+    final albumCoverMap = <String, Song>{};
     for (final albumEntry in topAlbums) {
       final albumName = albumEntry.key;
       if (!albumCoverMap.containsKey(albumName)) {
-        // 查找该专辑的第一首有封面的歌曲
+        Song? fallbackSong;
         for (final song in allSongs) {
-          if (song.album == albumName && song.albumArt != null) {
-            albumCoverMap[albumName] = song.albumArt;
+          if (song.album != albumName) {
+            continue;
+          }
+          fallbackSong ??= song;
+          if (song.albumArt != null) {
+            albumCoverMap[albumName] = song;
             break;
           }
+        }
+        if (!albumCoverMap.containsKey(albumName) && fallbackSong != null) {
+          albumCoverMap[albumName] = fallbackSong;
         }
       }
     }
@@ -492,7 +494,8 @@ class _StatisticsState extends State<Statistics> {
           separatorBuilder: (_, __) => const Divider(),
           itemBuilder: (context, index) {
             final album = topAlbums[index];
-            final cover = albumCoverMap[album.key];
+            final coverSong = albumCoverMap[album.key];
+            final cover = coverSong?.albumArt;
             return ListTile(
               leading: Container(
                 width: 40,
@@ -504,6 +507,7 @@ class _StatisticsState extends State<Statistics> {
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(4),
                         child: Image.memory(
+                          cacheWidth: 100,
                           cover,
                           width: 40,
                           height: 40,
@@ -532,5 +536,105 @@ class _StatisticsState extends State<Statistics> {
     }
 
     return result;
+  }
+
+  Song _resolveSongForStat({
+    required List<Song>? matchedSongs,
+    required Song fallback,
+  }) {
+    if (matchedSongs == null || matchedSongs.isEmpty) {
+      return fallback;
+    }
+    return matchedSongs.firstWhere(
+      (s) => s.albumArt != null,
+      orElse: () => matchedSongs.first,
+    );
+  }
+
+  Set<String> _collectRequiredCoverPaths({
+    required List<Song> allSongs,
+    required List<String> separators,
+  }) {
+    final required = <String>{};
+
+    final topSongs = _statsManager.getTopPlayedSongs(_showAllSongs ? 100 : 5);
+    final songMap = <String, List<Song>>{};
+    for (final song in allSongs) {
+      final fileName = p.basename(song.filePath);
+      (songMap[fileName] ??= <Song>[]).add(song);
+    }
+    for (final statSong in topSongs) {
+      final matched = songMap[p.basename(statSong.path)];
+      final resolved = _resolveSongForStat(
+        matchedSongs: matched,
+        fallback: Song(
+          title: statSong.title,
+          artist: statSong.artist,
+          album: statSong.album,
+          filePath: statSong.path,
+        ),
+      );
+      required.add(resolved.filePath);
+    }
+
+    final topArtists = _statsManager.getTopArtists(
+      _showAllArtists ? 100 : 5,
+      separators,
+    );
+    for (final entry in topArtists) {
+      final artistName = entry.key;
+      Song? fallbackSong;
+      for (final song in allSongs) {
+        final containsArtist = _splitArtists(
+          song.artist,
+          separators,
+        ).map((a) => a.trim()).contains(artistName);
+        if (!containsArtist) continue;
+        fallbackSong ??= song;
+        if (song.albumArt != null) {
+          required.add(song.filePath);
+          break;
+        }
+      }
+      if (fallbackSong != null) {
+        required.add(fallbackSong.filePath);
+      }
+    }
+
+    final topAlbums = _statsManager.getTopAlbums(_showAllAlbums ? 100 : 5);
+    for (final entry in topAlbums) {
+      final albumName = entry.key;
+      Song? fallbackSong;
+      for (final song in allSongs) {
+        if (song.album != albumName) continue;
+        fallbackSong ??= song;
+        if (song.albumArt != null) {
+          required.add(song.filePath);
+          break;
+        }
+      }
+      if (fallbackSong != null) {
+        required.add(fallbackSong.filePath);
+      }
+    }
+
+    return required;
+  }
+
+  void _syncTrackedCovers(Set<String> requiredPaths) {
+    final notifier = context.read<PlaylistContentNotifier>();
+    final toAdd = requiredPaths.difference(_trackedCoverPaths);
+    final toRemove = _trackedCoverPaths.difference(requiredPaths);
+
+    for (final path in toAdd) {
+      notifier.requestSongCover(path);
+    }
+    for (final path in toRemove) {
+      notifier.releaseSongCover(path);
+    }
+
+    _trackedCoverPaths
+      ..clear()
+      ..addAll(requiredPaths);
   }
 }

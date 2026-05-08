@@ -3411,8 +3411,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
         final timeMatches = timeTagRegExp.allMatches(content).toList();
 
         if (timeMatches.isNotEmpty) {
-          // 生成转换后的时间戳格式，用于逐字歌词
-          String convertedLine = '[${_formatTime(baseTimestamp)}]';
+          final StringBuffer convertedLine = StringBuffer(
+            '[${_formatTime(baseTimestamp)}]',
+          );
+          // 记录上一个片段的绝对结束时间，初始值为该句起始点
+          Duration lastAbsoluteEnd = baseTimestamp;
 
           for (int i = 0; i < timeMatches.length; i++) {
             final timeMatch = timeMatches[i];
@@ -3421,31 +3424,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
             final absoluteStart =
                 baseTimestamp + Duration(milliseconds: relativeStart);
+            final absoluteEnd =
+                absoluteStart + Duration(milliseconds: durationMs);
+
+            if (absoluteStart > lastAbsoluteEnd) {
+              // 如果当前字开始时间晚于上个字结束时间，说明中间有空白
+              // _parseKaraokeTokens 会正确处理该情况
+              convertedLine.write('<${_formatTime(lastAbsoluteEnd)}>');
+            }
 
             final textStart = timeMatch.end;
-            int textEnd = content.length;
-
-            // 下一个时间标记的开始位置作为当前文字的结束位置
-            for (final nextMatch in timeMatches) {
-              if (nextMatch.start > timeMatch.start) {
-                textEnd = nextMatch.start;
-                break;
-              }
-            }
-
+            final textEnd = (i + 1 < timeMatches.length)
+                ? timeMatches[i + 1].start
+                : content.length;
             final String text = content.substring(textStart, textEnd);
 
-            convertedLine += '<${_formatTime(absoluteStart)}>$text';
+            convertedLine.write('<${_formatTime(absoluteStart)}>$text');
 
-            // 最后一个词另外补一个时间戳
+            lastAbsoluteEnd = absoluteEnd;
+
             if (i == timeMatches.length - 1) {
-              final absoluteEnd =
-                  absoluteStart + Duration(milliseconds: durationMs);
-              convertedLine += '<${_formatTime(absoluteEnd)}>';
+              convertedLine.write('<${_formatTime(absoluteEnd)}>');
             }
           }
-
-          result.add(convertedLine);
+          result.add(convertedLine.toString());
         } else {
           result.add(line);
         }
@@ -3497,7 +3499,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       ...bracket.allMatches(rawText),
     ]..sort((a, b) => a.start.compareTo(b.start));
 
-    // 如果只有一个时间戳，将整行作为一个持续500ms的token
+    // 如果只有一个时间戳，持续0毫秒跳过动画
     if (matches.length == 1) {
       final displayText = _extractDisplayText(rawText);
       if (displayText.isNotEmpty) {
@@ -3505,7 +3507,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           LyricToken(
             text: displayText,
             start: lineStart,
-            end: lineStart + const Duration(milliseconds: 500),
+            end: lineStart + const Duration(milliseconds: 0),
           ),
         );
       }
@@ -4243,31 +4245,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     savedOrder.addAll(newPaths);
 
     // 解析元数据
-    final List<Song> songsWithMetadata = [];
+    final dedupedSongs = <Song>[];
+    final seen = <String>{};
 
     // final stopwatch = Stopwatch()..start();
 
     for (final path in savedOrder) {
       final song = await _parseSongMetadata(path);
-      songsWithMetadata.add(song);
-    }
 
-    // stopwatch.stop();
-    // print('解析耗时: ${stopwatch.elapsedMicroseconds} µs');
-
-    _allSongs = songsWithMetadata;
-
-    // 二次去重：通过歌手+歌曲名
-    final seen = <String>{};
-    final dedupedSongs = <Song>[];
-
-    for (final song in _allSongs) {
       final artist = song.artist.trim().toLowerCase();
       final title = song.title.trim().toLowerCase();
       final key = '$artist|$title';
 
-      if (!seen.contains(key)) {
-        seen.add(key);
+      if (seen.add(key)) {
         dedupedSongs.add(song);
       }
     }
