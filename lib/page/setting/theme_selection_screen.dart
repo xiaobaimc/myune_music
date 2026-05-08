@@ -19,7 +19,16 @@ class ThemeSelectionScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('更改主题配色', style: Theme.of(context).textTheme.titleMedium),
+              Row(
+                children: [
+                  Text('更改主题配色', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: '手动选择的颜色在关闭"动态主题配色"后生效',
+                    child: Icon(Icons.info_outline, size: 20, color: Theme.of(context).disabledColor),
+                  ),
+                ], 
+              ),
               ElevatedButton.icon(
                 onPressed: () => _showColorPickerDialog(context, themeProvider),
                 icon: const Icon(Icons.palette_outlined, size: 20),
@@ -62,7 +71,7 @@ class ThemeSelectionScreen extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                themeProvider.setSeedColor(pickerColor);
+                themeProvider.setSeedColor(pickerColor, isManual: true);
                 Navigator.of(context).pop();
               },
               child: const Text('确定'),

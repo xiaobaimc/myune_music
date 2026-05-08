@@ -32,6 +32,7 @@ class ThemeProvider with ChangeNotifier {
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
   static const String _seedColorKey = 'user_seed_color';
+  static const String _lastManualSeedColorKey = 'user_last_manual_seed_color';// 用户手动选择的种子色，用于在关闭动态配色时恢复
 
   static const String _fontFamilyKey = 'user_font_family';
   String _currentFontFamily = 'Misans'; // 默认字体
@@ -68,11 +69,14 @@ class ThemeProvider with ChangeNotifier {
     textTheme: misansTextTheme,
   ).makeMouseClickable();
 
-  void setSeedColor(Color newColor) async {
+  void setSeedColor(Color newColor, {bool isManual = false}) async {
     if (_currentSeedColor != newColor) {
       _currentSeedColor = newColor;
       notifyListeners();
       _saveSeedColor(newColor);
+    }
+    if (isManual) {
+      _saveLastManualSeedColor(newColor);
     }
   }
 
@@ -88,6 +92,37 @@ class ThemeProvider with ChangeNotifier {
   Future<void> _saveSeedColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_seedColorKey, color.toARGB32());
+  }
+
+  Future<void> _saveLastManualSeedColor(Color color) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lastManualSeedColorKey, color.toARGB32());
+  }
+
+  Future<void> restoreLastManualColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? savedColorValue = prefs.getInt(_lastManualSeedColorKey);
+    final color = savedColorValue != null
+        ? Color(savedColorValue)
+        : Color(_defaultSeedColorValue);
+    if (_currentSeedColor != color) {
+      _currentSeedColor = color;
+      notifyListeners();
+      await _saveSeedColor(color);
+    }
+  }
+
+  // 迁移手动选择的种子色键名
+  // 如果用户手动选择的种子色键名不存在，从种子色键名中获取种子色键名迁移到用户手动选择的种子色键名
+  // 这是为了在应用升级时，用户手动选择的种子色能够被恢复
+  Future<void> _migrateManualColorKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!prefs.containsKey(_lastManualSeedColorKey)) {
+      final existingSeed = prefs.getInt(_seedColorKey);
+      if (existingSeed != null) {
+        await prefs.setInt(_lastManualSeedColorKey, existingSeed);
+      }
+    }
   }
 
   void toggleDarkMode() async {
@@ -172,6 +207,7 @@ class ThemeProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     await Future.wait([_loadSeedColor(), _loadDarkMode(), _loadFontFamily()]);
+    await _migrateManualColorKey();
     notifyListeners();
   }
 
