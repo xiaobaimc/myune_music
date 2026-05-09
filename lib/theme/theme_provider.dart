@@ -85,7 +85,6 @@ class ThemeProvider with ChangeNotifier {
     final int? savedColorValue = prefs.getInt(_seedColorKey);
     if (savedColorValue != null) {
       _currentSeedColor = Color(savedColorValue);
-      notifyListeners();
     }
   }
 
@@ -113,7 +112,7 @@ class ThemeProvider with ChangeNotifier {
   }
 
   // 迁移手动选择的种子色键名
-  // 如果用户手动选择的种子色键名不存在，从种子色键名中获取种子色键名迁移到用户手动选择的种子色键名
+  // 如果用户手动选择的种子色键名不存在，从种子色键中获取颜色值并迁移到用户手动选择的种子色键名
   // 这是为了在应用升级时，用户手动选择的种子色能够被恢复
   Future<void> _migrateManualColorKey() async {
     final prefs = await SharedPreferences.getInstance();
@@ -178,7 +177,6 @@ class ThemeProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final String? modeString = prefs.getString('user_theme_mode');
     _themeMode = _stringToThemeMode(modeString);
-    notifyListeners();
   }
 
   Future<void> _loadFontFamily() async {
@@ -186,7 +184,6 @@ class ThemeProvider with ChangeNotifier {
     final savedFont = prefs.getString(_fontFamilyKey);
     if (savedFont != null && savedFont.isNotEmpty) {
       _currentFontFamily = savedFont;
-      notifyListeners();
     }
   }
 
