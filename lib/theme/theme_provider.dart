@@ -69,14 +69,14 @@ class ThemeProvider with ChangeNotifier {
     textTheme: misansTextTheme,
   ).makeMouseClickable();
 
-  void setSeedColor(Color newColor, {bool isManual = false}) async {
+  Future<void> setSeedColor(Color newColor, {bool isManual = false}) async {
     if (_currentSeedColor != newColor) {
       _currentSeedColor = newColor;
       notifyListeners();
-      _saveSeedColor(newColor);
+      await _saveSeedColor(newColor);
     }
     if (isManual) {
-      _saveLastManualSeedColor(newColor);
+      await _saveLastManualSeedColor(newColor);
     }
   }
 
