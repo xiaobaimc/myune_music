@@ -23,11 +23,6 @@ class ThemeSelectionScreen extends StatelessWidget {
               Row(
                 children: [
                   Text('更改主题配色', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: '手动选择的颜色在关闭"动态主题配色"后生效',
-                    child: Icon(Icons.info_outline, size: 20, color: Theme.of(context).disabledColor),
-                  ),
                 ],
               ),
               ElevatedButton.icon(
