@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 import '../../theme/theme_provider.dart';
+import 'settings_provider.dart';
 
 class ThemeSelectionScreen extends StatelessWidget {
   const ThemeSelectionScreen({super.key});
@@ -45,7 +46,8 @@ class ThemeSelectionScreen extends StatelessWidget {
     BuildContext context,
     ThemeProvider themeProvider,
   ) {
-    Color pickerColor = themeProvider.currentSeedColor;
+    // 使用最后一次手动选择的颜色作为初始值，避免动态颜色覆盖手动颜色
+    Color pickerColor = themeProvider.lastManualSeedColor;
 
     showDialog(
       context: context,
@@ -71,6 +73,12 @@ class ThemeSelectionScreen extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
+                // 如果当前启用了动态颜色，先关闭它
+                final settings = context.read<SettingsProvider>();
+                if (settings.useDynamicColor) {
+                  settings.setUseDynamicColor(false);
+                }
+                // 设置用户手动选择的颜色
                 themeProvider.setSeedColor(pickerColor, isManual: true);
                 Navigator.of(context).pop();
               },

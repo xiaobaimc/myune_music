@@ -25,7 +25,8 @@ class ThemeProvider with ChangeNotifier {
   );
 
   static final int _defaultSeedColorValue = Colors.blue.toARGB32(); // 默认蓝色
-  Color _currentSeedColor = Color(_defaultSeedColorValue);
+  Color _currentSeedColor = Color(_defaultSeedColorValue); // 当前正在使用的主题种子色（可能是动态色或手动色）
+  Color _lastManualSeedColor = Color(_defaultSeedColorValue); // 用户最后一次手动选择的种子色，用于在关闭动态配色时恢复
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
@@ -42,6 +43,8 @@ class ThemeProvider with ChangeNotifier {
   }
 
   Color get currentSeedColor => _currentSeedColor;
+
+  Color get lastManualSeedColor => _lastManualSeedColor;
 
   String get currentFontFamily => _currentFontFamily;
 
@@ -76,6 +79,7 @@ class ThemeProvider with ChangeNotifier {
       await _saveSeedColor(newColor);
     }
     if (isManual) {
+      _lastManualSeedColor = newColor;
       await _saveLastManualSeedColor(newColor);
     }
   }
@@ -96,6 +100,14 @@ class ThemeProvider with ChangeNotifier {
   Future<void> _saveLastManualSeedColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_lastManualSeedColorKey, color.toARGB32());
+  }
+
+  Future<void> _loadLastManualSeedColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? savedColorValue = prefs.getInt(_lastManualSeedColorKey);
+    if (savedColorValue != null) {
+      _lastManualSeedColor = Color(savedColorValue);
+    }
   }
 
   Future<void> restoreLastManualColor() async {
@@ -205,6 +217,7 @@ class ThemeProvider with ChangeNotifier {
   Future<void> initialize() async {
     await Future.wait([_loadSeedColor(), _loadDarkMode(), _loadFontFamily()]);
     await _migrateManualColorKey();
+    await _loadLastManualSeedColor();
     notifyListeners();
   }
 
