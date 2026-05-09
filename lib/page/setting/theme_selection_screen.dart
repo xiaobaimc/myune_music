@@ -27,7 +27,7 @@ class ThemeSelectionScreen extends StatelessWidget {
                     message: '手动选择的颜色在关闭"动态主题配色"后生效',
                     child: Icon(Icons.info_outline, size: 20, color: Theme.of(context).disabledColor),
                   ),
-                ], 
+                ],
               ),
               ElevatedButton.icon(
                 onPressed: () => _showColorPickerDialog(context, themeProvider),
