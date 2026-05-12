@@ -25,13 +25,15 @@ class ThemeProvider with ChangeNotifier {
   );
 
   static final int _defaultSeedColorValue = Colors.blue.toARGB32(); // 默认蓝色
-  Color _currentSeedColor = Color(_defaultSeedColorValue);
+  Color _currentSeedColor = Color(_defaultSeedColorValue); // 当前正在使用的主题种子色（可能是动态色或手动色）
+  Color _lastManualSeedColor = Color(_defaultSeedColorValue); // 用户最后一次手动选择的种子色，用于在关闭动态配色时恢复
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
   static const String _seedColorKey = 'user_seed_color';
+  static const String _lastManualSeedColorKey = 'user_last_manual_seed_color';// 用户手动选择的种子色，用于在关闭动态配色时恢复
 
   static const String _fontFamilyKey = 'user_font_family';
   String _currentFontFamily = 'Misans'; // 默认字体
@@ -41,6 +43,8 @@ class ThemeProvider with ChangeNotifier {
   }
 
   Color get currentSeedColor => _currentSeedColor;
+
+  Color get lastManualSeedColor => _lastManualSeedColor;
 
   String get currentFontFamily => _currentFontFamily;
 
@@ -68,11 +72,15 @@ class ThemeProvider with ChangeNotifier {
     textTheme: misansTextTheme,
   ).makeMouseClickable();
 
-  void setSeedColor(Color newColor) async {
+  Future<void> setSeedColor(Color newColor, {bool isManual = false}) async {
     if (_currentSeedColor != newColor) {
       _currentSeedColor = newColor;
       notifyListeners();
-      _saveSeedColor(newColor);
+      await _saveSeedColor(newColor);
+    }
+    if (isManual) {
+      _lastManualSeedColor = newColor;
+      await _saveLastManualSeedColor(newColor);
     }
   }
 
@@ -81,13 +89,51 @@ class ThemeProvider with ChangeNotifier {
     final int? savedColorValue = prefs.getInt(_seedColorKey);
     if (savedColorValue != null) {
       _currentSeedColor = Color(savedColorValue);
-      notifyListeners();
     }
   }
 
   Future<void> _saveSeedColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_seedColorKey, color.toARGB32());
+  }
+
+  Future<void> _saveLastManualSeedColor(Color color) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lastManualSeedColorKey, color.toARGB32());
+  }
+
+  Future<void> _loadLastManualSeedColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? savedColorValue = prefs.getInt(_lastManualSeedColorKey);
+    if (savedColorValue != null) {
+      _lastManualSeedColor = Color(savedColorValue);
+    }
+  }
+
+  Future<void> restoreLastManualColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? savedColorValue = prefs.getInt(_lastManualSeedColorKey);
+    final color = savedColorValue != null
+        ? Color(savedColorValue)
+        : Color(_defaultSeedColorValue);
+    if (_currentSeedColor != color) {
+      _currentSeedColor = color;
+      notifyListeners();
+      await _saveSeedColor(color);
+    }
+  }
+
+  // 迁移手动选择的种子色键名
+  // 如果用户手动选择的种子色键名不存在，从种子色键中获取颜色值并迁移到用户手动选择的种子色键名
+  // 这是为了在应用升级时，用户手动选择的种子色能够被恢复
+  Future<void> _migrateManualColorKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!prefs.containsKey(_lastManualSeedColorKey)) {
+      final existingSeed = prefs.getInt(_seedColorKey);
+      if (existingSeed != null) {
+        await prefs.setInt(_lastManualSeedColorKey, existingSeed);
+      }
+    }
   }
 
   void toggleDarkMode() async {
@@ -143,7 +189,6 @@ class ThemeProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final String? modeString = prefs.getString('user_theme_mode');
     _themeMode = _stringToThemeMode(modeString);
-    notifyListeners();
   }
 
   Future<void> _loadFontFamily() async {
@@ -151,7 +196,6 @@ class ThemeProvider with ChangeNotifier {
     final savedFont = prefs.getString(_fontFamilyKey);
     if (savedFont != null && savedFont.isNotEmpty) {
       _currentFontFamily = savedFont;
-      notifyListeners();
     }
   }
 
@@ -172,6 +216,8 @@ class ThemeProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     await Future.wait([_loadSeedColor(), _loadDarkMode(), _loadFontFamily()]);
+    await _migrateManualColorKey();
+    await _loadLastManualSeedColor();
     notifyListeners();
   }
 
