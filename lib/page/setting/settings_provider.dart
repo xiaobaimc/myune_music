@@ -22,6 +22,8 @@ class SettingsProvider with ChangeNotifier {
   static const _artistSeparatorsKey = 'artistSeparators'; // 艺术家分隔符设置的 key
   static const _minimizeToTrayKey = 'minimizeToTray'; // 最小化到托盘设置的 key
   static const _enableLyricBlurKey = 'enableLyricBlur'; // 歌词模糊效果设置的 key
+  static const _lyricBlurStrengthKey =
+      'lyricBlurStrength'; // 歌词模糊强度设置的 key
   static const _showTaskbarProgressKey =
       'showTaskbarProgress'; // 任务栏进度显示设置的 key
   static const _hiddenPagesKey = 'hiddenPages'; // 隐藏页面设置的 key
@@ -44,6 +46,7 @@ class SettingsProvider with ChangeNotifier {
   bool _addLyricPadding = true; // 默认启用歌词上下补位
   bool _minimizeToTray = false; // 默认不启用最小化到托盘
   bool _enableLyricBlur = true; // 默认启用歌词模糊效果
+  double _lyricBlurStrength = 2.5; // 歌词模糊强度，范围 1.0~4.0
   bool _showAlbumName = false; // 默认不显示专辑名称
   bool _enableDynamicBackground = false; // 默认不启用动态背景
   bool _audioDeviceIsAuto = true; // 默认音频设备为自动
@@ -74,6 +77,7 @@ class SettingsProvider with ChangeNotifier {
   bool get addLyricPadding => _addLyricPadding; // 获取歌词上下补位设置
   bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
   bool get enableLyricBlur => _enableLyricBlur; // 获取歌词模糊效果设置
+  double get lyricBlurStrength => _lyricBlurStrength; // 获取歌词模糊强度设置
   bool get showTaskbarProgress => _showTaskbarProgress; // 获取任务栏进度显示设置
   bool get showAlbumName => _showAlbumName; // 获取显示专辑名称设置
   bool get enableDynamicBackground => _enableDynamicBackground; // 获取动态背景设置
@@ -113,6 +117,7 @@ class SettingsProvider with ChangeNotifier {
     _addLyricPadding = prefs.getBool(_addLyricPaddingKey) ?? true; // 加载歌词上下补位设置
     _minimizeToTray = prefs.getBool(_minimizeToTrayKey) ?? false; // 加载最小化到托盘设置
     _enableLyricBlur = prefs.getBool(_enableLyricBlurKey) ?? true; // 加载歌词模糊效果设置
+    _lyricBlurStrength = prefs.getDouble(_lyricBlurStrengthKey) ?? 2.5; // 加载歌词模糊强度设置
     _primaryLyricSource =
         prefs.getString(_primaryLyricSourceKey) ?? 'qq'; // 加载主要歌词源设置
     _secondaryLyricSource =
@@ -255,6 +260,16 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableLyricBlurKey, value);
+  }
+
+  void setLyricBlurStrength(double value) async {
+    final clampedValue = value.clamp(1.0, 4.0);
+    if (_lyricBlurStrength == clampedValue) return;
+
+    _lyricBlurStrength = clampedValue;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_lyricBlurStrengthKey, clampedValue);
   }
 
   void setShowTaskbarProgress(bool value) async {

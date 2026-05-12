@@ -277,6 +277,9 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     final enableLyricBlur = context.select<SettingsProvider, bool>(
       (s) => s.enableLyricBlur,
     );
+    final lyricBlurStrength = context.select<SettingsProvider, double>(
+      (s) => s.lyricBlurStrength,
+    );
 
     final bool shouldBlur = enableLyricBlur && !_isUserScrolling;
 
@@ -359,16 +362,10 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                 double calculateSigma(int distance) {
                   if (!shouldBlur || isCurrent) return 0.0;
 
-                  // 针对小范围歌词显示进行优化
-                  const double maxSigma = 2.5;
                   const int maxDistance = 5;
-
-                  // 使用线性函数创建平滑的过渡效果
-                  double normalizedDistance = distance / maxDistance;
-                  if (normalizedDistance > 1.0) normalizedDistance = 1.0;
-
-                  // 简单线性过渡，确保相邻行差异较小
-                  return normalizedDistance * maxSigma;
+                  final double normalizedDistance =
+                      (distance / maxDistance).clamp(0.0, 1.0);
+                  return normalizedDistance * lyricBlurStrength;
                 }
 
                 final List<Widget> columnChildren = [];
