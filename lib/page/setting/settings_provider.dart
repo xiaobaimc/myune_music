@@ -33,6 +33,8 @@ class SettingsProvider with ChangeNotifier {
   static const _ignorePlaybackErrorsKey = 'ignorePlaybackErrors';
   static const _preferExternalLyricsKey = 'preferExternalLyrics';
 
+  static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
+
   int _maxLinesPerLyric = 2;
   double _fontSize = 22.0; // 默认字体大小
   TextAlign _lyricAlignment = TextAlign.center; // 默认居中对齐
@@ -51,6 +53,7 @@ class SettingsProvider with ChangeNotifier {
   String? _audioDeviceDesc; // 音频设备描述
   bool _ignorePlaybackErrors = false; // 默认不忽略播放错误
   bool _preferExternalLyrics = false; // 默认不优先读取外置LRC歌词
+  bool _enableLyricElasticScroll = false;
 
   bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
@@ -92,6 +95,7 @@ class SettingsProvider with ChangeNotifier {
   bool get ignorePlaybackErrors => _ignorePlaybackErrors;
 
   bool get preferExternalLyrics => _preferExternalLyrics; // 获取优先读取外置LRC歌词设置
+  bool get enableLyricElasticScroll => _enableLyricElasticScroll;
 
   SettingsProvider() {
     _loadFromPrefs();
@@ -127,6 +131,9 @@ class SettingsProvider with ChangeNotifier {
     _audioDeviceDesc = prefs.getString(_audioDeviceDescKey);
     _ignorePlaybackErrors = prefs.getBool(_ignorePlaybackErrorsKey) ?? false;
     _preferExternalLyrics = prefs.getBool(_preferExternalLyricsKey) ?? false;
+    _enableLyricElasticScroll =
+        prefs.getBool(_enableLyricElasticScrollKey) ?? false;
+
     // 加载隐藏页面设置
     final hiddenPagesList = prefs.getStringList(_hiddenPagesKey);
     if (hiddenPagesList != null) {
@@ -324,5 +331,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_preferExternalLyricsKey, value);
+  }
+
+  void setEnableLyricElasticScroll(bool value) async {
+    _enableLyricElasticScroll = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableLyricElasticScrollKey, value);
   }
 }

@@ -30,9 +30,11 @@ texts列表里有3行，但tokens列表里只有2个元素（因为只有第 1�
 */
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -46,6 +48,7 @@ class LyricsWidget extends StatefulWidget {
   final int currentIndex;
   final int maxLinesPerLyric; // 最大行数
   final Function(int index)? onTapLine;
+  final bool enablePullWaveScroll;
 
   const LyricsWidget({
     super.key,
@@ -53,13 +56,15 @@ class LyricsWidget extends StatefulWidget {
     required this.currentIndex,
     this.maxLinesPerLyric = 1,
     this.onTapLine,
+    this.enablePullWaveScroll = true,
   });
 
   @override
   State<LyricsWidget> createState() => _LyricsWidgetState();
 }
 
-class _LyricsWidgetState extends State<LyricsWidget> {
+class _LyricsWidgetState extends State<LyricsWidget>
+    with TickerProviderStateMixin {
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
       ItemPositionsListener.create();
@@ -73,10 +78,13 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
   bool _isUserScrolling = false; // 标记用户是否在手动滚动
   Timer? _scrollStopTimer; // 滚动停止检测定时器
+  List<AnimationController> _pullWaveControllers = [];
+  final List<Timer> _pullWaveTimers = [];
 
   @override
   void initState() {
     super.initState();
+    _resetPullWaveControllers();
     // 首次构建后滚动到当前行
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scrollToCurrentLine(instant: true),
@@ -86,7 +94,41 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   @override
   void dispose() {
     _scrollStopTimer?.cancel();
+    _cancelPullWaveTimers();
+    for (final controller in _pullWaveControllers) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _resetPullWaveControllers() {
+    _cancelPullWaveTimers();
+
+    if (mounted) {
+      for (final controller in _pullWaveControllers) {
+        controller.dispose();
+      }
+    }
+
+    _pullWaveControllers = List<AnimationController>.generate(
+      widget.lyrics.length,
+      (index) {
+        final controller = AnimationController.unbounded(vsync: this);
+        controller.addListener(() {
+          // if (controller.value.abs() < 0.5) {
+          //   controller.value = 0.0;
+          // }
+        });
+        return controller;
+      },
+    );
+  }
+
+  void _cancelPullWaveTimers() {
+    for (final timer in _pullWaveTimers) {
+      timer.cancel();
+    }
+    _pullWaveTimers.clear();
   }
 
   // 直接监听滚轮判断用户是否手动滚动
@@ -113,19 +155,105 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   void didUpdateWidget(covariant LyricsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // 当前行变化，滚动到对应行
-    if (widget.currentIndex != oldWidget.currentIndex) {
-      _scrollToCurrentLine();
-    }
     // 当歌词列表发生变化时（如切换歌曲），滚动到顶部
-    else if (widget.lyrics != oldWidget.lyrics) {
+    if (widget.lyrics != oldWidget.lyrics) {
+      _resetPullWaveControllers();
       // 使用微延迟确保在新歌词加载后执行滚动
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (widget.currentIndex == 0 && _itemScrollController.isAttached) {
           _itemScrollController.jumpTo(index: 0, alignment: 0.0);
+        } else {
+          _scrollToCurrentLine(instant: true);
         }
       });
+    } else if (widget.currentIndex != oldWidget.currentIndex) {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      if (settings.enableLyricElasticScroll) {
+        _startPullWaveScroll(oldWidget.currentIndex);
+      }
+      _scrollToCurrentLine();
     }
+  }
+
+  void _startPullWaveScroll(int oldIndex) {
+    if (!widget.enablePullWaveScroll ||
+        _isUserScrolling ||
+        widget.lyrics.isEmpty ||
+        _pullWaveControllers.length != widget.lyrics.length ||
+        widget.currentIndex < 0) {
+      return;
+    }
+
+    _cancelPullWaveTimers();
+
+    // 弹簧力度
+    const double baseAmplitude = 12;
+    // 波浪扩散速度
+    const double delayFactor = 0.045;
+
+    final int direction = widget.currentIndex >= oldIndex ? -1 : 1;
+
+    for (int i = 0; i < widget.lyrics.length; i++) {
+      final int distance = (i - widget.currentIndex).abs();
+
+      final double executionDelay = distance * delayFactor;
+
+      final double amplitude =
+          direction * baseAmplitude / math.pow(1.0 + distance * 0.18, 1.25);
+
+      final int interval = _lyricIntervalAt(i);
+      final double ratio = math
+          .pow(1.0 - ((interval.clamp(100, 800) - 100) / 700), 0.2)
+          .toDouble();
+      final double stiffness = 160.0 + (ratio * 40.0);
+      final double damping = math.sqrt(stiffness) * 2.1;
+
+      final spring = SpringDescription(
+        mass: 1.0,
+        stiffness: stiffness,
+        damping: damping,
+      );
+
+      final timer = Timer(
+        Duration(milliseconds: (executionDelay * 1000).round()),
+        () {
+          if (!mounted || i >= _pullWaveControllers.length) return;
+
+          final controller = _pullWaveControllers[i];
+          controller.stop();
+
+          // 快速推移 + 弹簧回弹
+          controller
+              .animateTo(
+                amplitude,
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+              )
+              .whenComplete(() {
+                if (!mounted || i >= _pullWaveControllers.length) return;
+                controller.animateWith(
+                  SpringSimulation(
+                    spring,
+                    controller.value,
+                    0.0,
+                    controller.velocity,
+                  ),
+                );
+              });
+        },
+      );
+      _pullWaveTimers.add(timer);
+    }
+  }
+
+  int _lyricIntervalAt(int index) {
+    if (index <= 0 || index >= widget.lyrics.length) {
+      return 1000;
+    }
+
+    final current = widget.lyrics[index].timestamp.inMilliseconds;
+    final previous = widget.lyrics[index - 1].timestamp.inMilliseconds;
+    return current - previous;
   }
 
   // 滚动方法
@@ -149,11 +277,16 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     if (instant) {
       _itemScrollController.jumpTo(index: actualIndex, alignment: 0.0);
     } else {
+      final duration = Duration(
+        milliseconds: settings.enableLyricElasticScroll ? 520 : 300,
+      );
       _itemScrollController.scrollTo(
         index: actualIndex,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.38, // 0.38 看起来更顺眼一点
+        duration: duration,
+        curve: settings.enableLyricElasticScroll
+            ? Curves.easeOutCubic
+            : Curves.easeInOut,
+        alignment: settings.enableLyricElasticScroll ? 0.38 : 0.38,
       );
     }
   }
@@ -349,6 +482,11 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                 final int lyricIndex = index - paddingItemCount;
                 final line = widget.lyrics[lyricIndex];
                 final isCurrent = lyricIndex == widget.currentIndex;
+                final AnimationController? controller =
+                    widget.enablePullWaveScroll &&
+                        lyricIndex < _pullWaveControllers.length
+                    ? _pullWaveControllers[lyricIndex]
+                    : null;
 
                 line.texts.take(widget.maxLinesPerLyric);
 
@@ -569,7 +707,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                   }
                 }
 
-                return Padding(
+                final Widget lyricRow = Padding(
                   padding: EdgeInsets.symmetric(
                     vertical:
                         lyricVerticalSpacing +
@@ -630,6 +768,25 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                     ),
                   ),
                 );
+
+                return controller != null
+                    ? AnimatedBuilder(
+                        key: ValueKey('lyric_$lyricIndex'),
+                        animation: controller,
+                        builder: (context, child) {
+                          final double val = controller.value;
+                          final double renderOffset = val.abs() < 0.3
+                              ? 0.0
+                              : val;
+
+                          return Transform.translate(
+                            offset: Offset(0, renderOffset),
+                            child: child,
+                          );
+                        },
+                        child: lyricRow,
+                      )
+                    : lyricRow;
               },
             ),
           ),
@@ -654,8 +811,14 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 class LyricsView extends StatelessWidget {
   final int maxLinesPerLyric;
   final Function(int index)? onTapLine;
+  final bool enablePullWaveScroll;
 
-  const LyricsView({super.key, this.maxLinesPerLyric = 1, this.onTapLine});
+  const LyricsView({
+    super.key,
+    this.maxLinesPerLyric = 1,
+    this.onTapLine,
+    this.enablePullWaveScroll = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -676,6 +839,7 @@ class LyricsView extends StatelessWidget {
           currentIndex: currentLyricLineIndex,
           maxLinesPerLyric: maxLinesPerLyric,
           onTapLine: onTapLine,
+          enablePullWaveScroll: enablePullWaveScroll,
         );
 
         final settings = Provider.of<SettingsProvider>(context, listen: false);

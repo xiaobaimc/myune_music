@@ -28,6 +28,13 @@ enum PlayMode { sequence, shuffle, repeatOne }
 
 enum DetailViewContext { playlist, allSongs, artist, album }
 
+class EqualizerPreset {
+  final String name;
+  final List<double> gains;
+
+  const EqualizerPreset(this.name, this.gains);
+}
+
 class PlaylistContentNotifier extends ChangeNotifier {
   // --- 播放列表相关 ---
   final PlaylistManager _playlistManager = PlaylistManager();
@@ -100,9 +107,47 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 音调与倍速 ---
   double _currentPitch = 1.0; // 音调大小
   double _currentPlaybackRate = 1.0; // 播放速度
+  Timer? _equalizerApplyTimer;
+  Timer? _audioControlSaveTimer;
+  static const List<int> equalizerFrequencies = [
+    31,
+    62,
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000,
+    16000,
+  ];
+  static const List<EqualizerPreset> equalizerPresets = [
+    EqualizerPreset('自定义', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    EqualizerPreset('默认', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    EqualizerPreset('流行乐', [1, 2, 3, 2, 0, -1, 0, 2, 3, 2]),
+    EqualizerPreset('摇滚乐', [4, 3, 2, 0, -1, -1, 1, 3, 4, 3]),
+    EqualizerPreset('古典', [2, 2, 1, 0, 0, 0, -1, 1, 2, 3]),
+    EqualizerPreset('爵士', [3, 2, 1, 1, -1, -1, 0, 1, 2, 2]),
+    EqualizerPreset('人声', [-2, -1, 0, 1, 3, 4, 3, 1, 0, -1]),
+    EqualizerPreset('高音增强', [-3, -2, -2, -1, 0, 1, 3, 5, 6, 6]),
+    EqualizerPreset('低音增强', [6, 5, 4, 3, 1, 0, -1, -2, -3, -3]),
+    EqualizerPreset('电子乐', [5, 4, 2, 0, -2, 1, 2, 4, 5, 4]),
+  ];
+  List<double> _equalizerGains = List<double>.filled(
+    equalizerFrequencies.length,
+    0.0,
+  );
+  String _equalizerPresetName = '默认';
+
+  static const _pitchKey = 'player_pitch';
+  static const _playbackRateKey = 'player_playback_rate';
+  static const _equalizerGainsKey = 'player_equalizer_gains';
+  static const _equalizerPresetKey = 'player_equalizer_preset';
 
   double get currentPitch => _currentPitch;
   double get currentPlaybackRate => _currentPlaybackRate;
+  List<double> get equalizerGains => List.unmodifiable(_equalizerGains);
+  String get equalizerPresetName => _equalizerPresetName;
 
   // --- 音量控制 ---
   double _volume = 100.0; // 当前音量
@@ -301,6 +346,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await loadPlayMode();
     // 加载音量设置
     await _loadVolumeSetting();
+    // 加载音高、倍速和均衡器设置
+    await _loadAudioControlSettings();
     // 恢复播放状态
     await _restorePlaybackState();
   }
@@ -416,6 +463,107 @@ class PlaylistContentNotifier extends ChangeNotifier {
     setVolume(newVolume);
   }
 
+  double _sanitizePitch(double? value) {
+    if (value == null || value.isNaN || value.isInfinite) {
+      return 1.0;
+    }
+    return value.clamp(0.5, 1.5).toDouble();
+  }
+
+  double _sanitizePlaybackRate(double? value) {
+    if (value == null || value.isNaN || value.isInfinite) {
+      return 1.0;
+    }
+    return value.clamp(0.5, 2.0).toDouble();
+  }
+
+  double _sanitizeEqualizerGain(double value) {
+    if (value.isNaN || value.isInfinite) {
+      return 0.0;
+    }
+    return value.clamp(-12.0, 12.0).toDouble();
+  }
+
+  Future<void> _loadAudioControlSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _currentPitch = _sanitizePitch(prefs.getDouble(_pitchKey));
+    _currentPlaybackRate = _sanitizePlaybackRate(
+      prefs.getDouble(_playbackRateKey),
+    );
+    _equalizerPresetName = prefs.getString(_equalizerPresetKey) ?? '默认';
+
+    final gainsJson = prefs.getString(_equalizerGainsKey);
+    if (gainsJson != null) {
+      try {
+        final decoded = jsonDecode(gainsJson);
+        if (decoded is List && decoded.length == equalizerFrequencies.length) {
+          _equalizerGains = decoded
+              .map(
+                (value) => value is num
+                    ? _sanitizeEqualizerGain(value.toDouble())
+                    : 0.0,
+              )
+              .toList();
+        }
+      } catch (_) {
+        _equalizerGains = List<double>.filled(equalizerFrequencies.length, 0.0);
+        _equalizerPresetName = '默认';
+      }
+    } else {
+      final preset = equalizerPresets.firstWhere(
+        (preset) => preset.name == _equalizerPresetName,
+        orElse: () => equalizerPresets[1],
+      );
+      _equalizerGains = List<double>.from(preset.gains);
+    }
+
+    await _mediaPlayer.setPitch(_currentPitch);
+    await _mediaPlayer.setRate(_currentPlaybackRate);
+    await _applyEqualizer();
+  }
+
+  Future<void> _saveAudioControlSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_pitchKey, _currentPitch);
+    await prefs.setDouble(_playbackRateKey, _currentPlaybackRate);
+    await prefs.setString(_equalizerPresetKey, _equalizerPresetName);
+    await prefs.setString(_equalizerGainsKey, jsonEncode(_equalizerGains));
+  }
+
+  void _scheduleAudioControlSave() {
+    _audioControlSaveTimer?.cancel();
+    _audioControlSaveTimer = Timer(const Duration(milliseconds: 300), () {
+      _saveAudioControlSettings();
+    });
+  }
+
+  bool _isEqualizerFlat() {
+    return _equalizerGains.every((gain) => gain.abs() < 0.05);
+  }
+
+  Future<void> _applyEqualizer() async {
+    if (_mediaPlayer.platform is! NativePlayer) return;
+
+    final platform = _mediaPlayer.platform as dynamic;
+    try {
+      if (_isEqualizerFlat()) {
+        await platform.setProperty('af', '');
+        return;
+      }
+
+      final filters = <String>[];
+      for (var i = 0; i < equalizerFrequencies.length; i++) {
+        filters.add(
+          'equalizer=f=${equalizerFrequencies[i]}:t=q:w=1:g=${_equalizerGains[i].toStringAsFixed(1)}',
+        );
+      }
+
+      await platform.setProperty('af', 'lavfi=[${filters.join(',')}]');
+    } catch (e) {
+      //
+    }
+  }
+
   @override
   // --- 播放器相关 ---
   void dispose() {
@@ -425,7 +573,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _safeDispose(); // 释放播放器资源
     _cleanupSmtc();
     _metadataCacheSaveTimer?.cancel();
+    _equalizerApplyTimer?.cancel();
+    _audioControlSaveTimer?.cancel();
     _saveSongMetadataCache();
+    _saveAudioControlSettings();
     savePlaybackState();
     super.dispose();
   }
@@ -1566,6 +1717,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (pitch < 0.5 || pitch > 1.5) return;
     _currentPitch = pitch;
     await _mediaPlayer.setPitch(pitch);
+    await _saveAudioControlSettings();
     notifyListeners(); // 通知 UI 更新
   }
 
@@ -1573,7 +1725,53 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (rate < 0.5 || rate > 2.0) return;
     _currentPlaybackRate = rate;
     await _mediaPlayer.setRate(rate);
+    await _saveAudioControlSettings();
     notifyListeners(); // 通知 UI 更新
+  }
+
+  Future<void> setEqualizerBand(int index, double gain) async {
+    if (index < 0 || index >= _equalizerGains.length) return;
+    _equalizerGains[index] = _sanitizeEqualizerGain(gain);
+    _equalizerPresetName = '自定义';
+    _equalizerApplyTimer?.cancel();
+    _equalizerApplyTimer = Timer(const Duration(milliseconds: 160), () {
+      _applyEqualizer();
+    });
+    _scheduleAudioControlSave();
+    notifyListeners();
+  }
+
+  Future<void> commitEqualizerBand(int index, double gain) async {
+    if (index < 0 || index >= _equalizerGains.length) return;
+    _equalizerGains[index] = _sanitizeEqualizerGain(gain);
+    _equalizerPresetName = '自定义';
+    _equalizerApplyTimer?.cancel();
+    await _applyEqualizer();
+    await _saveAudioControlSettings();
+    notifyListeners();
+  }
+
+  Future<void> applyEqualizerPreset(EqualizerPreset preset) async {
+    if (preset.gains.length != equalizerFrequencies.length) return;
+    _equalizerPresetName = preset.name;
+    _equalizerGains = preset.gains
+        .map((gain) => _sanitizeEqualizerGain(gain))
+        .toList();
+    await _applyEqualizer();
+    await _saveAudioControlSettings();
+    notifyListeners();
+  }
+
+  Future<void> resetAudioControls() async {
+    _currentPitch = 1.0;
+    _currentPlaybackRate = 1.0;
+    _equalizerPresetName = '默认';
+    _equalizerGains = List<double>.filled(equalizerFrequencies.length, 0.0);
+    await _mediaPlayer.setPitch(_currentPitch);
+    await _mediaPlayer.setRate(_currentPlaybackRate);
+    await _applyEqualizer();
+    await _saveAudioControlSettings();
+    notifyListeners();
   }
 
   // 根据播放模式播放下一首
@@ -2049,6 +2247,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
 
       await _mediaPlayer.open(Media(songFilePath));
+      await _mediaPlayer.setPitch(_currentPitch);
+      await _mediaPlayer.setRate(_currentPlaybackRate);
+      await _applyEqualizer();
 
       _loadLyricsForSong(songFilePath);
 

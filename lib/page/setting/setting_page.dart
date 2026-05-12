@@ -466,7 +466,7 @@ class _SettingPageState extends State<SettingPage>
                   // 启用模糊背景
                   SwitchListTile(
                     title: Text(
-                      '启用播放页模糊背景',
+                      '播放页模糊背景',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     value: settings.useBlurBackground, // 使用 settings
@@ -480,7 +480,7 @@ class _SettingPageState extends State<SettingPage>
                   SwitchListTile(
                     title: const Row(
                       children: [
-                        Text('启用播放页动态背景'),
+                        Text('播放页动态背景'),
                         SizedBox(width: 4),
                         InfoIcon('未启用模糊背景时不生效'),
                       ],
@@ -495,7 +495,7 @@ class _SettingPageState extends State<SettingPage>
                   // 启用歌词模糊效果
                   SwitchListTile(
                     title: Text(
-                      '启用歌词模糊效果',
+                      '歌词模糊效果',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     value: settings.enableLyricBlur,
@@ -507,12 +507,28 @@ class _SettingPageState extends State<SettingPage>
                   ),
                   // 歌词上下补位设置
                   SwitchListTile(
-                    title: const Text('强制播放页高亮歌词垂直居中显示'),
+                    title: const Text('高亮歌词始终垂直居中显示'),
                     value: settings.addLyricPadding,
                     onChanged: (value) {
                       context.read<SettingsProvider>().setAddLyricPadding(
                         value,
                       );
+                    },
+                  ),
+                  // 启用歌词弹性滚动
+                  SwitchListTile(
+                    title: const Row(
+                      children: [
+                        Text('歌词弹性滚动'),
+                        SizedBox(width: 4),
+                        InfoIcon('实验性功能。启用后会显著提升性能占用'),
+                      ],
+                    ),
+                    value: settings.enableLyricElasticScroll,
+                    onChanged: (value) {
+                      context
+                          .read<SettingsProvider>()
+                          .setEnableLyricElasticScroll(value);
                     },
                   ),
                   // // 播放页同时间戳最大显示歌词行数
