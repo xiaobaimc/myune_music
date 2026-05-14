@@ -476,6 +476,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _mediaPlayer.stream.error.listen((error) {
       final errorString = error.toString();
+
+      // 检测音频设备错误：当用户选择了特定设备且该设备不可用时，自动回退到自动选择
+      if (errorString.contains('Could not open/initialize audio device') &&
+          !_settingsProvider.audioDeviceIsAuto) {
+        useAutoAudioDevice();
+        _infoStreamController.add('所选音频设备不可用，已自动切换到默认设备');
+        return;
+      }
+
       final shouldNotifyUI =
           !(_settingsProvider.ignorePlaybackErrors &&
               (errorString.contains('Error decoding audio') ||
