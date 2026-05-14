@@ -1,4 +1,4 @@
-/* 
+﻿/* 
 FIXME: 假设以下格式
 `
 [00:08.220]First [00:08.412]things [00:08.882]first[00:09.378]
@@ -48,7 +48,6 @@ class LyricsWidget extends StatefulWidget {
   final int currentIndex;
   final int maxLinesPerLyric; // 最大行数
   final Function(int index)? onTapLine;
-  final bool enablePullWaveScroll;
 
   const LyricsWidget({
     super.key,
@@ -56,7 +55,6 @@ class LyricsWidget extends StatefulWidget {
     required this.currentIndex,
     this.maxLinesPerLyric = 1,
     this.onTapLine,
-    this.enablePullWaveScroll = true,
   });
 
   @override
@@ -78,57 +76,42 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   bool _isUserScrolling = false; // 标记用户是否在手动滚动
   Timer? _scrollStopTimer; // 滚动停止检测定时器
-  List<AnimationController> _pullWaveControllers = [];
-  final List<Timer> _pullWaveTimers = [];
+
+  final List<GlobalKey> _elasticItemKeys = [];
+  final List<double> _elasticItemHeights = [];
+  final List<double> _elasticBaseYPositions = [];
+  final List<double> _elasticAnimatedYPositions = [];
+  final List<AnimationController> _elasticControllers = [];
+  bool _elasticHeightsMeasured = false;
+  int _elasticAnimationGeneration = 0;
+  bool _isElasticPointerDragging = false;
+  bool _didElasticPointerMove = false;
+  bool _frameScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    _resetPullWaveControllers();
+
+    final settings = context.read<SettingsProvider>();
+    if (settings.enableLyricElasticScroll) {
+      _resetElasticState();
+    }
+
     // 首次构建后滚动到当前行
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _scrollToCurrentLine(instant: true),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToCurrentLine(instant: true);
+
+      if (settings.enableLyricElasticScroll) {
+        _jumpElasticToCurrent();
+      }
+    });
   }
 
   @override
   void dispose() {
     _scrollStopTimer?.cancel();
-    _cancelPullWaveTimers();
-    for (final controller in _pullWaveControllers) {
-      controller.dispose();
-    }
+    _disposeElasticControllers();
     super.dispose();
-  }
-
-  void _resetPullWaveControllers() {
-    _cancelPullWaveTimers();
-
-    if (mounted) {
-      for (final controller in _pullWaveControllers) {
-        controller.dispose();
-      }
-    }
-
-    _pullWaveControllers = List<AnimationController>.generate(
-      widget.lyrics.length,
-      (index) {
-        final controller = AnimationController.unbounded(vsync: this);
-        controller.addListener(() {
-          // if (controller.value.abs() < 0.5) {
-          //   controller.value = 0.0;
-          // }
-        });
-        return controller;
-      },
-    );
-  }
-
-  void _cancelPullWaveTimers() {
-    for (final timer in _pullWaveTimers) {
-      timer.cancel();
-    }
-    _pullWaveTimers.clear();
   }
 
   // 直接监听滚轮判断用户是否手动滚动
@@ -155,105 +138,22 @@ class _LyricsWidgetState extends State<LyricsWidget>
   void didUpdateWidget(covariant LyricsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    // 当前行变化，滚动到对应行
+    if (widget.currentIndex != oldWidget.currentIndex) {
+      _scrollToCurrentLine();
+      _animateElasticToCurrent();
+    }
     // 当歌词列表发生变化时（如切换歌曲），滚动到顶部
-    if (widget.lyrics != oldWidget.lyrics) {
-      _resetPullWaveControllers();
+    else if (widget.lyrics != oldWidget.lyrics) {
+      _resetElasticState();
       // 使用微延迟确保在新歌词加载后执行滚动
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (widget.currentIndex == 0 && _itemScrollController.isAttached) {
           _itemScrollController.jumpTo(index: 0, alignment: 0.0);
-        } else {
-          _scrollToCurrentLine(instant: true);
         }
+        _jumpElasticToCurrent();
       });
-    } else if (widget.currentIndex != oldWidget.currentIndex) {
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
-      if (settings.enableLyricElasticScroll) {
-        _startPullWaveScroll(oldWidget.currentIndex);
-      }
-      _scrollToCurrentLine();
     }
-  }
-
-  void _startPullWaveScroll(int oldIndex) {
-    if (!widget.enablePullWaveScroll ||
-        _isUserScrolling ||
-        widget.lyrics.isEmpty ||
-        _pullWaveControllers.length != widget.lyrics.length ||
-        widget.currentIndex < 0) {
-      return;
-    }
-
-    _cancelPullWaveTimers();
-
-    // 弹簧力度
-    const double baseAmplitude = 12;
-    // 波浪扩散速度
-    const double delayFactor = 0.045;
-
-    final int direction = widget.currentIndex >= oldIndex ? -1 : 1;
-
-    for (int i = 0; i < widget.lyrics.length; i++) {
-      final int distance = (i - widget.currentIndex).abs();
-
-      final double executionDelay = distance * delayFactor;
-
-      final double amplitude =
-          direction * baseAmplitude / math.pow(1.0 + distance * 0.18, 1.25);
-
-      final int interval = _lyricIntervalAt(i);
-      final double ratio = math
-          .pow(1.0 - ((interval.clamp(100, 800) - 100) / 700), 0.2)
-          .toDouble();
-      final double stiffness = 160.0 + (ratio * 40.0);
-      final double damping = math.sqrt(stiffness) * 2.1;
-
-      final spring = SpringDescription(
-        mass: 1.0,
-        stiffness: stiffness,
-        damping: damping,
-      );
-
-      final timer = Timer(
-        Duration(milliseconds: (executionDelay * 1000).round()),
-        () {
-          if (!mounted || i >= _pullWaveControllers.length) return;
-
-          final controller = _pullWaveControllers[i];
-          controller.stop();
-
-          // 快速推移 + 弹簧回弹
-          controller
-              .animateTo(
-                amplitude,
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-              )
-              .whenComplete(() {
-                if (!mounted || i >= _pullWaveControllers.length) return;
-                controller.animateWith(
-                  SpringSimulation(
-                    spring,
-                    controller.value,
-                    0.0,
-                    controller.velocity,
-                  ),
-                );
-              });
-        },
-      );
-      _pullWaveTimers.add(timer);
-    }
-  }
-
-  int _lyricIntervalAt(int index) {
-    if (index <= 0 || index >= widget.lyrics.length) {
-      return 1000;
-    }
-
-    final current = widget.lyrics[index].timestamp.inMilliseconds;
-    final previous = widget.lyrics[index - 1].timestamp.inMilliseconds;
-    return current - previous;
   }
 
   // 滚动方法
@@ -277,16 +177,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (instant) {
       _itemScrollController.jumpTo(index: actualIndex, alignment: 0.0);
     } else {
-      final duration = Duration(
-        milliseconds: settings.enableLyricElasticScroll ? 520 : 300,
-      );
       _itemScrollController.scrollTo(
         index: actualIndex,
-        duration: duration,
-        curve: settings.enableLyricElasticScroll
-            ? Curves.easeOutCubic
-            : Curves.easeInOut,
-        alignment: settings.enableLyricElasticScroll ? 0.38 : 0.38,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.38, // 0.38 看起来更顺眼一点
       );
     }
   }
@@ -390,6 +285,347 @@ class _LyricsWidgetState extends State<LyricsWidget>
     );
   }
 
+  double _calculateSigma(int distance, bool shouldBlur, bool isCurrent) {
+    if (!shouldBlur || isCurrent) return 0.0;
+
+    const double maxSigma = 2.5;
+    const int maxDistance = 5;
+    double normalizedDistance = distance / maxDistance;
+    if (normalizedDistance > 1.0) normalizedDistance = 1.0;
+    return normalizedDistance * maxSigma;
+  }
+
+  Widget _withLyricEffects({
+    required Widget child,
+    required TextAlign lyricAlignment,
+    required bool isCurrent,
+    required bool shouldBlur,
+    required int distance,
+  }) {
+    final double sigma = _calculateSigma(distance, shouldBlur, isCurrent);
+    final Widget effectiveChild = sigma == 0.0
+        ? child
+        : ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: child,
+          );
+
+    return AnimatedScale(
+      alignment: _getAlignmentFromTextAlign(lyricAlignment),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeInOutSine,
+      scale: isCurrent ? 1.02 : 1.0,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        child: effectiveChild,
+      ),
+    );
+  }
+
+  TextStyle _lyricTextStyle({
+    required bool isCurrent,
+    required bool isSecondaryLine,
+    required double fontSize,
+    required ColorScheme colorScheme,
+  }) {
+    final double lineFontSize = isSecondaryLine ? fontSize * 0.88 : fontSize;
+    final FontWeight lineFontWeight = isCurrent
+        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
+        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+    final Color lineColor = isCurrent
+        ? (isSecondaryLine
+              ? colorScheme.primary.withValues(alpha: 0.88)
+              : colorScheme.primary)
+        : (isSecondaryLine
+              ? colorScheme.onSurfaceVariant.withValues(alpha: 0.58)
+              : colorScheme.onSurfaceVariant.withValues(alpha: 0.7));
+
+    return TextStyle(
+      fontSize: lineFontSize,
+      height: 1.2,
+      color: lineColor,
+      fontWeight: lineFontWeight,
+    );
+  }
+
+  Widget _buildStaticLyricText({
+    required String text,
+    required TextAlign lyricAlignment,
+    required TextStyle style,
+  }) {
+    return Text(
+      text,
+      textAlign: lyricAlignment,
+      style: style,
+      textHeightBehavior: const TextHeightBehavior(
+        applyHeightToFirstAscent: false,
+        applyHeightToLastDescent: false,
+      ),
+    );
+  }
+
+  Widget _buildLyricItem({
+    required int lyricIndex,
+    required double maxWidth,
+    required double fontSize,
+    required double lyricVerticalSpacing,
+    required TextAlign lyricAlignment,
+    required bool shouldBlur,
+    required ColorScheme colorScheme,
+  }) {
+    final line = widget.lyrics[lyricIndex];
+    final isCurrent = lyricIndex == widget.currentIndex;
+    final int distance = (lyricIndex - widget.currentIndex).abs();
+    final List<Widget> columnChildren = [];
+    int renderedLines = 0;
+    final int maxAllowed = widget.maxLinesPerLyric;
+    final int karaokeCount = (line.tokens != null) ? line.tokens!.length : 0;
+
+    if (isCurrent && line.isKaraoke) {
+      final int linesToTake = (karaokeCount > maxAllowed)
+          ? maxAllowed
+          : karaokeCount;
+      final List<List<LyricToken>> tokensToRender = line.tokens!
+          .take(linesToTake)
+          .toList();
+
+      renderedLines += linesToTake;
+
+      columnChildren.add(
+        _withLyricEffects(
+          lyricAlignment: lyricAlignment,
+          isCurrent: isCurrent,
+          shouldBlur: shouldBlur,
+          distance: distance,
+          child: _buildMultiLineKaraokeRichText(
+            tokensToRender,
+            isCurrent,
+            fontSize,
+            colorScheme,
+          ),
+        ),
+      );
+    } else {
+      final int mainLinesLimit = (karaokeCount > 0 ? karaokeCount : 1);
+      final int linesToTake = (mainLinesLimit > maxAllowed)
+          ? maxAllowed
+          : mainLinesLimit;
+
+      for (int i = 0; i < linesToTake && i < line.texts.length; i++) {
+        renderedLines++;
+
+        final bool isSecondaryLine = i > 0;
+
+        final Widget staticText = _buildStaticLyricText(
+          text: line.texts[i],
+          lyricAlignment: lyricAlignment,
+          style: _lyricTextStyle(
+            isCurrent: isCurrent,
+            isSecondaryLine: isSecondaryLine,
+            fontSize: fontSize,
+            colorScheme: colorScheme,
+          ),
+        );
+
+        columnChildren.add(
+          _withLyricEffects(
+            lyricAlignment: lyricAlignment,
+            isCurrent: isCurrent,
+            shouldBlur: shouldBlur,
+            distance: distance,
+            child: staticText,
+          ),
+        );
+        if (i < linesToTake - 1) {
+          columnChildren.add(const SizedBox(height: 6));
+        }
+      }
+    }
+
+    final int translationStartIndex = (karaokeCount > 0 ? karaokeCount : 1);
+
+    if (renderedLines < maxAllowed &&
+        line.texts.length > translationStartIndex) {
+      columnChildren.add(const SizedBox(height: 6));
+
+      for (
+        int i = translationStartIndex;
+        i < line.texts.length && renderedLines < maxAllowed;
+        i++
+      ) {
+        renderedLines++;
+
+        final Widget translationWidget = _buildStaticLyricText(
+          text: line.texts[i],
+          lyricAlignment: lyricAlignment,
+          style: _lyricTextStyle(
+            isCurrent: isCurrent,
+            isSecondaryLine: true,
+            fontSize: fontSize,
+            colorScheme: colorScheme,
+          ),
+        );
+
+        columnChildren.add(
+          _withLyricEffects(
+            lyricAlignment: lyricAlignment,
+            isCurrent: isCurrent,
+            shouldBlur: shouldBlur,
+            distance: distance,
+            child: translationWidget,
+          ),
+        );
+
+        if (i < line.texts.length - 1 && renderedLines < maxAllowed) {
+          columnChildren.add(const SizedBox(height: 6));
+        }
+      }
+    }
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: lyricVerticalSpacing + 0.4 * (fontSize / 2),
+        horizontal: 4,
+      ),
+      child: Align(
+        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+        child: SizedBox(
+          width: maxWidth,
+          child: TextButton(
+            onPressed: () {
+              widget.onTapLine?.call(lyricIndex);
+              final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+                context,
+                listen: false,
+              );
+              if (!playlistNotifier.isPlaying) {
+                playlistNotifier.play();
+              }
+            },
+            style: ButtonStyle(
+              padding: WidgetStateProperty.all<EdgeInsets>(
+                const EdgeInsets.fromLTRB(12, 9, 12, 9),
+              ),
+              shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              backgroundColor: WidgetStateProperty.resolveWith<Color>((
+                Set<WidgetState> states,
+              ) {
+                if (states.contains(WidgetState.hovered)) {
+                  return Colors.grey.withValues(alpha: 0.2);
+                }
+                return Colors.transparent;
+              }),
+              overlayColor: WidgetStateProperty.resolveWith<Color>((
+                Set<WidgetState> states,
+              ) {
+                if (states.contains(WidgetState.pressed)) {
+                  return Colors.grey.withValues(alpha: 0.3);
+                }
+                return Colors.transparent;
+              }),
+              alignment: _getAlignmentFromTextAlign(lyricAlignment),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: columnChildren,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildElasticLyrics({
+    required double viewportHeight,
+    required double maxWidth,
+    required double fontSize,
+    required double lyricVerticalSpacing,
+    required TextAlign lyricAlignment,
+    required bool addLyricPadding,
+    required bool shouldBlur,
+    required ColorScheme colorScheme,
+  }) {
+    if (_elasticControllers.length != widget.lyrics.length) {
+      _resetElasticState();
+    }
+
+    final double paddingHeight = addLyricPadding ? viewportHeight * 0.37 : 0;
+    _rebuildElasticBasePositions(topPadding: paddingHeight);
+    _measureElasticItems(paddingHeight, viewportHeight);
+
+    final double contentHeight =
+        paddingHeight +
+        _elasticItemHeights.fold<double>(0, (sum, height) => sum + height) +
+        paddingHeight;
+
+    double stabilizeOffset(double value, double target) {
+      final diff = value - target;
+
+      if (diff.abs() < 0.3) {
+        return target;
+      }
+
+      return value;
+    }
+
+    return Listener(
+      onPointerSignal: _onElasticPointerSignal,
+      onPointerDown: _onElasticPointerDown,
+      onPointerMove: _onElasticPointerMove,
+      onPointerUp: _onElasticPointerUp,
+      onPointerCancel: _onElasticPointerCancel,
+      behavior: HitTestBehavior.translucent,
+      child: ClipRect(
+        child: SizedBox(
+          width: double.infinity,
+          height: viewportHeight,
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            minHeight: contentHeight,
+            maxHeight: contentHeight,
+            child: SizedBox(
+              height: contentHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: List.generate(widget.lyrics.length, (index) {
+                  final renderOffset = stabilizeOffset(
+                    _elasticControllers[index].value,
+                    _elasticBaseYPositions[index],
+                  );
+                  return Positioned(
+                    top: 0, // 固定top，交给Transform.translate处理
+                    left: 0,
+                    right: 0,
+
+                    child: Transform.translate(
+                      offset: Offset(0, renderOffset),
+                      child: RepaintBoundary(
+                        child: KeyedSubtree(
+                          key: _elasticItemKeys[index],
+                          child: _buildLyricItem(
+                            lyricIndex: index,
+                            maxWidth: maxWidth,
+                            fontSize: fontSize,
+                            lyricVerticalSpacing: lyricVerticalSpacing,
+                            lyricAlignment: lyricAlignment,
+                            shouldBlur: shouldBlur,
+                            colorScheme: colorScheme,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
@@ -409,6 +645,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     );
     final enableLyricBlur = context.select<SettingsProvider, bool>(
       (s) => s.enableLyricBlur,
+    );
+    final enableLyricElasticScroll = context.select<SettingsProvider, bool>(
+      (s) => s.enableLyricElasticScroll,
     );
 
     final bool shouldBlur = enableLyricBlur && !_isUserScrolling;
@@ -440,6 +679,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
           Future.delayed(const Duration(milliseconds: 50), () {
             if (mounted) {
               _scrollToCurrentLine(instant: false);
+              _elasticHeightsMeasured = false;
+              _animateElasticToCurrent();
             }
           });
         }
@@ -450,6 +691,21 @@ class _LyricsWidgetState extends State<LyricsWidget>
         final int actualLyricsCount = widget.lyrics.length;
         // 总的项数（包括填充项）
         final int totalItemCount = actualLyricsCount + 2 * paddingItemCount;
+
+        if (enableLyricElasticScroll) {
+          return _buildElasticLyrics(
+            viewportHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : MediaQuery.of(context).size.height,
+            maxWidth: maxWidth,
+            fontSize: fontSize,
+            lyricVerticalSpacing: lyricVerticalSpacing,
+            lyricAlignment: lyricAlignment,
+            addLyricPadding: addLyricPadding,
+            shouldBlur: shouldBlur,
+            colorScheme: colorScheme,
+          );
+        }
 
         return Listener(
           onPointerSignal: _onPointerSignal,
@@ -480,313 +736,17 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
                 // 处理实际歌词项
                 final int lyricIndex = index - paddingItemCount;
-                final line = widget.lyrics[lyricIndex];
-                final isCurrent = lyricIndex == widget.currentIndex;
-                final AnimationController? controller =
-                    widget.enablePullWaveScroll &&
-                        lyricIndex < _pullWaveControllers.length
-                    ? _pullWaveControllers[lyricIndex]
-                    : null;
-
-                line.texts.take(widget.maxLinesPerLyric);
-
-                // 计算当前行与目标行之间的距离
-                final int distance = (lyricIndex - widget.currentIndex).abs();
-
-                // 根据距离计算模糊值，距离越远模糊越大
-                double calculateSigma(int distance) {
-                  if (!shouldBlur || isCurrent) return 0.0;
-
-                  // 针对小范围歌词显示进行优化
-                  const double maxSigma = 2.5;
-                  const int maxDistance = 5;
-
-                  // 使用线性函数创建平滑的过渡效果
-                  double normalizedDistance = distance / maxDistance;
-                  if (normalizedDistance > 1.0) normalizedDistance = 1.0;
-
-                  // 简单线性过渡，确保相邻行差异较小
-                  return normalizedDistance * maxSigma;
-                }
-
-                final List<Widget> columnChildren = [];
-                int renderedLines = 0;
-                final int maxAllowed = widget.maxLinesPerLyric;
-
-                // 确定有多少行属于卡拉OK原文（如：日语原文+罗马音）
-                final int karaokeCount = (line.tokens != null)
-                    ? line.tokens!.length
-                    : 0;
-
-                if (isCurrent && line.isKaraoke) {
-                  // 限制卡拉OK显示的行数，不能超过总限制
-                  final int linesToTake = (karaokeCount > maxAllowed)
-                      ? maxAllowed
-                      : karaokeCount;
-                  final List<List<LyricToken>> tokensToRender = line.tokens!
-                      .take(linesToTake)
-                      .toList();
-
-                  renderedLines += linesToTake;
-
-                  columnChildren.add(
-                    AnimatedScale(
-                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeInOutSine,
-                      scale: isCurrent ? 1.02 : 1,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        child: isCurrent || !shouldBlur
-                            ? _buildMultiLineKaraokeRichText(
-                                tokensToRender,
-                                isCurrent,
-                                fontSize,
-                                colorScheme,
-                              )
-                            : ImageFiltered(
-                                imageFilter: ui.ImageFilter.blur(
-                                  sigmaX: calculateSigma(distance),
-                                  sigmaY: calculateSigma(distance),
-                                ),
-                                child: _buildMultiLineKaraokeRichText(
-                                  tokensToRender,
-                                  isCurrent,
-                                  fontSize,
-                                  colorScheme,
-                                ),
-                              ),
-                      ),
-                    ),
-                  );
-                } else {
-                  final int mainLinesLimit = (karaokeCount > 0
-                      ? karaokeCount
-                      : 1);
-                  final int linesToTake = (mainLinesLimit > maxAllowed)
-                      ? maxAllowed
-                      : mainLinesLimit;
-
-                  // 预计算样式变量
-                  final double secondaryFontSize = fontSize * 0.88;
-                  final Color primaryColor = colorScheme.primary;
-                  final Color secondaryPrimaryColor = colorScheme.primary
-                      .withValues(alpha: 0.88);
-                  final Color surfaceVariantColor = colorScheme.onSurfaceVariant
-                      .withValues(alpha: 0.7);
-                  final Color secondarySurfaceVariantColor = colorScheme
-                      .onSurfaceVariant
-                      .withValues(alpha: 0.58);
-
-                  for (
-                    int i = 0;
-                    i < linesToTake && i < line.texts.length;
-                    i++
-                  ) {
-                    renderedLines++;
-
-                    final bool isSecondaryLine = i > 0;
-
-                    final double lineFontSize = isSecondaryLine
-                        ? secondaryFontSize
-                        : fontSize;
-                    final FontWeight lineFontWeight = isCurrent
-                        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
-                        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
-                    final Color lineColor = isCurrent
-                        ? (isSecondaryLine
-                              ? secondaryPrimaryColor
-                              : primaryColor)
-                        : (isSecondaryLine
-                              ? secondarySurfaceVariantColor
-                              : surfaceVariantColor);
-
-                    final Widget staticText = Text(
-                      line.texts[i],
-                      textAlign: lyricAlignment,
-                      style: TextStyle(
-                        fontSize: lineFontSize,
-                        height: 1.2,
-                        color: lineColor,
-                        fontWeight: lineFontWeight,
-                      ),
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
-                    );
-
-                    columnChildren.add(
-                      AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutSine,
-                        scale: isCurrent ? 1.02 : 1.0,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: isCurrent || !shouldBlur
-                              ? staticText
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: staticText,
-                                ),
-                        ),
-                      ),
-                    );
-                    if (i < linesToTake - 1) {
-                      columnChildren.add(const SizedBox(height: 6));
-                    }
-                  }
-                }
-
-                final int translationStartIndex = (karaokeCount > 0
-                    ? karaokeCount
-                    : 1);
-
-                if (renderedLines < maxAllowed &&
-                    line.texts.length > translationStartIndex) {
-                  columnChildren.add(const SizedBox(height: 6));
-
-                  for (
-                    int i = translationStartIndex;
-                    i < line.texts.length && renderedLines < maxAllowed;
-                    i++
-                  ) {
-                    renderedLines++;
-
-                    final Widget translationWidget = Text(
-                      line.texts[i],
-                      textAlign: lyricAlignment,
-                      style: TextStyle(
-                        fontSize: fontSize * 0.88,
-                        height: 1.2,
-                        color: isCurrent
-                            ? colorScheme.primary.withValues(alpha: 0.88)
-                            : colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.58,
-                              ),
-                        fontWeight: isCurrent
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
-                    );
-
-                    columnChildren.add(
-                      AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutSine,
-                        scale: isCurrent ? 1.02 : 1,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: isCurrent || !shouldBlur
-                              ? translationWidget
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: translationWidget,
-                                ),
-                        ),
-                      ),
-                    );
-
-                    // 如果还有下一行且没达到上限，添加间距
-                    if (i < line.texts.length - 1 &&
-                        renderedLines < maxAllowed) {
-                      columnChildren.add(const SizedBox(height: 6));
-                    }
-                  }
-                }
-
-                final Widget lyricRow = Padding(
-                  padding: EdgeInsets.symmetric(
-                    vertical:
-                        lyricVerticalSpacing +
-                        0.4 * (fontSize / 2), // 补偿行高减少的部分
-                    horizontal: 4,
-                  ),
-                  child: Align(
-                    alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                    child: SizedBox(
-                      width: maxWidth,
-                      child: TextButton(
-                        onPressed: () {
-                          widget.onTapLine?.call(lyricIndex);
-                          // 如果当前处于暂停状态，则开始播放
-                          final playlistNotifier =
-                              Provider.of<PlaylistContentNotifier>(
-                                context,
-                                listen: false,
-                              );
-                          if (!playlistNotifier.isPlaying) {
-                            playlistNotifier.play();
-                          }
-                        },
-                        style: ButtonStyle(
-                          padding: WidgetStateProperty.all<EdgeInsets>(
-                            const EdgeInsets.fromLTRB(12, 9, 12, 9),
-                          ),
-                          shape:
-                              WidgetStateProperty.all<RoundedRectangleBorder>(
-                                RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                          backgroundColor:
-                              WidgetStateProperty.resolveWith<Color>((
-                                Set<WidgetState> states,
-                              ) {
-                                if (states.contains(WidgetState.hovered)) {
-                                  return Colors.grey.withValues(alpha: 0.2);
-                                }
-                                return Colors.transparent;
-                              }),
-                          overlayColor: WidgetStateProperty.resolveWith<Color>((
-                            Set<WidgetState> states,
-                          ) {
-                            if (states.contains(WidgetState.pressed)) {
-                              return Colors.grey.withValues(alpha: 0.3);
-                            }
-                            return Colors.transparent;
-                          }),
-                          alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: columnChildren,
-                        ),
-                      ),
-                    ),
+                return RepaintBoundary(
+                  child: _buildLyricItem(
+                    lyricIndex: lyricIndex,
+                    maxWidth: maxWidth,
+                    fontSize: fontSize,
+                    lyricVerticalSpacing: lyricVerticalSpacing,
+                    lyricAlignment: lyricAlignment,
+                    shouldBlur: shouldBlur,
+                    colorScheme: colorScheme,
                   ),
                 );
-
-                return controller != null
-                    ? AnimatedBuilder(
-                        key: ValueKey('lyric_$lyricIndex'),
-                        animation: controller,
-                        builder: (context, child) {
-                          final double val = controller.value;
-                          final double renderOffset = val.abs() < 0.3
-                              ? 0.0
-                              : val;
-
-                          return Transform.translate(
-                            offset: Offset(0, renderOffset),
-                            child: child,
-                          );
-                        },
-                        child: lyricRow,
-                      )
-                    : lyricRow;
               },
             ),
           ),
@@ -806,19 +766,310 @@ class _LyricsWidgetState extends State<LyricsWidget>
         return Alignment.center;
     }
   }
+
+  // --- 辅助函数 ---
+
+  void _onElasticPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      _shiftElasticItems(-event.scrollDelta.dy);
+      _scheduleElasticScrollEnd();
+    }
+  }
+
+  void _onElasticPointerDown(PointerDownEvent event) {
+    _isElasticPointerDragging = true;
+    _didElasticPointerMove = false;
+  }
+
+  void _onElasticPointerMove(PointerMoveEvent event) {
+    if (!_isElasticPointerDragging || event.delta.dy == 0) return;
+    _didElasticPointerMove = true;
+    _shiftElasticItems(event.delta.dy);
+  }
+
+  void _onElasticPointerUp(PointerUpEvent event) {
+    _isElasticPointerDragging = false;
+    if (_didElasticPointerMove) {
+      // 拖动时需要将动画调度到当前位置
+      _scheduleElasticScrollEnd();
+    }
+    _didElasticPointerMove = false;
+  }
+
+  void _onElasticPointerCancel(PointerCancelEvent event) {
+    _isElasticPointerDragging = false;
+    if (_didElasticPointerMove) {
+      _scheduleElasticScrollEnd(); // 处理取消事件，如触摸中断
+    }
+    _didElasticPointerMove = false;
+  }
+
+  void _startElasticUserScroll() {
+    _scrollStopTimer?.cancel();
+    if (!_isUserScrolling) {
+      setState(() {
+        _isUserScrolling = true;
+      });
+    }
+  }
+
+  // 根据拖动距离移动所有歌词项
+  void _shiftElasticItems(double delta) {
+    _startElasticUserScroll();
+    // 更新动画代数，防止冲突
+    _elasticAnimationGeneration++;
+    // 防止监听器响应
+    for (int i = 0; i < _elasticControllers.length; i++) {
+      final controller = _elasticControllers[i];
+      controller.stop();
+      controller.value += delta;
+      _elasticAnimatedYPositions[i] = controller.value;
+    }
+    if (mounted) setState(() {});
+  }
+
+  // 安排滚动结束后自动回到当前播放位置
+  void _scheduleElasticScrollEnd() {
+    _scrollStopTimer?.cancel();
+    _scrollStopTimer = Timer(const Duration(milliseconds: 1000), () {
+      if (!mounted) return;
+      _isElasticPointerDragging = false;
+      setState(() {
+        _isUserScrolling = false;
+      });
+      _animateElasticToCurrent();
+    });
+  }
+
+  // 测量每个歌词项的实际高度
+  void _measureElasticItems(double topPadding, double viewportHeight) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _elasticItemKeys.length != widget.lyrics.length) return;
+
+      bool changed = false;
+      for (int i = 0; i < _elasticItemKeys.length; i++) {
+        final context = _elasticItemKeys[i].currentContext;
+        final renderObject = context?.findRenderObject();
+        if (renderObject is RenderBox && renderObject.hasSize) {
+          final height = renderObject.size.height;
+          if ((height - _elasticItemHeights[i]).abs() > 0.5) {
+            _elasticItemHeights[i] = height;
+            changed = true;
+          }
+        }
+      }
+
+      if (changed || !_elasticHeightsMeasured) {
+        final bool shouldJump = !_elasticHeightsMeasured;
+        _elasticHeightsMeasured = true;
+        _rebuildElasticBasePositions(topPadding: topPadding);
+        setState(() {});
+
+        // 首次直接跳转到当前位置，后续使用动画过渡
+        if (shouldJump) {
+          _jumpElasticToCurrent(viewportHeight: viewportHeight);
+        } else {
+          _animateElasticToCurrent(viewportHeight: viewportHeight);
+        }
+      }
+    });
+  }
+
+  // 立即跳转到当前播放的歌词位置
+  void _jumpElasticToCurrent({double? viewportHeight}) {
+    if (!_hasValidElasticIndex) return;
+
+    _elasticAnimationGeneration++;
+    final double center =
+        (viewportHeight ?? _currentViewportHeight) * 0.38; // 高亮在0.38的位置
+    final double offsetToCenter =
+        center - _elasticBaseYPositions[widget.currentIndex];
+    for (int i = 0; i < _elasticControllers.length; i++) {
+      final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
+      _elasticControllers[i].stop();
+      _elasticControllers[i].value = targetY;
+      _elasticAnimatedYPositions[i] = targetY;
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _animateElasticToCurrent({double? viewportHeight}) {
+    if (!_hasValidElasticIndex || _isUserScrolling) return;
+
+    final double center = (viewportHeight ?? _currentViewportHeight) * 0.38;
+    final double offsetToCenter =
+        center - _elasticBaseYPositions[widget.currentIndex];
+
+    final int generation = ++_elasticAnimationGeneration;
+    final int anchorIndex = _estimateElasticAnchorIndex(
+      viewportHeight ?? _currentViewportHeight,
+    );
+
+    for (int i = 0; i < widget.lyrics.length; i++) {
+      final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
+      // 用于调整动画参数
+      final int interval = i > 0
+          ? (widget.lyrics[i].timestamp - widget.lyrics[i - 1].timestamp)
+                .inMilliseconds
+          : 1000;
+
+      final double normalizedInterval = (interval.clamp(100, 800) - 100) / 700;
+      final double ratio = math.pow(1.0 - normalizedInterval, 0.2).toDouble();
+      // 根据时间间隔调整弹簧刚度
+      final double stiffness = 170.0 + (ratio * 50.0);
+      final spring = SpringDescription(
+        mass: 1.0,
+        stiffness: stiffness,
+        damping: math.sqrt(stiffness) * 2.2,
+      );
+      final double executionDelay = _elasticDelayFromAnchor(i, anchorIndex);
+
+      Future.delayed(
+        Duration(milliseconds: (executionDelay * 1000).toInt()),
+        () {
+          if (!mounted ||
+              i >= _elasticControllers.length ||
+              _isUserScrolling ||
+              generation != _elasticAnimationGeneration) {
+            return;
+          }
+          final simulation = SpringSimulation(
+            spring,
+            _elasticAnimatedYPositions[i],
+            targetY,
+            0.0,
+          );
+          _elasticControllers[i].animateWith(simulation);
+        },
+      );
+    }
+  }
+
+  // 计算从锚点到指定索引的延迟时间
+  double _elasticDelayFromAnchor(int index, int anchorIndex) {
+    if (index <= anchorIndex) return 0.0;
+
+    double delay = 0.0;
+    double step = 0.045;
+    for (int i = anchorIndex; i < index; i++) {
+      delay += step;
+      step /= 1.05;
+    }
+
+    return delay;
+  }
+
+  // 估算动画的锚点索引（可见位置往上一点）
+  int _estimateElasticAnchorIndex(double viewportHeight) {
+    if (!_hasValidElasticIndex) return widget.currentIndex;
+
+    final double currentTop = _elasticBaseYPositions[widget.currentIndex];
+    final double anchorY =
+        currentTop - viewportHeight * 0.45; // 当前项上方0.45视口高度处（高亮处为0.38）
+
+    int anchorIndex = widget.currentIndex;
+    for (int i = widget.currentIndex; i >= 0; i--) {
+      if (_elasticBaseYPositions[i] <= anchorY) {
+        anchorIndex = i;
+        break;
+      }
+    }
+
+    return anchorIndex.clamp(0, widget.lyrics.length - 1);
+  }
+
+  bool get _hasValidElasticIndex =>
+      widget.currentIndex >= 0 &&
+      widget.currentIndex < widget.lyrics.length &&
+      _elasticControllers.length == widget.lyrics.length;
+
+  double get _currentViewportHeight {
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      return renderObject.size.height;
+    }
+    return MediaQuery.of(context).size.height;
+  }
+
+  void _disposeElasticControllers() {
+    for (final controller in _elasticControllers) {
+      controller.dispose();
+    }
+    _elasticControllers.clear();
+  }
+
+  void _resetElasticState() {
+    _elasticAnimationGeneration++;
+    _disposeElasticControllers();
+    _elasticItemKeys
+      ..clear()
+      ..addAll(List.generate(widget.lyrics.length, (_) => GlobalKey()));
+    _elasticItemHeights
+      ..clear()
+      ..addAll(List.filled(widget.lyrics.length, _estimatedElasticItemHeight));
+    _elasticBaseYPositions
+      ..clear()
+      ..addAll(List.filled(widget.lyrics.length, 0));
+    _elasticAnimatedYPositions
+      ..clear()
+      ..addAll(List.filled(widget.lyrics.length, 0));
+    _elasticControllers.addAll(
+      List.generate(widget.lyrics.length, (index) {
+        final controller = AnimationController.unbounded(vsync: this);
+        controller.addListener(() {
+          _elasticAnimatedYPositions[index] = controller.value;
+
+          _scheduleFrame();
+        });
+        return controller;
+      }),
+    );
+    _elasticHeightsMeasured = false;
+    _rebuildElasticBasePositions();
+    _syncElasticControllersToBase();
+  }
+
+  void _scheduleFrame() {
+    if (_frameScheduled) return;
+
+    _frameScheduled = true;
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+      _frameScheduled = false;
+    });
+  }
+
+  double get _estimatedElasticItemHeight {
+    final double fontSize = _lastFontSize ?? 20;
+    final double spacing = _lastLyricVerticalSpacing ?? 6;
+    return (fontSize * 2.5) + (spacing * 2);
+  }
+
+  void _rebuildElasticBasePositions({double topPadding = 0}) {
+    double y = topPadding;
+    for (int i = 0; i < _elasticItemHeights.length; i++) {
+      _elasticBaseYPositions[i] = y;
+      y += _elasticItemHeights[i];
+    }
+  }
+
+  void _syncElasticControllersToBase() {
+    for (int i = 0; i < _elasticControllers.length; i++) {
+      final double value = _elasticBaseYPositions[i];
+      _elasticControllers[i].value = value;
+      _elasticAnimatedYPositions[i] = value;
+    }
+  }
 }
 
 class LyricsView extends StatelessWidget {
   final int maxLinesPerLyric;
   final Function(int index)? onTapLine;
-  final bool enablePullWaveScroll;
 
-  const LyricsView({
-    super.key,
-    this.maxLinesPerLyric = 1,
-    this.onTapLine,
-    this.enablePullWaveScroll = true,
-  });
+  const LyricsView({super.key, this.maxLinesPerLyric = 1, this.onTapLine});
 
   @override
   Widget build(BuildContext context) {
@@ -839,7 +1090,6 @@ class LyricsView extends StatelessWidget {
           currentIndex: currentLyricLineIndex,
           maxLinesPerLyric: maxLinesPerLyric,
           onTapLine: onTapLine,
-          enablePullWaveScroll: enablePullWaveScroll,
         );
 
         final settings = Provider.of<SettingsProvider>(context, listen: false);
