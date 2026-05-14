@@ -1,6 +1,6 @@
 # 🎵 Myune Music
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.38%2B-blue?logo=flutter)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.41%2B-blue?logo=flutter)](https://flutter.dev/)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux-brightgreen)](#)
 ![Rust](https://img.shields.io/badge/lang-Rust-orange)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)
@@ -193,7 +193,7 @@ sudo apt install libmpv-dev mpv
 ### 环境要求
 
 * 安装 **Rust** 环境
-* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.10.0，**Flutter** 版本需 ≥ 3.38.0
+* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.10.0，**Flutter** 版本需 ≥ 3.41.0
 
 ### 安装依赖
 
