@@ -33,6 +33,30 @@ class LyricsSettingsDrawer extends StatelessWidget {
               const Divider(height: 1),
               const SizedBox(height: 10),
 
+              // 歌词对齐方式设置
+              Text('歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<TextAlign>(
+                  segments: const [
+                    ButtonSegment(value: TextAlign.left, label: Text('居左')),
+                    ButtonSegment(value: TextAlign.center, label: Text('居中')),
+                    ButtonSegment(value: TextAlign.right, label: Text('居右')),
+                  ],
+                  selected: {settings.lyricAlignment},
+                  onSelectionChanged: (Set<TextAlign> newSelection) {
+                    if (newSelection.isNotEmpty) {
+                      context.read<SettingsProvider>().setLyricAlignment(
+                        newSelection.first,
+                      );
+                    }
+                  },
+                  showSelectedIcon: false,
+                ),
+              ),
+              const Divider(),
+
               // 同时间戳歌词行数设置
               Text('同时间戳歌词行数', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
@@ -88,6 +112,24 @@ class LyricsSettingsDrawer extends StatelessWidget {
               ),
               const Divider(),
 
+              // 歌词模糊强度设置
+              Text('歌词模糊强度', style: Theme.of(context).textTheme.titleMedium),
+              Slider(
+                value: settings.lyricBlurStrength,
+                min: 1.0,
+                max: 4.0,
+                divisions: 12,
+                label: settings.lyricBlurStrength.toStringAsFixed(1),
+                onChanged: (value) {
+                  context.read<SettingsProvider>().setLyricBlurStrength(value);
+                },
+              ),
+              Text(
+                '当前强度: ${settings.lyricBlurStrength.toStringAsFixed(1)}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const Divider(),
+
               // Text('歌词高亮位置', style: Theme.of(context).textTheme.titleMedium),
               // Slider(
               //   value: settings.lyricHighlightPosition,
@@ -105,26 +147,6 @@ class LyricsSettingsDrawer extends StatelessWidget {
               //   '当前位置: ${settings.lyricHighlightPosition.toStringAsFixed(1)}',
               //   style: Theme.of(context).textTheme.bodyMedium,
               // ),
-
-              // 歌词对齐方式设置
-              Text('歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
-              SegmentedButton<TextAlign>(
-                segments: const [
-                  ButtonSegment(value: TextAlign.left, label: Text('居左')),
-                  ButtonSegment(value: TextAlign.center, label: Text('居中')),
-                  ButtonSegment(value: TextAlign.right, label: Text('居右')),
-                ],
-                selected: {settings.lyricAlignment},
-                onSelectionChanged: (Set<TextAlign> newSelection) {
-                  if (newSelection.isNotEmpty) {
-                    context.read<SettingsProvider>().setLyricAlignment(
-                      newSelection.first,
-                    );
-                  }
-                },
-                showSelectedIcon: false,
-              ),
             ],
           ),
         ),

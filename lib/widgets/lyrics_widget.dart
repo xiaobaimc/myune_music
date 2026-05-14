@@ -285,14 +285,17 @@ class _LyricsWidgetState extends State<LyricsWidget>
     );
   }
 
-  double _calculateSigma(int distance, bool shouldBlur, bool isCurrent) {
+  double _calculateSigma(
+    int distance,
+    bool shouldBlur,
+    bool isCurrent,
+    double blurStrength,
+  ) {
     if (!shouldBlur || isCurrent) return 0.0;
 
-    const double maxSigma = 2.5;
     const int maxDistance = 5;
-    double normalizedDistance = distance / maxDistance;
-    if (normalizedDistance > 1.0) normalizedDistance = 1.0;
-    return normalizedDistance * maxSigma;
+    final double normalizedDistance = (distance / maxDistance).clamp(0.0, 1.0);
+    return normalizedDistance * blurStrength;
   }
 
   Widget _withLyricEffects({
@@ -301,8 +304,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required bool isCurrent,
     required bool shouldBlur,
     required int distance,
+    required double blurStrength,
   }) {
-    final double sigma = _calculateSigma(distance, shouldBlur, isCurrent);
+    final double sigma = _calculateSigma(
+      distance,
+      shouldBlur,
+      isCurrent,
+      blurStrength,
+    );
     final Widget effectiveChild = sigma == 0.0
         ? child
         : ImageFiltered(
@@ -372,6 +381,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required TextAlign lyricAlignment,
     required bool shouldBlur,
     required ColorScheme colorScheme,
+    required double blurStrength,
   }) {
     final line = widget.lyrics[lyricIndex];
     final isCurrent = lyricIndex == widget.currentIndex;
@@ -397,6 +407,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           isCurrent: isCurrent,
           shouldBlur: shouldBlur,
           distance: distance,
+          blurStrength: blurStrength,
           child: _buildMultiLineKaraokeRichText(
             tokensToRender,
             isCurrent,
@@ -433,6 +444,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             isCurrent: isCurrent,
             shouldBlur: shouldBlur,
             distance: distance,
+            blurStrength: blurStrength,
             child: staticText,
           ),
         );
@@ -472,6 +484,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             isCurrent: isCurrent,
             shouldBlur: shouldBlur,
             distance: distance,
+            blurStrength: blurStrength,
             child: translationWidget,
           ),
         );
@@ -546,6 +559,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required bool addLyricPadding,
     required bool shouldBlur,
     required ColorScheme colorScheme,
+    required double blurStrength,
   }) {
     if (_elasticControllers.length != widget.lyrics.length) {
       _resetElasticState();
@@ -612,6 +626,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             lyricAlignment: lyricAlignment,
                             shouldBlur: shouldBlur,
                             colorScheme: colorScheme,
+                            blurStrength: blurStrength,
                           ),
                         ),
                       ),
@@ -648,6 +663,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     );
     final enableLyricElasticScroll = context.select<SettingsProvider, bool>(
       (s) => s.enableLyricElasticScroll,
+    );
+    final lyricBlurStrength = context.select<SettingsProvider, double>(
+      (s) => s.lyricBlurStrength,
     );
 
     final bool shouldBlur = enableLyricBlur && !_isUserScrolling;
@@ -704,6 +722,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             addLyricPadding: addLyricPadding,
             shouldBlur: shouldBlur,
             colorScheme: colorScheme,
+            blurStrength: lyricBlurStrength,
           );
         }
 
@@ -736,15 +755,281 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
                 // 处理实际歌词项
                 final int lyricIndex = index - paddingItemCount;
-                return RepaintBoundary(
-                  child: _buildLyricItem(
-                    lyricIndex: lyricIndex,
-                    maxWidth: maxWidth,
-                    fontSize: fontSize,
-                    lyricVerticalSpacing: lyricVerticalSpacing,
-                    lyricAlignment: lyricAlignment,
-                    shouldBlur: shouldBlur,
-                    colorScheme: colorScheme,
+                final line = widget.lyrics[lyricIndex];
+                final isCurrent = lyricIndex == widget.currentIndex;
+
+                line.texts.take(widget.maxLinesPerLyric);
+
+                // 计算当前行与目标行之间的距离
+                final int distance = (lyricIndex - widget.currentIndex).abs();
+
+                // 根据距离计算模糊值，距离越远模糊越大
+                double calculateSigma(int distance) {
+                  if (!shouldBlur || isCurrent) return 0.0;
+
+                  const int maxDistance = 5;
+                  final double normalizedDistance = (distance / maxDistance)
+                      .clamp(0.0, 1.0);
+                  return normalizedDistance * lyricBlurStrength;
+                }
+
+                final List<Widget> columnChildren = [];
+                int renderedLines = 0;
+                final int maxAllowed = widget.maxLinesPerLyric;
+
+                // 确定有多少行属于卡拉OK原文（如：日语原文+罗马音）
+                final int karaokeCount = (line.tokens != null)
+                    ? line.tokens!.length
+                    : 0;
+
+                if (isCurrent && line.isKaraoke) {
+                  // 限制卡拉OK显示的行数，不能超过总限制
+                  final int linesToTake = (karaokeCount > maxAllowed)
+                      ? maxAllowed
+                      : karaokeCount;
+                  final List<List<LyricToken>> tokensToRender = line.tokens!
+                      .take(linesToTake)
+                      .toList();
+
+                  renderedLines += linesToTake;
+
+                  columnChildren.add(
+                    AnimatedScale(
+                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOutSine,
+                      scale: isCurrent ? 1.02 : 1,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        child: isCurrent || !shouldBlur
+                            ? _buildMultiLineKaraokeRichText(
+                                tokensToRender,
+                                isCurrent,
+                                fontSize,
+                                colorScheme,
+                              )
+                            : ImageFiltered(
+                                imageFilter: ui.ImageFilter.blur(
+                                  sigmaX: calculateSigma(distance),
+                                  sigmaY: calculateSigma(distance),
+                                ),
+                                child: _buildMultiLineKaraokeRichText(
+                                  tokensToRender,
+                                  isCurrent,
+                                  fontSize,
+                                  colorScheme,
+                                ),
+                              ),
+                      ),
+                    ),
+                  );
+                } else {
+                  final int mainLinesLimit = (karaokeCount > 0
+                      ? karaokeCount
+                      : 1);
+                  final int linesToTake = (mainLinesLimit > maxAllowed)
+                      ? maxAllowed
+                      : mainLinesLimit;
+
+                  // 预计算样式变量
+                  final double secondaryFontSize = fontSize * 0.88;
+                  final Color primaryColor = colorScheme.primary;
+                  final Color secondaryPrimaryColor = colorScheme.primary
+                      .withValues(alpha: 0.88);
+                  final Color surfaceVariantColor = colorScheme.onSurfaceVariant
+                      .withValues(alpha: 0.7);
+                  final Color secondarySurfaceVariantColor = colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.58);
+
+                  for (
+                    int i = 0;
+                    i < linesToTake && i < line.texts.length;
+                    i++
+                  ) {
+                    renderedLines++;
+
+                    final bool isSecondaryLine = i > 0;
+
+                    final double lineFontSize = isSecondaryLine
+                        ? secondaryFontSize
+                        : fontSize;
+                    final FontWeight lineFontWeight = isCurrent
+                        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
+                        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+                    final Color lineColor = isCurrent
+                        ? (isSecondaryLine
+                              ? secondaryPrimaryColor
+                              : primaryColor)
+                        : (isSecondaryLine
+                              ? secondarySurfaceVariantColor
+                              : surfaceVariantColor);
+
+                    final Widget staticText = Text(
+                      line.texts[i],
+                      textAlign: lyricAlignment,
+                      style: TextStyle(
+                        fontSize: lineFontSize,
+                        height: 1.2,
+                        color: lineColor,
+                        fontWeight: lineFontWeight,
+                      ),
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                    );
+
+                    columnChildren.add(
+                      AnimatedScale(
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutSine,
+                        scale: isCurrent ? 1.02 : 1.0,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: isCurrent || !shouldBlur
+                              ? staticText
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
+                                  ),
+                                  child: staticText,
+                                ),
+                        ),
+                      ),
+                    );
+                    if (i < linesToTake - 1) {
+                      columnChildren.add(const SizedBox(height: 6));
+                    }
+                  }
+                }
+
+                final int translationStartIndex = (karaokeCount > 0
+                    ? karaokeCount
+                    : 1);
+
+                if (renderedLines < maxAllowed &&
+                    line.texts.length > translationStartIndex) {
+                  columnChildren.add(const SizedBox(height: 6));
+
+                  for (
+                    int i = translationStartIndex;
+                    i < line.texts.length && renderedLines < maxAllowed;
+                    i++
+                  ) {
+                    renderedLines++;
+
+                    final Widget translationWidget = Text(
+                      line.texts[i],
+                      textAlign: lyricAlignment,
+                      style: TextStyle(
+                        fontSize: fontSize * 0.88,
+                        height: 1.2,
+                        color: isCurrent
+                            ? colorScheme.primary.withValues(alpha: 0.88)
+                            : colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.58,
+                              ),
+                        fontWeight: isCurrent
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                    );
+
+                    columnChildren.add(
+                      AnimatedScale(
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutSine,
+                        scale: isCurrent ? 1.02 : 1,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: isCurrent || !shouldBlur
+                              ? translationWidget
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
+                                  ),
+                                  child: translationWidget,
+                                ),
+                        ),
+                      ),
+                    );
+
+                    // 如果还有下一行且没达到上限，添加间距
+                    if (i < line.texts.length - 1 &&
+                        renderedLines < maxAllowed) {
+                      columnChildren.add(const SizedBox(height: 6));
+                    }
+                  }
+                }
+
+                return Padding(
+                  padding: EdgeInsets.symmetric(
+                    vertical:
+                        lyricVerticalSpacing +
+                        0.4 * (fontSize / 2), // 补偿行高减少的部分
+                    horizontal: 4,
+                  ),
+                  child: Align(
+                    alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                    child: SizedBox(
+                      width: maxWidth,
+                      child: TextButton(
+                        onPressed: () {
+                          widget.onTapLine?.call(lyricIndex);
+                          // 如果当前处于暂停状态，则开始播放
+                          final playlistNotifier =
+                              Provider.of<PlaylistContentNotifier>(
+                                context,
+                                listen: false,
+                              );
+                          if (!playlistNotifier.isPlaying) {
+                            playlistNotifier.play();
+                          }
+                        },
+                        style: ButtonStyle(
+                          padding: WidgetStateProperty.all<EdgeInsets>(
+                            const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                          ),
+                          shape:
+                              WidgetStateProperty.all<RoundedRectangleBorder>(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                          backgroundColor:
+                              WidgetStateProperty.resolveWith<Color>((
+                                Set<WidgetState> states,
+                              ) {
+                                if (states.contains(WidgetState.hovered)) {
+                                  return Colors.grey.withValues(alpha: 0.2);
+                                }
+                                return Colors.transparent;
+                              }),
+                          overlayColor: WidgetStateProperty.resolveWith<Color>((
+                            Set<WidgetState> states,
+                          ) {
+                            if (states.contains(WidgetState.pressed)) {
+                              return Colors.grey.withValues(alpha: 0.3);
+                            }
+                            return Colors.transparent;
+                          }),
+                          alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: columnChildren,
+                        ),
+                      ),
+                    ),
                   ),
                 );
               },
