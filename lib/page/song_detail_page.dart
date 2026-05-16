@@ -1,10 +1,12 @@
 // 音频可视化:https://pub.dev/packages/sonix
 
 import 'dart:ui' as ui;
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:mesh_gradient/mesh_gradient.dart';
+import 'package:colorgram/colorgram.dart';
 
 import '../widgets/lyrics_widget.dart';
 import 'playlist/playlist_content_notifier.dart';
@@ -13,6 +15,7 @@ import '../widgets/song_detail_page/app_window_title_bar.dart';
 import './setting/settings_provider.dart';
 import '../widgets/playing_queue_drawer.dart';
 import '../widgets/lyrics_settings_drawer.dart';
+import 'playlist/playlist_models.dart';
 
 // 公共模糊背景组件
 class BackgroundBlurWidget extends StatefulWidget {
@@ -25,37 +28,162 @@ class BackgroundBlurWidget extends StatefulWidget {
 
 class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
     with TickerProviderStateMixin {
-  late AnimationController _rotationController;
-  late Animation<double> _rotationAnimation;
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+
+  List<Color>? _extractedColors;
+  String? _lastSongFilePath;
+  bool _isProcessingColor = false;
+
+  // 初始网格位置
+  static const List<Offset> _gridPositions = [
+    Offset(0.15, 0.2),
+    Offset(0.85, 0.15),
+    Offset(0.2, 0.85),
+    Offset(0.8, 0.8),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _rotationController = AnimationController(
-      duration: const Duration(seconds: 60),
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 10),
       vsync: this,
-    )..repeat();
+    );
 
-    _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
-      CurvedAnimation(parent: _rotationController, curve: Curves.linear),
+    _animation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.linear),
     );
   }
 
   @override
   void dispose() {
-    _rotationController.dispose();
+    _animationController.dispose();
     super.dispose();
+  }
+
+  void _checkAndUpdateColors(Song? song, bool isDarkTheme) {
+    if (song == null || song.albumArt == null) {
+      if (_extractedColors != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _extractedColors = null);
+        });
+      }
+      return;
+    }
+
+    if (song.filePath == _lastSongFilePath || _isProcessingColor) return;
+
+    _lastSongFilePath = song.filePath;
+    _isProcessingColor = true;
+
+    _extractColorsAsync(song, isDarkTheme);
+  }
+
+  Future<void> _extractColorsAsync(Song song, bool isDarkTheme) async {
+    try {
+      final ImageProvider imageProvider = MemoryImage(song.albumArt!);
+      final List<CgColor> cgColors = await extractColor(imageProvider, 6);
+
+      if (!mounted || song.filePath != _lastSongFilePath) return;
+
+      final List<Color> adjustedColors = cgColors.map((cg) {
+        final rawColor = Color.fromARGB(255, cg.r, cg.g, cg.b);
+        final hsl = HSLColor.fromColor(rawColor);
+
+        double newLightness;
+        double newSaturation;
+
+        if (isDarkTheme) {
+          newLightness = hsl.lightness.clamp(0.08, 0.18);
+          newSaturation = hsl.saturation.clamp(0.18, 0.35);
+        } else {
+          newLightness = hsl.lightness.clamp(0.35, 0.55);
+          newSaturation = hsl.saturation.clamp(0.18, 0.38);
+        }
+
+        return hsl
+            .withLightness(newLightness)
+            .withSaturation(newSaturation)
+            .toColor();
+      }).toList();
+
+      while (adjustedColors.length < 4) {
+        adjustedColors.add(
+          adjustedColors.isNotEmpty ? adjustedColors.first : Colors.blueGrey,
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _extractedColors = adjustedColors.sublist(0, 4);
+        });
+      }
+    } catch (e) {
+      //
+    } finally {
+      _isProcessingColor = false;
+    }
+  }
+
+  List<MeshGradientPoint> _getMeshPoints(bool isDarkTheme) {
+    final List<Color> baseColors =
+        _extractedColors ??
+        (isDarkTheme
+            ? const [
+                Color(0xFF0B0B0F),
+                Color(0xFF08090D),
+                Color(0xFF0A0B10),
+                Color(0xFF0D0A12),
+              ]
+            : const [
+                Color(0xFFD6D0D2),
+                Color(0xFFD0D5D8),
+                Color(0xFFD5D8DC),
+                Color(0xFFD8D1D6),
+              ]);
+
+    return List.generate(_gridPositions.length, (i) {
+      return MeshGradientPoint(
+        position: _gridPositions[i],
+        // 浅色模式下不稀释颜色
+        color: baseColors[i].withValues(alpha: isDarkTheme ? 0.28 : 1.0),
+      );
+    });
+  }
+
+  void _manageAnimation(bool shouldAnimate) {
+    if (shouldAnimate) {
+      if (!_animationController.isAnimating) {
+        _animationController.repeat();
+      }
+    } else {
+      if (_animationController.isAnimating) {
+        _animationController.stop();
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final useBlurBackground = settings.useBlurBackground;
+    final enableDynamicBackground = settings.enableDynamicBackground;
+
+    // 动画开关逻辑，通过延迟到帧后来避免 build 期间的副作用
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _manageAnimation(enableDynamicBackground && useBlurBackground);
+      }
+    });
+
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
         final currentSong = playlistNotifier.currentSong;
-        final settings = context.watch<SettingsProvider>();
-        final useBlurBackground = settings.useBlurBackground;
-        final enableDynamicBackground = settings.enableDynamicBackground;
 
+        _checkAndUpdateColors(currentSong, isDarkTheme);
         // 当没有封面图或用户未启用模糊背景时，使用纯色背景
         if (currentSong?.albumArt == null || !useBlurBackground) {
           return Container(
@@ -64,42 +192,103 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
           );
         }
 
-        // 使用封面图作为模糊背景
+        if (enableDynamicBackground) {
+          final basePoints = _getMeshPoints(isDarkTheme);
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              AnimatedBuilder(
+                animation: _animation,
+                builder: (context, _) {
+                  final List<MeshGradientPoint> animatedPoints = [];
+                  const double amplitude = 0.35;
+                  final double time = _animation.value * 2 * math.pi;
+
+                  for (int i = 0; i < basePoints.length; i++) {
+                    final point = basePoints[i];
+                    double offsetX = 0.0;
+                    double offsetY = 0.0;
+
+                    if (i == 0) {
+                      offsetX = amplitude * math.sin(time);
+                      offsetY = amplitude * math.cos(time * 1.2);
+                    } else if (i == 1) {
+                      offsetX = amplitude * math.cos(time * 0.9);
+                      offsetY = amplitude * math.sin(time * 1.1);
+                    } else if (i == 2) {
+                      offsetX = amplitude * math.sin(time * 1.3);
+                      offsetY = amplitude * math.sin(time * 0.8);
+                    } else {
+                      offsetX = amplitude * math.cos(time * 1.1);
+                      offsetY = amplitude * math.cos(time * 1.4);
+                    }
+
+                    animatedPoints.add(
+                      MeshGradientPoint(
+                        position: Offset(
+                          (point.position.dx + offsetX).clamp(0.0, 1.0),
+                          (point.position.dy + offsetY).clamp(0.0, 1.0),
+                        ),
+                        color: point.color,
+                      ),
+                    );
+                  }
+
+                  return MeshGradient(
+                    points: animatedPoints,
+                    options: MeshGradientOptions(
+                      blend: 4.0,
+                      noiseIntensity: 0.1,
+                    ),
+                  );
+                },
+              ),
+              Container(
+                color: Theme.of(context).colorScheme.surface.withValues(
+                  alpha: isDarkTheme ? 0.4 : 0.6,
+                ),
+              ),
+              if (child != null) child,
+            ],
+          );
+        }
+
+        // 静态高斯模糊背景部分
         return Stack(
           fit: StackFit.expand,
           children: [
-            // 直接使用模糊的图像,而不是使用 BackdropFilter
-            AnimatedBuilder(
-              animation: _rotationAnimation,
-              child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(
-                  sigmaX: 40,
-                  sigmaY: 40,
-                  tileMode: TileMode.decal, // 避免边缘问题
-                ),
-                child: Image.memory(
-                  currentSong!.albumArt!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Theme.of(context).colorScheme.surface,
-                    );
-                  },
+            ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(
+                sigmaX: 40,
+                sigmaY: 40,
+                tileMode: TileMode.decal,
+              ),
+              child: Image.memory(
+                currentSong!.albumArt!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    Container(color: Theme.of(context).colorScheme.surface),
+              ),
+            ),
+            IgnorePointer(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.8),
+                      Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.8),
+                    ],
+                  ),
                 ),
               ),
-              builder: (context, imageChild) {
-                return Transform.rotate(
-                  angle: enableDynamicBackground ? _rotationAnimation.value : 0,
-                  child: imageChild,
-                );
-              },
             ),
-            Container(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.8),
-            ),
-            child!,
+            if (child != null) child,
           ],
         );
       },
@@ -212,7 +401,7 @@ class SongDetailPage extends StatelessWidget {
                                         builder: (context, constraints) {
                                           final w = constraints.maxWidth;
                                           // 按父容器宽度的60%计算封面大小，再限制在310~480像素之间，最后不超过父容器宽度
-                                          final double imageSize = min(
+                                          final double imageSize = math.min(
                                             w,
                                             ((w * 0.6)).clamp(310.0, 480.0),
                                           );

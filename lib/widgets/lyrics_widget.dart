@@ -226,8 +226,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
           ? secondaryFontSize
           : fontSize;
       final FontWeight lineFontWeight = isCurrent
-          ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
-          : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+          ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w600)
+          : (isSecondaryLine ? FontWeight.w400 : FontWeight.w400);
       final Color lineBaseColor = isSecondaryLine
           ? secondarySurfaceVariantColor
           : surfaceVariantColor;
@@ -339,8 +339,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }) {
     final double lineFontSize = isSecondaryLine ? fontSize * 0.88 : fontSize;
     final FontWeight lineFontWeight = isCurrent
-        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
-        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w600)
+        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w400);
     final Color lineColor = isCurrent
         ? (isSecondaryLine
               ? colorScheme.primary.withValues(alpha: 0.88)
@@ -855,8 +855,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         ? secondaryFontSize
                         : fontSize;
                     final FontWeight lineFontWeight = isCurrent
-                        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w700)
-                        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w500);
+                        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w600)
+                        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w400);
                     final Color lineColor = isCurrent
                         ? (isSecondaryLine
                               ? secondaryPrimaryColor

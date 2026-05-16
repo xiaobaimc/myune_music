@@ -11,3 +11,7 @@ linter:
     prefer_final_in_for_each: true
     avoid_unnecessary_containers: true
     use_key_in_widget_constructors: true
+    
+analyzer:
+  exclude:
+    - 'rust_builder/cargokit/build_tool/**'

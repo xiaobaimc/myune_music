@@ -9,10 +9,7 @@ class FontSelectorDialog extends StatefulWidget {
   /// 当前已选中的字体家族名称
   final String currentFontFamily;
 
-  const FontSelectorDialog({
-    super.key,
-    required this.currentFontFamily,
-  });
+  const FontSelectorDialog({super.key, required this.currentFontFamily});
 
   @override
   State<FontSelectorDialog> createState() => _FontSelectorDialogState();
@@ -21,25 +18,34 @@ class FontSelectorDialog extends StatefulWidget {
 class _FontSelectorDialogState extends State<FontSelectorDialog> {
   /// 搜索框的文本控制器
   final _searchController = TextEditingController();
+
   /// 字体列表的滚动控制器
   final _scrollController = ScrollController();
+
   /// 字体服务实例，用于扫描和加载字体
   final _fontService = FontService();
 
   /// 所有已扫描字体的完整列表
   List<FontMeta> _allFonts = [];
+
   /// 字体文件名到元数据的映射表
   Map<String, FontMeta> _fontsMap = {};
+
   /// 搜索过滤后的字体列表
   List<FontMeta> _filteredFonts = [];
+
   /// 当前选中的字体文件名
   String? _selectedFont;
+
   /// 当前选中的字体元数据
   FontMeta? _selectedMeta;
+
   /// 预览用字体文件名
   String? _previewFont;
+
   /// 是否正在扫描字体
   bool _isScanning = true;
+
   /// 搜索防抖定时器
   Timer? _debounce;
 
@@ -70,7 +76,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 初始化字体列表
-  /// 
+  ///
   /// 扫描系统字体，合并默认字体，然后按显示名称排序
   Future<void> _initFonts() async {
     final scanned = await _fontService.scanFonts();
@@ -103,7 +109,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 根据搜索关键词过滤字体列表
-  /// 
+  ///
   /// 匹配显示名称或文件名，不区分大小写
   void _applyFilter() {
     final query = _searchController.text.toLowerCase().trim();
@@ -120,7 +126,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 选择指定字体并加载预览
-  /// 
+  ///
   /// 更新选中状态，如果字体未加载则立即加载
   Future<void> _selectFont(FontMeta meta) async {
     setState(() {
@@ -142,7 +148,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 获取当前预览使用的字体家族名称
-  /// 
+  ///
   /// 优先级：预览字体 > 选中字体 > 默认字体
   String _previewFontFamily() {
     if (_previewFont != null && _previewFont != 'Misans') {
@@ -180,7 +186,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 构建对话框标题栏
-  /// 
+  ///
   /// 包含标题、刷新按钮和重置默认字体按钮
   Widget _buildTitle(BuildContext context) {
     return Row(
@@ -207,7 +213,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 刷新系统字体列表
-  /// 
+  ///
   /// 重新扫描字体目录，更新字体列表
   Future<void> _refreshFonts() async {
     setState(() => _isScanning = true);
@@ -216,7 +222,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 构建搜索栏组件
-  /// 
+  ///
   /// 包含搜索图标、文本输入框和清除按钮
   Widget _buildSearchBar(BuildContext context) {
     return TextField(
@@ -234,19 +240,18 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
             : null,
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
   /// 构建字体预览区域
-  /// 
+  ///
   /// 显示当前选中的字体名称和预览示例文字
   Widget _buildPreviewArea(BuildContext context) {
     final previewFamily = _previewFontFamily();
-    final displayName = _selectedMeta?.displayName ??
+    final displayName =
+        _selectedMeta?.displayName ??
         _fontService.resolveDisplayName(_selectedFont ?? 'Misans');
 
     return Container(
@@ -268,10 +273,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
           const SizedBox(height: 4),
           Text(
             '字体预览效果\nThe quick brown fox jumps over the lazy dog.\n放て！心に刻んだ夢を 未来さえ置き去りにして。',
-            style: TextStyle(
-              fontFamily: previewFamily,
-              fontSize: 16,
-            ),
+            style: TextStyle(fontFamily: previewFamily, fontSize: 16),
           ),
         ],
       ),
@@ -279,7 +281,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 构建字体列表组件
-  /// 
+  ///
   /// 使用平滑滚动容器包裹ListView，
   /// 扫描中显示加载指示器，无结果时显示空状态提示
   Widget _buildFontList(BuildContext context) {
@@ -315,7 +317,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 构建单个字体列表项
-  /// 
+  ///
   /// 显示字体名称，选中时高亮显示
   Widget _buildFontTile(BuildContext context, FontMeta meta, bool isSelected) {
     return ListTile(
@@ -331,9 +333,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
         meta.displayName,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : null,
+          color: isSelected ? Theme.of(context).colorScheme.primary : null,
         ),
         overflow: TextOverflow.ellipsis,
       ),
@@ -342,7 +342,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   }
 
   /// 构建对话框操作按钮
-  /// 
+  ///
   /// 包含取消和确定按钮
   List<Widget> _buildActions(BuildContext context) {
     return [

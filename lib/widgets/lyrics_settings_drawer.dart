@@ -114,15 +114,28 @@ class LyricsSettingsDrawer extends StatelessWidget {
 
               // 歌词模糊强度设置
               Text('歌词模糊强度', style: Theme.of(context).textTheme.titleMedium),
-              Slider(
-                value: settings.lyricBlurStrength,
-                min: 1.0,
-                max: 4.0,
-                divisions: 12,
-                label: settings.lyricBlurStrength.toStringAsFixed(1),
-                onChanged: (value) {
-                  context.read<SettingsProvider>().setLyricBlurStrength(value);
-                },
+              Tooltip(
+                message: settings.enableLyricBlur ? '' : '需启用 "歌词模糊效果" ',
+                child: IgnorePointer(
+                  ignoring: !settings.enableLyricBlur,
+                  child: Opacity(
+                    opacity: settings.enableLyricBlur ? 1.0 : 0.5,
+                    child: Slider(
+                      value: settings.lyricBlurStrength,
+                      min: 1.0,
+                      max: 4.0,
+                      divisions: 12,
+                      label: settings.lyricBlurStrength.toStringAsFixed(1),
+                      onChanged: settings.enableLyricBlur
+                          ? (value) {
+                              context
+                                  .read<SettingsProvider>()
+                                  .setLyricBlurStrength(value);
+                            }
+                          : null,
+                    ),
+                  ),
+                ),
               ),
               Text(
                 '当前强度: ${settings.lyricBlurStrength.toStringAsFixed(1)}',

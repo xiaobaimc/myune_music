@@ -186,7 +186,7 @@ class _PlaybarState extends State<Playbar> {
                               Text(
                                 currentSong?.title ?? '未知歌曲',
                                 style: TextStyle(
-                                  color: onBarColor,
+                                  color: onBarColor.withValues(alpha: 0.9),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),

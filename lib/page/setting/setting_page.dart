@@ -482,7 +482,7 @@ class _SettingPageState extends State<SettingPage>
                       children: [
                         Text('播放页动态背景'),
                         SizedBox(width: 4),
-                        InfoIcon('未启用模糊背景时不生效'),
+                        InfoIcon('实验性功能。启用后会略微提升性能占用\n未启用模糊背景时不生效'),
                       ],
                     ),
                     value: settings.enableDynamicBackground,

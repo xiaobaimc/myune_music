@@ -25,15 +25,20 @@ class ThemeProvider with ChangeNotifier {
   );
 
   static final int _defaultSeedColorValue = Colors.blue.toARGB32(); // 默认蓝色
-  Color _currentSeedColor = Color(_defaultSeedColorValue); // 当前正在使用的主题种子色（可能是动态色或手动色）
-  Color _lastManualSeedColor = Color(_defaultSeedColorValue); // 用户最后一次手动选择的种子色，用于在关闭动态配色时恢复
+  Color _currentSeedColor = Color(
+    _defaultSeedColorValue,
+  ); // 当前正在使用的主题种子色（可能是动态色或手动色）
+  Color _lastManualSeedColor = Color(
+    _defaultSeedColorValue,
+  ); // 用户最后一次手动选择的种子色，用于在关闭动态配色时恢复
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
   static const String _seedColorKey = 'user_seed_color';
-  static const String _lastManualSeedColorKey = 'user_last_manual_seed_color';// 用户手动选择的种子色，用于在关闭动态配色时恢复
+  static const String _lastManualSeedColorKey =
+      'user_last_manual_seed_color'; // 用户手动选择的种子色，用于在关闭动态配色时恢复
 
   static const String _fontFamilyKey = 'user_font_family';
   String _currentFontFamily = 'Misans'; // 默认字体
