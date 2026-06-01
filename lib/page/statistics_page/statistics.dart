@@ -23,6 +23,7 @@ class _StatisticsState extends State<Statistics> {
   final Set<String> _trackedCoverPaths = <String>{};
 
   late final ScrollController scrollController;
+  PlaylistContentNotifier? _playlistNotifier;
 
   @override
   void initState() {
@@ -32,12 +33,24 @@ class _StatisticsState extends State<Statistics> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _playlistNotifier ??= context.read<PlaylistContentNotifier>();
+  }
+
+  @override
   void dispose() {
-    final notifier = context.read<PlaylistContentNotifier>();
-    for (final path in _trackedCoverPaths) {
-      notifier.releaseSongCover(path);
-    }
+    final pathsToRelease = List<String>.from(_trackedCoverPaths);
     _trackedCoverPaths.clear();
+
+    if (_playlistNotifier != null && pathsToRelease.isNotEmpty) {
+      Future.microtask(() {
+        for (final path in pathsToRelease) {
+          _playlistNotifier!.releaseSongCover(path);
+        }
+      });
+    }
+
     scrollController.dispose();
     super.dispose();
   }

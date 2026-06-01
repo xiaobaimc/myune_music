@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import 'dart:typed_data';
 import '../playlist/playlist_content_notifier.dart';
+import '../../widgets/single_line_lyrics.dart';
 import 'artist_detail_view.dart';
 
 class ArtistList extends StatefulWidget {
@@ -82,6 +83,16 @@ class _ArtistListState extends State<ArtistList> {
           : Column(
               key: const ValueKey('artist_list'),
               children: [
+                AppBar(
+                  title: const SingleLineLyricView(
+                    maxLinesPerLyric: 2,
+                    textAlign: TextAlign.left,
+                    alignment: Alignment.topLeft,
+                  ),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  surfaceTintColor: Colors.transparent,
+                ),
+                const Divider(height: 1, thickness: 1),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16.0,

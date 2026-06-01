@@ -15,6 +15,7 @@ import '../page/setting/settings_provider.dart';
 class PageEntry {
   final bool Function(String label, Set<String> hiddenPages) visible; // 是否显示
   final String label;
+  final String routeName;
   final IconData icon;
   final IconData selectedIcon;
   final Widget page;
@@ -22,6 +23,7 @@ class PageEntry {
   PageEntry({
     required this.visible,
     required this.label,
+    required this.routeName,
     required this.icon,
     required this.selectedIcon,
     required this.page,
@@ -41,6 +43,7 @@ class _MainViewState extends State<MainView> {
   final int _tappedIndex = -1;
 
   late final List<PageEntry> _entries;
+  final GlobalKey<NavigatorState> _contentNavKey = GlobalKey<NavigatorState>();
 
   final TextStyle _mainViewTextStyle = const TextStyle(
     fontSize: 13,
@@ -55,6 +58,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => true, // 歌单始终显示
         label: '歌单',
+        routeName: '/playlist',
         icon: Icons.playlist_play,
         selectedIcon: Icons.playlist_play_outlined,
         page: const Playlist(),
@@ -62,6 +66,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => !hiddenPages.contains(label),
         label: '全部歌曲',
+        routeName: '/all_songs',
         icon: Icons.queue_music,
         selectedIcon: Icons.queue_music_outlined,
         page: const AllSongs(),
@@ -69,6 +74,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => !hiddenPages.contains(label),
         label: '歌手',
+        routeName: '/artists',
         icon: Icons.person_outlined,
         selectedIcon: Icons.person,
         page: const ArtistListPage(),
@@ -76,6 +82,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => !hiddenPages.contains(label),
         label: '专辑',
+        routeName: '/albums',
         icon: Icons.album_outlined,
         selectedIcon: Icons.album,
         page: const AlbumListPage(),
@@ -83,6 +90,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => !hiddenPages.contains(label),
         label: '统计',
+        routeName: '/statistics',
         icon: Icons.leaderboard_outlined,
         selectedIcon: Icons.leaderboard,
         page: const StatisticsPage(),
@@ -90,6 +98,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => !hiddenPages.contains(label),
         label: '歌曲详情信息',
+        routeName: '/song_details',
         icon: Icons.library_music_outlined,
         selectedIcon: Icons.library_music,
         page: const SongDetails(),
@@ -97,6 +106,7 @@ class _MainViewState extends State<MainView> {
       PageEntry(
         visible: (label, hiddenPages) => true, // 设置始终显示
         label: '设置',
+        routeName: '/settings',
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings,
         page: const Setting(),
@@ -174,9 +184,17 @@ class _MainViewState extends State<MainView> {
                       playlistNotifier.setActiveAllSongsView();
                       break;
                   }
+
+                  if (_currentIndex == index) return;
+
                   setState(() {
                     _currentIndex = index;
                   });
+
+                  _contentNavKey.currentState?.pushNamedAndRemoveUntil(
+                    visibleEntries[index].routeName,
+                    (route) => false,
+                  );
                 },
                 destinations: [
                   for (int i = 0; i < visibleEntries.length; i++)
@@ -186,7 +204,40 @@ class _MainViewState extends State<MainView> {
             ),
             Expanded(
               child: visibleEntries.isNotEmpty
-                  ? visibleEntries[_currentIndex].page
+                  ? Navigator(
+                      key: _contentNavKey,
+                      // initialRoute: visibleEntries[_currentIndex].routeName,
+                      onGenerateRoute: (settings) {
+                        // 查找与路由匹配的条目
+                        final entry = visibleEntries.firstWhere(
+                          (e) => e.routeName == settings.name,
+                          orElse: () => visibleEntries.first,
+                        );
+
+                        return PageRouteBuilder(
+                          pageBuilder:
+                              (context, animation, secondaryAnimation) =>
+                                  entry.page,
+                          transitionDuration: const Duration(milliseconds: 150),
+                          reverseTransitionDuration: const Duration(
+                            milliseconds: 150,
+                          ),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                  reverseCurve: Curves.easeInOut,
+                                );
+
+                                return FadeTransition(
+                                  opacity: curvedAnimation,
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                    )
                   : const SizedBox.shrink(),
             ),
           ],

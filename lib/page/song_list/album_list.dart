@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:typed_data';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_notifier.dart';
+import '../../widgets/single_line_lyrics.dart';
 import 'album_detail_view.dart';
 import 'package:pinyin/pinyin.dart';
 
@@ -83,6 +84,16 @@ class _AlbumListState extends State<AlbumList> {
           : Column(
               key: const ValueKey('album_grid'),
               children: [
+                AppBar(
+                  title: const SingleLineLyricView(
+                    maxLinesPerLyric: 2,
+                    textAlign: TextAlign.left,
+                    alignment: Alignment.topLeft,
+                  ),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  surfaceTintColor: Colors.transparent,
+                ),
+                const Divider(height: 1, thickness: 1),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16.0,
