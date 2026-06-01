@@ -22,38 +22,18 @@
 * 🧩 支持 **音频独占模式**（仅 Windows）
 * 🔌 支持 **手动选择音频输出设备**
 
-## 🎵 歌曲管理说明
 
-**所有歌曲都需要通过歌单页面进行添加**
+## 🔧关于 Linux
 
-播放器提供两种管理方式：**文件夹模式** 与 **手动模式**。
+需要安装 `libmpv`
 
-### 🗂️ 文件夹模式
+例如 **Ubuntu/Debian**
 
-* 添加歌单时选择“**添加文件夹**”，可选多个路径
-* 自动扫描文件夹及其子目录内的所有歌曲
-* 可通过右键菜单添加 / 删除文件夹
-* 手动点击“**刷新按钮**”可更新歌曲列表
-* ⚠️ 文件夹模式中无法手动添加或删除单曲
+``` bash
+sudo apt install libmpv-dev mpv 
+```
 
-### 📝 手动模式
-
-* 创建歌单时选择“**手动管理歌单歌曲**”
-* 可自由添加 / 删除歌曲
-* 支持批量选择文件并自动去重
-
-> 两种方式均支持按 **歌手/专辑** 分类展示
-
-### 🎫 关于播放队列
-
-* 在歌单页面，可以通过**右键歌曲**添加到播放队列，或者作为**下一首播放**，并**添加**到播放队列
-* 还可以通过**多选**菜单，添加多个歌曲进入播放队列内
-
-> tips: 可以放心全选某个歌单内的歌曲添加到播放队列中，软件会自动排除**重复歌曲**
-
-* ⚠️ 当手动播放歌曲（**不通过播放队列抽屉，上/下一首**）时，会清空播放队列，并按照播放歌曲的**上下文**作为队列，可以在**播放队列抽屉**中将队列**保存为一个新歌单**
-
-## 🎶 关于桌面歌词
+## 🎶 桌面歌词
 由于 [Flutter](https://flutter.dev/) 暂不支持多窗口功能，因此暂未提供桌面歌词。
 可使用以下第三方工具替代：
 
@@ -62,7 +42,7 @@
 
 > 以上软件非本人开发，请支持原作者 🙏
 
-## 🌐 关于歌词
+## 🌐 歌词
 
 目前仅支持UTF-8编码的 **.lrc** 文件
 
@@ -76,7 +56,7 @@
 
 实现参考 [通过歌曲名获取原文+翻译歌词](https://www.showby.top/archives/624)
 
-### 🎵 关于歌词解析
+### 🎵 歌词解析
 
 假设有如下格式的歌词
 
@@ -92,7 +72,7 @@
 
 软件内提供设置`同时间戳歌词行数`，例如调整数值为2，最后一行（罗马音）就不会被显示
 
-### 📃 关于逐字歌词
+### 📃 逐字歌词
 
 软件支持两种格式的逐字歌词：
 
@@ -123,70 +103,17 @@
 
 ## 🎵 支持的音频格式
 
-由于底层采用 **[mpv](https://mpv.io)** 播放引擎（基于 FFmpeg），理论上支持几乎所有常见及部分非常规的音频格式，包括但不限于：
+参阅 [media-kit](https://github.com/media-kit/media-kit#supported-formats)
 
-| 类型          | 格式示例                                               | 说明                      |
-| ----------- | -------------------------------------------------- | ----------------------- |
-| **无损格式**    | `FLAC`, `ALAC`, `APE`, `WAV`, `AIFF`, `DSF`, `DFF` | 支持高解析度音频、无损压缩或未压缩格式     |
-| **有损格式**    | `MP3`, `AAC`, `M4A`, `OGG`, `OPUS`, `WMA`, `MP2`   | 主流压缩格式，兼容性极佳            |
-| **其他实验性格式** | `TTA`, `WV`, `SPX`, `CAF` 等                        | FFmpeg 原生支持的冷门格式        |
+> 部分格式需在设置启用 **允许添加任何格式的文件**
 
-### 🛠️ 启用冷门格式支持
-
-若需要播放非常规音频格式（例如 `TTA`、`WV` 等），请前往设置菜单：
-
-1. 打开 **设置**
-2. 转到 **高级**
-3. 启用 **允许添加任何格式的文件**
-
-此操作会允许添加任何格式的文件到软件内
-
-## 🔧关于 Linux
-
-目前 Linux 版本仅在 **Debian 12 + Gnome(X11)** 测试过，已知问题有**无法选择字体**
-
-目前只提供可执行文件 且图标之类的也没有，后续会考虑其他方案
-
-### 在使用前安装依赖
-
-需要安装 `libmpv`
-
-例如 **Ubuntu/Debian**
-
-``` bash
-sudo apt install libmpv-dev mpv 
-```
 
 ## 📸 软件截图
-![](screenshot/6e14973b9473176c5e971fcd489292db.png)
-> 字体大小22，垂直间距6，居左对齐，启用歌词模糊和背景模糊效果
 
-![](screenshot/cad821b2b9bcab39866bed28aa10ba64.png)
-> 字体大小22，垂直间距6，居中对齐，启用歌词模糊和背景模糊效果
+![](screenshot/1f1d095fdece3740c123cc267b2933d8.png)
 
-![](screenshot/9b4ecbf45ba3e627ad0f49eb58de49a6.png)
-> 字体大小25，垂直间距10，居左对齐，关闭歌词模糊，启用背景模糊效果
+![](screenshot/ed403ac56eb0c48ccfa7f1bb769c040d.png)
 
-![](screenshot/52736f272726c264106786882e10294f.png)
-> 字体大小22，垂直间距6，居左对齐，启用歌词模糊和背景模糊效果，启用深色模式
-
-![](screenshot/5b3a494c901a3b4f45cde9346cbaa494.png)
-
-![](screenshot/8bf7b69971d2ee82d6a1b07458435429.png)
-
-![](screenshot/d4555aec0a2d22cf94a532cf556f5833.png)
-
-![](screenshot/4a7670f3ebf01f882075ad2d1d8503b8.png)
-
-![](screenshot/229b937e755fc80c1b6c2b035a9fce9d.png)
-
-![](screenshot/e4c6b8a45a044f23f6a0cab5b911a3e4.png)
-
-![](screenshot/2d2dcc15474a0305dd38c5c95d796171.png)
-
-![](screenshot/e5509c9d49dd41c80a5eaff376e37d9b.png)
-
-![](screenshot/0d13a2582b84e3d163988899b1944333.png)
 
 ## 🚀 快速开始
 
@@ -229,19 +156,6 @@ flutter build windows --release # 或对应平台名
 
 > 提供了 Rust + Flutter 的 SMTC 实现参考 🙏
 
-## 📄 许可证
-
-本项目使用 **Apache License 2.0** 开源许可协议。
-详细内容请查看根目录下的 [LICENSE](/LICENSE) 文件。
-
-## 🔤 字体版权说明（Font License）
-
-本项目使用小米公司提供的 **MiSans 字体**，该字体已明确允许**免费商用**。
-
-* 字体版权归小米公司所有
-* 相关许可协议请查阅：[MiSans 字体知识产权使用许可协议](https://hyperos.mi.com/font-download/MiSans%E5%AD%97%E4%BD%93%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf)
-* MiSans 官网：[https://hyperos.mi.com/font/](https://hyperos.mi.com/font/)
-
 ## ❤️ 贡献与赞助
 如果你喜欢这个项目，觉得它对你有帮助，可以通过以下方式支持我，让我有动力继续维护和更新
 
@@ -259,6 +173,19 @@ flutter build windows --release # 或对应平台名
 ### ☕ 赞助
 
 * [爱发电](https://ifdian.net/a/xiaobaimc)
+
+## 📄 许可证
+
+本项目使用 **Apache License 2.0** 开源许可协议。
+详细内容请查看根目录下的 [LICENSE](/LICENSE) 文件。
+
+## 🔤 字体版权说明（Font License）
+
+本项目使用小米公司提供的 **MiSans 字体**，该字体已明确允许**免费商用**。
+
+* 字体版权归小米公司所有
+* 相关许可协议请查阅：[MiSans 字体知识产权使用许可协议](https://hyperos.mi.com/font-download/MiSans%E5%AD%97%E4%BD%93%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf)
+* MiSans 官网：[https://hyperos.mi.com/font/](https://hyperos.mi.com/font/)
 
 ## Star History Chart
 

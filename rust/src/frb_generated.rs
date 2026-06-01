@@ -475,6 +475,7 @@ impl SseDecode for crate::api::audio_info::AudioInfo {
         let mut var_year = <Option<u32>>::sse_decode(deserializer);
         let mut var_genre = <Option<String>>::sse_decode(deserializer);
         let mut var_albumArtist = <Option<String>>::sse_decode(deserializer);
+        let mut var_trackNumber = <Option<u32>>::sse_decode(deserializer);
         return crate::api::audio_info::AudioInfo {
             title: var_title,
             artist: var_artist,
@@ -487,6 +488,7 @@ impl SseDecode for crate::api::audio_info::AudioInfo {
             year: var_year,
             genre: var_genre,
             album_artist: var_albumArtist,
+            track_number: var_trackNumber,
         };
     }
 }
@@ -498,11 +500,13 @@ impl SseDecode for crate::api::audio_info::AudioInfoOptions {
         let mut var_needLyrics = <bool>::sse_decode(deserializer);
         let mut var_needAudioProps = <bool>::sse_decode(deserializer);
         let mut var_needExtraTags = <bool>::sse_decode(deserializer);
+        let mut var_needTrackNumber = <bool>::sse_decode(deserializer);
         return crate::api::audio_info::AudioInfoOptions {
             need_cover: var_needCover,
             need_lyrics: var_needLyrics,
             need_audio_props: var_needAudioProps,
             need_extra_tags: var_needExtraTags,
+            need_track_number: var_needTrackNumber,
         };
     }
 }
@@ -731,6 +735,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::audio_info::AudioInfo {
             self.year.into_into_dart().into_dart(),
             self.genre.into_into_dart().into_dart(),
             self.album_artist.into_into_dart().into_dart(),
+            self.track_number.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -754,6 +759,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::audio_info::AudioInfoOptions 
             self.need_lyrics.into_into_dart().into_dart(),
             self.need_audio_props.into_into_dart().into_dart(),
             self.need_extra_tags.into_into_dart().into_dart(),
+            self.need_track_number.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -867,6 +873,7 @@ impl SseEncode for crate::api::audio_info::AudioInfo {
         <Option<u32>>::sse_encode(self.year, serializer);
         <Option<String>>::sse_encode(self.genre, serializer);
         <Option<String>>::sse_encode(self.album_artist, serializer);
+        <Option<u32>>::sse_encode(self.track_number, serializer);
     }
 }
 
@@ -877,6 +884,7 @@ impl SseEncode for crate::api::audio_info::AudioInfoOptions {
         <bool>::sse_encode(self.need_lyrics, serializer);
         <bool>::sse_encode(self.need_audio_props, serializer);
         <bool>::sse_encode(self.need_extra_tags, serializer);
+        <bool>::sse_encode(self.need_track_number, serializer);
     }
 }
 

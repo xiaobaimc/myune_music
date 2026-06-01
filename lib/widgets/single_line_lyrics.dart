@@ -46,7 +46,7 @@ class SingleLineLyricWidget extends StatelessWidget {
           fontSize: fontSize,
           height: 1.6,
           color: colorScheme.primary,
-          fontWeight: FontWeight.w700,
+          fontWeight: const FontWeight(640),
         ),
       );
     }
@@ -62,7 +62,7 @@ class SingleLineLyricWidget extends StatelessWidget {
           fontSize: fontSize,
           height: 1.6,
           color: colorScheme.primary,
-          fontWeight: FontWeight.w700,
+          fontWeight: const FontWeight(640),
         ),
       );
     }).toList();

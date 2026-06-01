@@ -8,6 +8,7 @@ class Song {
   final String filePath;
   final Uint8List? albumArt;
   final Duration? duration;
+  final int? trackNumber;
 
   Song({
     required this.title,
@@ -16,6 +17,7 @@ class Song {
     required this.filePath,
     this.albumArt,
     this.duration,
+    this.trackNumber,
   });
 
   Map<String, dynamic> toJson() {

@@ -466,8 +466,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AudioInfo dco_decode_audio_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return AudioInfo(
       title: dco_decode_opt_String(arr[0]),
       artist: dco_decode_opt_String(arr[1]),
@@ -480,6 +480,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       year: dco_decode_opt_box_autoadd_u_32(arr[8]),
       genre: dco_decode_opt_String(arr[9]),
       albumArtist: dco_decode_opt_String(arr[10]),
+      trackNumber: dco_decode_opt_box_autoadd_u_32(arr[11]),
     );
   }
 
@@ -487,13 +488,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AudioInfoOptions dco_decode_audio_info_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return AudioInfoOptions(
       needCover: dco_decode_bool(arr[0]),
       needLyrics: dco_decode_bool(arr[1]),
       needAudioProps: dco_decode_bool(arr[2]),
       needExtraTags: dco_decode_bool(arr[3]),
+      needTrackNumber: dco_decode_bool(arr[4]),
     );
   }
 
@@ -677,6 +679,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_year = sse_decode_opt_box_autoadd_u_32(deserializer);
     final var_genre = sse_decode_opt_String(deserializer);
     final var_albumArtist = sse_decode_opt_String(deserializer);
+    final var_trackNumber = sse_decode_opt_box_autoadd_u_32(deserializer);
     return AudioInfo(
       title: var_title,
       artist: var_artist,
@@ -689,6 +692,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       year: var_year,
       genre: var_genre,
       albumArtist: var_albumArtist,
+      trackNumber: var_trackNumber,
     );
   }
 
@@ -699,11 +703,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_needLyrics = sse_decode_bool(deserializer);
     final var_needAudioProps = sse_decode_bool(deserializer);
     final var_needExtraTags = sse_decode_bool(deserializer);
+    final var_needTrackNumber = sse_decode_bool(deserializer);
     return AudioInfoOptions(
       needCover: var_needCover,
       needLyrics: var_needLyrics,
       needAudioProps: var_needAudioProps,
       needExtraTags: var_needExtraTags,
+      needTrackNumber: var_needTrackNumber,
     );
   }
 
@@ -924,6 +930,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.year, serializer);
     sse_encode_opt_String(self.genre, serializer);
     sse_encode_opt_String(self.albumArtist, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.trackNumber, serializer);
   }
 
   @protected
@@ -936,6 +943,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.needLyrics, serializer);
     sse_encode_bool(self.needAudioProps, serializer);
     sse_encode_bool(self.needExtraTags, serializer);
+    sse_encode_bool(self.needTrackNumber, serializer);
   }
 
   @protected

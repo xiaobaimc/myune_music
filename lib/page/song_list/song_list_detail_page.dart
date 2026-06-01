@@ -96,7 +96,9 @@ class SongListDetailPage extends StatelessWidget {
 }
 
 class SongListDetailWidget extends StatelessWidget {
-  const SongListDetailWidget({super.key});
+  final bool showSearchField;
+
+  const SongListDetailWidget({super.key, this.showSearchField = true});
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +108,7 @@ class SongListDetailWidget extends StatelessWidget {
 
     return Column(
       children: [
-        if (isSearching)
+        if (isSearching && showSearchField)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
@@ -144,7 +146,7 @@ class SongListDetailWidget extends StatelessWidget {
                     slivers: [
                       SliverReorderableList(
                         itemCount: songs.length,
-                        onReorder: (oldIndex, newIndex) {
+                        onReorderItem: (oldIndex, newIndex) {
                           // 在搜索时，禁用拖拽排序功能
                           if (isSearching) return;
 

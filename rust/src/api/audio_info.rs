@@ -17,6 +17,7 @@ pub struct AudioInfoOptions {
     pub need_lyrics: bool,
     pub need_audio_props: bool,
     pub need_extra_tags: bool, // 包含:专辑艺术家、流派、年份
+    pub need_track_number: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -33,6 +34,7 @@ pub struct AudioInfo {
     pub year: Option<u32>,
     pub genre: Option<String>,
     pub album_artist: Option<String>,
+    pub track_number: Option<u32>,
 }
 
 fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFile, String> {
@@ -84,6 +86,7 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
         year: None,
         genre: None,
         album_artist: None,
+        track_number: None,
     };
 
     // 处理标签信息
@@ -120,6 +123,12 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
 
             if let Some(album_artist_str) = tag.get_string(ItemKey::AlbumArtist) {
                 info.album_artist = Some(album_artist_str.to_string());
+            }
+        }
+
+        if options.need_track_number {
+            if let Some(track_str) = tag.get_string(ItemKey::TrackNumber) {
+                info.track_number = track_str.parse::<u32>().ok();
             }
         }
     }

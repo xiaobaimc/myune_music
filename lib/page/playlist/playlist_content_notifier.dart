@@ -22,7 +22,7 @@ import '../../theme/theme_provider.dart';
 import '../statistics_page/playback_tracker.dart';
 import '../../src/rust/api/audio_info.dart';
 
-enum SortCriterion { title, artist, dateModified, random }
+enum SortCriterion { title, artist, dateModified, random, trackNumber }
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -772,6 +772,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needLyrics: false,
           needAudioProps: true,
           needExtraTags: false,
+          needTrackNumber: false,
         ),
       );
       final stat = await file.stat();
@@ -812,6 +813,34 @@ class PlaylistContentNotifier extends ChangeNotifier {
     );
   }
 
+  Future<AudioInfo?> _readTrackNumberForSort(String filePath) async {
+    final normalizedPath = Uri.file(
+      filePath,
+    ).toFilePath(windows: Platform.isWindows);
+    final file = File(normalizedPath);
+
+    if (!await file.exists()) {
+      return null;
+    }
+
+    try {
+      final metadata = await readAudioInfo(
+        path: normalizedPath,
+        options: const AudioInfoOptions(
+          needCover: false,
+          needLyrics: false,
+          needAudioProps: false,
+          needExtraTags: false,
+          needTrackNumber: true, // 只读取音轨号
+        ),
+      );
+
+      return metadata;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // 为播放准备完整元数据（包括封面等）
   Future<Song> _prepareSongForPlayback(String filePath) async {
     // 首先获取基础元数据
@@ -830,6 +859,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needLyrics: false,
             needAudioProps: true,
             needExtraTags: false,
+            needTrackNumber: false,
           ),
         );
 
@@ -909,6 +939,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
     updateList(_activeSongList);
     updateList(_filteredSongs);
 
+    if (_playingPlaylist?.songs != null) {
+      updateList(_playingPlaylist!.songs!);
+    }
+
+    if (_currentPlayingQueue != null) {
+      updateList(_currentPlayingQueue!);
+    }
+
     // 单独处理当前播放歌曲
     if (_currentSong != null &&
         _normalizePath(_currentSong!.filePath) == targetPath) {
@@ -978,6 +1016,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needLyrics: false,
             needAudioProps: true,
             needExtraTags: false,
+            needTrackNumber: false,
           ),
         );
 
@@ -1054,6 +1093,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 寻找歌曲
   Song? _findSongByPath(String filePath) {
     final target = _normalizePath(filePath);
+    if (_isUsingQueue && _currentPlayingQueue != null) {
+      for (final song in _currentPlayingQueue!) {
+        if (_normalizePath(song.filePath) == target) {
+          return song;
+        }
+      }
+    }
+    if (_playingPlaylist?.songs != null) {
+      for (final song in _playingPlaylist!.songs!) {
+        if (_normalizePath(song.filePath) == target) {
+          return song;
+        }
+      }
+    }
     for (final song in _currentPlaylistSongs) {
       if (_normalizePath(song.filePath) == target) {
         return song;
@@ -1108,6 +1161,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needLyrics: false,
             needAudioProps: false,
             needExtraTags: false,
+            needTrackNumber: false,
           ),
         );
 
@@ -2606,16 +2660,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 排序歌曲
   Future<void> reorderSong(int oldIndex, int newIndex) async {
     if (_selectedIndex < 0) return;
-
+ 
     // 边界检查
     if (oldIndex < 0 || oldIndex >= _currentPlaylistSongs.length) return;
-
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
+ 
     // 确保 newIndex 也在有效范围内
     if (newIndex < 0 || newIndex >= _currentPlaylistSongs.length) return;
-
+ 
     final song = _currentPlaylistSongs.removeAt(oldIndex);
     _currentPlaylistSongs.insert(newIndex, song);
 
@@ -2631,13 +2682,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 排序歌单
   Future<void> reorderPlaylist(int oldIndex, int newIndex) async {
-    int targetIndex = newIndex;
-    if (oldIndex < newIndex) {
-      targetIndex -= 1;
-    }
-    if (oldIndex == targetIndex) return;
+    if (oldIndex == newIndex) return;
 
-    if (_playlists[oldIndex].isDefault || _playlists[targetIndex].isDefault) {
+    if (_playlists[oldIndex].isDefault || _playlists[newIndex].isDefault) {
       _infoStreamController.add('默认歌单不能改变顺序');
       notifyListeners();
       return;
@@ -2648,7 +2695,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         : null;
 
     final item = _playlists.removeAt(oldIndex);
-    _playlists.insert(targetIndex, item);
+    _playlists.insert(newIndex, item);
 
     // 根据id重新找索引
     // 这样即使歌单位置变了, selectedIndex 也会自动指向挪动后的那个位置
@@ -2711,6 +2758,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
       });
 
       // 提取出排好序的路径并返回
+      return sortableList.map((item) => item['path'] as String).toList();
+    }
+
+    // 音轨号排序
+    if (criterion == SortCriterion.trackNumber) {
+      final sortableList = <Map<String, dynamic>>[];
+      for (final path in paths) {
+        final audioInfo = await _readTrackNumberForSort(path);
+        final trackNumber = audioInfo?.trackNumber ?? 9999; // 没有音轨号的排到最后
+        sortableList.add({'path': path, 'trackNumber': trackNumber});
+      }
+
+      sortableList.sort((a, b) {
+        final trackNumberA = a['trackNumber'] as int;
+        final trackNumberB = b['trackNumber'] as int;
+
+        final result = trackNumberA.compareTo(trackNumberB);
+        return descending ? -result : result;
+      });
+
       return sortableList.map((item) => item['path'] as String).toList();
     }
 
@@ -2888,6 +2955,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needLyrics: true,
           needAudioProps: false,
           needExtraTags: false,
+          needTrackNumber: false,
         ),
       );
 
@@ -4130,6 +4198,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needLyrics: false,
           needAudioProps: true,
           needExtraTags: true,
+          needTrackNumber: false,
         ),
       );
       final stat = await file.stat();
@@ -4320,6 +4389,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       name: '动态播放列表',
       // 将 List<Song> 转换为播放器需要的 List<String>
       songFilePaths: songs.map((s) => s.filePath).toList(),
+      songs: List<Song>.from(songs),
     );
 
     // 设置播放上下文为这个新创建的临时歌单
@@ -4407,11 +4477,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return;
     }
 
-    // 如果项目向下移动，新的索引会比实际插入位置大1
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
-
     // 更新列表顺序
     final song = _activeSongList.removeAt(oldIndex);
     _activeSongList.insert(newIndex, song);
@@ -4496,10 +4561,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> reorderAllSongs(int oldIndex, int newIndex) async {
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
-
     // 在内存中对歌曲列表进行排序
     final song = _allSongs.removeAt(oldIndex);
     _allSongs.insert(newIndex, song);

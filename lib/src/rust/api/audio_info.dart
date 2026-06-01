@@ -29,6 +29,7 @@ class AudioInfo {
   final int? year;
   final String? genre;
   final String? albumArtist;
+  final int? trackNumber;
 
   const AudioInfo({
     this.title,
@@ -42,6 +43,7 @@ class AudioInfo {
     this.year,
     this.genre,
     this.albumArtist,
+    this.trackNumber,
   });
 
   @override
@@ -56,7 +58,8 @@ class AudioInfo {
       sampleRate.hashCode ^
       year.hashCode ^
       genre.hashCode ^
-      albumArtist.hashCode;
+      albumArtist.hashCode ^
+      trackNumber.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -73,7 +76,8 @@ class AudioInfo {
           sampleRate == other.sampleRate &&
           year == other.year &&
           genre == other.genre &&
-          albumArtist == other.albumArtist;
+          albumArtist == other.albumArtist &&
+          trackNumber == other.trackNumber;
 }
 
 class AudioInfoOptions {
@@ -81,12 +85,14 @@ class AudioInfoOptions {
   final bool needLyrics;
   final bool needAudioProps;
   final bool needExtraTags;
+  final bool needTrackNumber;
 
   const AudioInfoOptions({
     required this.needCover,
     required this.needLyrics,
     required this.needAudioProps,
     required this.needExtraTags,
+    required this.needTrackNumber,
   });
 
   static Future<AudioInfoOptions> default_() =>
@@ -97,7 +103,8 @@ class AudioInfoOptions {
       needCover.hashCode ^
       needLyrics.hashCode ^
       needAudioProps.hashCode ^
-      needExtraTags.hashCode;
+      needExtraTags.hashCode ^
+      needTrackNumber.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -107,5 +114,6 @@ class AudioInfoOptions {
           needCover == other.needCover &&
           needLyrics == other.needLyrics &&
           needAudioProps == other.needAudioProps &&
-          needExtraTags == other.needExtraTags;
+          needExtraTags == other.needExtraTags &&
+          needTrackNumber == other.needTrackNumber;
 }

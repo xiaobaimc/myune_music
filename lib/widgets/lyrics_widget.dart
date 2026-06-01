@@ -34,7 +34,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -1191,40 +1190,36 @@ class _LyricsWidgetState extends State<LyricsWidget>
     );
 
     for (int i = 0; i < widget.lyrics.length; i++) {
-      final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
-      // 用于调整动画参数
-      final int interval = i > 0
-          ? (widget.lyrics[i].timestamp - widget.lyrics[i - 1].timestamp)
-                .inMilliseconds
-          : 1000;
+      if (i >= _elasticControllers.length) break;
 
-      final double normalizedInterval = (interval.clamp(100, 800) - 100) / 700;
-      final double ratio = math.pow(1.0 - normalizedInterval, 0.2).toDouble();
-      // 根据时间间隔调整弹簧刚度
-      final double stiffness = 170.0 + (ratio * 50.0);
-      final spring = SpringDescription(
-        mass: 1.0,
-        stiffness: stiffness,
-        damping: math.sqrt(stiffness) * 2.2,
-      );
+      final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
       final double executionDelay = _elasticDelayFromAnchor(i, anchorIndex);
 
       Future.delayed(
         Duration(milliseconds: (executionDelay * 1000).toInt()),
         () {
           if (!mounted ||
-              i >= _elasticControllers.length ||
               _isUserScrolling ||
               generation != _elasticAnimationGeneration) {
             return;
           }
-          final simulation = SpringSimulation(
-            spring,
-            _elasticAnimatedYPositions[i],
+
+          final controller = _elasticControllers[i];
+
+          // 避免微小差距闪烁
+          if ((controller.value - targetY).abs() < 0.2) {
+            controller.value = targetY;
+            controller.stop();
+            return;
+          }
+
+          controller.stop();
+
+          controller.animateTo(
             targetY,
-            0.0,
+            duration: const Duration(milliseconds: 550),
+            curve: const LyricSpringCurve(),
           );
-          _elasticControllers[i].animateWith(simulation);
         },
       );
     }
@@ -1232,11 +1227,24 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   // 计算从锚点到指定索引的延迟时间
   double _elasticDelayFromAnchor(int index, int anchorIndex) {
+    int visibleTopIndex = widget.currentIndex;
+    for (int i = 0; i < _elasticControllers.length; i++) {
+      // 当 value >= -20 时，说明它刚刚好处于屏幕顶端边缘或刚进入屏幕
+      if (_elasticControllers[i].value >= -20) {
+        visibleTopIndex = i;
+        break;
+      }
+    }
+
+    if (index <= visibleTopIndex) return 0.0;
     if (index <= anchorIndex) return 0.0;
 
     double delay = 0.0;
     double step = 0.045;
-    for (int i = anchorIndex; i < index; i++) {
+
+    final int startLoopIndex = math.max(visibleTopIndex, anchorIndex);
+
+    for (int i = startLoopIndex; i < index; i++) {
       delay += step;
       step /= 1.05;
     }
@@ -1250,7 +1258,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final double currentTop = _elasticBaseYPositions[widget.currentIndex];
     final double anchorY =
-        currentTop - viewportHeight * 0.45; // 当前项上方0.45视口高度处（高亮处为0.38）
+        currentTop - viewportHeight * 1.0; // 动画触发在不可见的位置，只需要使用它的涟漪就好
+
+    // 前几行上面没有东西作为锚点
+    if (anchorY < _elasticBaseYPositions[0]) {
+      final double estimatedHeight = _estimatedElasticItemHeight;
+      final double missingHeight = _elasticBaseYPositions[0] - anchorY;
+      final int virtualOffset = (missingHeight / estimatedHeight).ceil();
+      return -virtualOffset;
+    }
 
     int anchorIndex = widget.currentIndex;
     for (int i = widget.currentIndex; i >= 0; i--) {
@@ -1259,8 +1275,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         break;
       }
     }
-
-    return anchorIndex.clamp(0, widget.lyrics.length - 1);
+    return anchorIndex;
   }
 
   bool get _hasValidElasticIndex =>
@@ -1622,3 +1637,66 @@ class _LyricsClipper extends CustomClipper<Rect> {
         oldClipper.endPercent != endPercent;
   }
 }
+
+class LyricSpringCurve extends Curve {
+  final double speedFactor;
+  final double dampingFactor;
+
+  const LyricSpringCurve({this.speedFactor = 1.2, this.dampingFactor = 0.88});
+
+  @override
+  double transformInternal(double t) {
+    if (t <= 0.0) return 0.0;
+    if (t >= 1.0) return 1.0;
+
+    // 指数1.8保证了在t=1.0时，x对t的导数（时钟变化率）严格为0
+    final double warpedT = 1.0 - math.pow(1.0 - t, 1.8);
+
+    final double durationScale = 4.8 * speedFactor;
+    final double x = warpedT * durationScale;
+
+    final double zeta = dampingFactor.clamp(0.01, 0.999);
+    const double omegaN = 1.0;
+    final double omegaD = omegaN * math.sqrt(1.0 - zeta * zeta);
+
+    double getSpring(double time) {
+      final double envelope = math.exp(-zeta * omegaN * time);
+      final double oscillator =
+          math.cos(omegaD * time) +
+          (zeta * omegaN / omegaD) * math.sin(omegaD * time);
+      return 1.0 - envelope * oscillator;
+    }
+
+    final double rawSpring = getSpring(x);
+    final double endRaw = getSpring(durationScale);
+    return rawSpring / endRaw;
+  }
+}
+
+
+// class LyricSpringCurve extends Curve {
+//   final double stiffnessFactor;
+
+//   const LyricSpringCurve({this.stiffnessFactor = 1.0});
+
+//   @override
+//   double transformInternal(double t) {
+//     final double decay1 = -7.85 * stiffnessFactor;
+//     final double decay2 = -20.41 * stiffnessFactor;
+
+//     double getRaw(double time) {
+//       final double currentTime = time * 0.55;
+//       final double term1 = 1.625 * math.exp(decay1 * currentTime);
+//       final double term2 = 0.625 * math.exp(decay2 * currentTime);
+//       return 1.0 - term1 + term2;
+//     }
+
+//     final double startRaw = getRaw(0.0);
+//     final double endRaw = getRaw(1.0);
+
+//     final double normalized = (getRaw(t) - startRaw) / (endRaw - startRaw);
+
+//     final double fade = t * t * (3.0 - 2.0 * t);
+//     return normalized + fade * (1.0 - normalized);
+//   }
+// }

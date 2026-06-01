@@ -173,7 +173,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                     },
                                   );
                                 },
-                                onReorder: (oldIndex, newIndex) {
+                                onReorderItem: (oldIndex, newIndex) {
                                   // 在搜索时，不执行排序操作
                                   if (isSearching) return;
                                   notifier.reorderAllSongs(oldIndex, newIndex);

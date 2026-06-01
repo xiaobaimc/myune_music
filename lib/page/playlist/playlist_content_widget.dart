@@ -213,7 +213,7 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
                 controller: _scrollController,
                 config: SmoothScrollConfig.lenis(),
                 child: ReorderableListView(
-                  onReorder: (oldIndex, newIndex) {
+                  onReorderItem: (oldIndex, newIndex) {
                     notifier.reorderPlaylist(oldIndex, newIndex);
                   },
                   buildDefaultDragHandles: false,
@@ -972,11 +972,16 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                                     notifier.toggleSongSelection(song);
                                   } else {
                                     if (notifier.isSearching) {
-                                      // 使用当前渲染列表快照
-                                      notifier.playFromDynamicList(
-                                        List<Song>.from(songs),
-                                        index,
-                                      );
+                                      final playlistIndex = notifier
+                                          .currentPlaylistSongs
+                                          .indexWhere(
+                                            (playlistSong) =>
+                                                playlistSong.filePath ==
+                                                song.filePath,
+                                          );
+                                      if (playlistIndex != -1) {
+                                        notifier.playSongAtIndex(playlistIndex);
+                                      }
                                     } else {
                                       notifier.playSongAtIndex(index);
                                     }
@@ -987,7 +992,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                               );
                             },
                             // 在搜索时禁用拖拽排序功能
-                            onReorder: (oldIndex, newIndex) {
+                            onReorderItem: (oldIndex, newIndex) {
                               final isSearching = context
                                   .read<PlaylistContentNotifier>()
                                   .isSearching;
@@ -997,7 +1002,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
 
                               // 如果正在搜索或多选模式，则不做任何事，直接返回
                               if (isSearching || isMultiSelectMode) {
-                                return;
+                                  return;
                               }
 
                               // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs

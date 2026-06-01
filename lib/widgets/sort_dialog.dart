@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 
 class SortDialog extends StatefulWidget {
-  const SortDialog({super.key});
+  final bool isAlbumView; // 新增参数，标识是否在专辑视图中
+
+  const SortDialog({super.key, this.isAlbumView = false});
 
   @override
   State<SortDialog> createState() => _SortDialogState();
@@ -25,24 +27,30 @@ class _SortDialogState extends State<SortDialog> {
             onChanged: (value) => setState(
               () => _selectedCriterion = value ?? _selectedCriterion,
             ),
-            child: const Column(
+            child: Column(
               children: [
-                RadioListTile<SortCriterion>(
+                const RadioListTile<SortCriterion>(
                   title: Text('按歌曲名'),
                   value: SortCriterion.title,
                 ),
-                RadioListTile<SortCriterion>(
+                const RadioListTile<SortCriterion>(
                   title: Text('按歌手名'),
                   value: SortCriterion.artist,
                 ),
-                RadioListTile<SortCriterion>(
+                const RadioListTile<SortCriterion>(
                   title: Text('按修改日期'),
                   value: SortCriterion.dateModified,
                 ),
-                RadioListTile<SortCriterion>(
+                const RadioListTile<SortCriterion>(
                   title: Text('随机排序'),
                   value: SortCriterion.random,
                 ),
+                // 仅在专辑视图中显示音轨号排序选项
+                if (widget.isAlbumView)
+                  const RadioListTile<SortCriterion>(
+                    title: Text('按音轨号'),
+                    value: SortCriterion.trackNumber,
+                  ),
               ],
             ),
           ),
@@ -64,7 +72,7 @@ class _SortDialogState extends State<SortDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            // 当用户点击“应用”时，关闭对话框并返回选择结果
+            // 当用户点击"应用"时，关闭对话框并返回选择结果
             Navigator.of(context).pop({
               'criterion': _selectedCriterion,
               'descending': _isDescending,
