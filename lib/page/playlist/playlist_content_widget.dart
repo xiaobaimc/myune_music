@@ -9,6 +9,7 @@ import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
 import '../../widgets/sort_dialog.dart';
 import '../setting/settings_provider.dart';
+import '../../layout/navigation_notifier.dart';
 
 enum ManagementMode { manual, folder }
 
@@ -1002,7 +1003,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
 
                               // 如果正在搜索或多选模式，则不做任何事，直接返回
                               if (isSearching || isMultiSelectMode) {
-                                  return;
+                                return;
                               }
 
                               // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
@@ -1157,10 +1158,12 @@ class SongTileWidget extends StatefulWidget {
 class _SongTileWidgetState extends State<SongTileWidget> {
   bool _isHovered = false;
   String? _requestedCoverPath;
+  late PlaylistContentNotifier _notifier;
 
   @override
   void initState() {
     super.initState();
+    _notifier = context.read<PlaylistContentNotifier>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -1184,20 +1187,22 @@ class _SongTileWidgetState extends State<SongTileWidget> {
 
   @override
   void dispose() {
-    _requestedCoverPath = null;
+    if (_requestedCoverPath != null) {
+      _releaseCover(_requestedCoverPath!);
+    }
     super.dispose();
   }
 
   void _requestCover(String filePath) {
     _requestedCoverPath = filePath;
-    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+    _notifier.requestSongCover(filePath);
   }
 
   void _releaseCover(String filePath) {
     if (_requestedCoverPath == null) {
       return;
     }
-    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _notifier.releaseSongCover(filePath);
     _requestedCoverPath = null;
   }
 
@@ -1206,102 +1211,200 @@ class _SongTileWidgetState extends State<SongTileWidget> {
     PlaylistContentNotifier playlistNotifier,
   ) async {
     final notifier = context.read<PlaylistContentNotifier>();
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final colorScheme = Theme.of(context).colorScheme;
+    final iconColor = colorScheme.primary.withValues(alpha: 0.8);
 
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-
-    final iconColor = Theme.of(
-      context,
-    ).colorScheme.primary.withValues(alpha: 0.8);
-
-    // 检查是否是基于文件夹的播放列表
     final isFolderBasedPlaylist =
-        notifier.playlists[notifier.selectedIndex].isFolderBased;
+        notifier.playlists.isNotEmpty &&
+            notifier.selectedIndex >= 0 &&
+            notifier.selectedIndex < notifier.playlists.length
+        ? notifier.playlists[notifier.selectedIndex].isFolderBased
+        : false;
 
-    final result = await showMenu(
+    final individualArtists = notifier.getIndividualArtists(widget.song.artist);
+
+    final result = await showMenu<String>(
       context: context,
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       position: RelativeRect.fromLTRB(
         position.dx,
         position.dy,
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      items: <PopupMenuItem<String>>[
+      items: <PopupMenuEntry<String>>[
         PopupMenuItem<String>(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          value: 'moveToTop',
-          child: Column(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          height: 48,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  tooltip: '置于顶部',
+                  icon: Icon(Icons.arrow_circle_up_rounded, color: iconColor),
+                  onPressed: () => Navigator.pop(context, 'moveToTop'),
+                ),
+                IconButton(
+                  tooltip: '添加到播放队列',
+                  icon: Icon(
+                    Icons.playlist_add_circle_outlined,
+                    color: iconColor,
+                  ),
+                  onPressed: () => Navigator.pop(context, 'addToQueue'),
+                ),
+                IconButton(
+                  tooltip: '作为下一首播放',
+                  icon: Icon(
+                    Icons.play_circle_outline_outlined,
+                    color: iconColor,
+                  ),
+                  onPressed: () => Navigator.pop(context, 'nextSong'),
+                ),
+                IconButton(
+                  tooltip: '显示文件',
+                  icon: Icon(Icons.folder_outlined, color: iconColor),
+                  onPressed: () => Navigator.pop(context, 'showInExplorer'),
+                ),
+                if (!isFolderBasedPlaylist)
+                  IconButton(
+                    tooltip: '移除歌曲',
+                    icon: Icon(
+                      Icons.delete_outline_outlined,
+                      color: colorScheme.error.withValues(alpha: 0.8),
+                    ),
+                    onPressed: () => Navigator.pop(context, 'deleteSong'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        PopupMenuItem<String>(
+          value: 'goToSongDetails',
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Icon(Icons.arrow_circle_up_rounded, color: iconColor),
-                  const SizedBox(width: 5),
-                  const Text('置于顶部'),
-                ],
+              Icon(Icons.info_outline, size: 20, color: iconColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '查看歌曲详情',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
+                ),
               ),
             ],
           ),
         ),
+
         PopupMenuItem<String>(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          value: 'addToQueue',
-          child: Column(
+          value: 'goToAlbum',
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Icon(Icons.playlist_add_circle_outlined, color: iconColor),
-                  const SizedBox(width: 5),
-                  const Text('添加到播放队列'),
-                ],
+              Icon(Icons.album_outlined, size: 20, color: iconColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '转到专辑: ${widget.song.album}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
+                ),
               ),
             ],
           ),
         ),
-        PopupMenuItem<String>(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          value: 'nextSong',
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.play_circle_outline_outlined, color: iconColor),
-                  const SizedBox(width: 5),
-                  const Text('作为下一首播放'),
-                ],
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          value: 'showInExplorer',
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.folder_outlined, color: iconColor),
-                  const SizedBox(width: 5),
-                  const Text('显示文件'),
-                ],
-              ),
-            ],
-          ),
-        ),
-        // 只有非基于文件夹的播放列表才允许删除歌曲
-        if (!isFolderBasedPlaylist)
+
+        if (individualArtists.length == 1)
           PopupMenuItem<String>(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            value: 'deleteSong',
+            value: 'goToArtist_${individualArtists[0]}',
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Icon(Icons.delete_outline_outlined, color: iconColor),
-                const SizedBox(width: 5),
-                const Text('移除歌曲'),
+                Icon(Icons.person_outline, size: 20, color: iconColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '转到歌手: ${individualArtists[0]}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          PopupMenuItem<String>(
+            enabled: false,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Icon(Icons.person_outline, size: 20, color: iconColor),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: individualArtists
+                        .map(
+                          (artist) => InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            mouseCursor: SystemMouseCursors.click,
+                            onTap: () =>
+                                Navigator.pop(context, 'goToArtist_$artist'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer.withValues(
+                                  alpha: 0.4,
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.2,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                artist,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1368,6 +1471,37 @@ class _SongTileWidgetState extends State<SongTileWidget> {
         }
       } catch (e) {
         notifier.postError('打开文件位置失败');
+      }
+    } else if (result == 'goToSongDetails') {
+      final settings = context.read<SettingsProvider>();
+      if (settings.hiddenPages.contains('歌曲详情信息')) {
+        notifier.postInfo('歌曲详情页已被隐藏，无法跳转');
+        return;
+      }
+      notifier.setViewingSong(widget.song);
+      if (context.mounted) {
+        context.read<NavigationNotifier>().pushRoute('/song_details');
+      }
+    } else if (result == 'goToAlbum') {
+      final settings = context.read<SettingsProvider>();
+      if (settings.hiddenPages.contains('专辑')) {
+        notifier.postInfo('专辑页已被隐藏，无法跳转');
+        return;
+      }
+      notifier.setActiveAlbumView(widget.song.album);
+      if (context.mounted) {
+        context.read<NavigationNotifier>().pushRoute('/albums');
+      }
+    } else if (result.startsWith('goToArtist_')) {
+      final settings = context.read<SettingsProvider>();
+      if (settings.hiddenPages.contains('歌手')) {
+        notifier.postInfo('歌手页已被隐藏，无法跳转');
+        return;
+      }
+      final artist = result.substring('goToArtist_'.length);
+      notifier.setActiveArtistView(artist);
+      if (context.mounted) {
+        context.read<NavigationNotifier>().pushRoute('/artists');
       }
     }
   }

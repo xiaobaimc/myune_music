@@ -1258,7 +1258,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final double currentTop = _elasticBaseYPositions[widget.currentIndex];
     final double anchorY =
-        currentTop - viewportHeight * 1.0; // 动画触发在不可见的位置，只需要使用它的涟漪就好
+        currentTop - viewportHeight * 0.88; // 动画触发在不可见的位置，只需要使用它的涟漪就好
 
     // 前几行上面没有东西作为锚点
     if (anchorY < _elasticBaseYPositions[0]) {

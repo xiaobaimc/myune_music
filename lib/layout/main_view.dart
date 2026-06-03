@@ -11,6 +11,7 @@ import '../page/pages/statistics_page.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
 import '../page/setting/settings_provider.dart';
+import 'navigation_notifier.dart';
 
 class PageEntry {
   final bool Function(String label, Set<String> hiddenPages) visible; // 是否显示
@@ -38,12 +39,9 @@ class MainView extends StatefulWidget {
 }
 
 class _MainViewState extends State<MainView> {
-  int _currentIndex = 0;
-
   final int _tappedIndex = -1;
 
   late final List<PageEntry> _entries;
-  final GlobalKey<NavigatorState> _contentNavKey = GlobalKey<NavigatorState>();
 
   final TextStyle _mainViewTextStyle = const TextStyle(
     fontSize: 13,
@@ -114,7 +112,11 @@ class _MainViewState extends State<MainView> {
     ];
   }
 
-  NavigationRailDestination _buildDest(PageEntry entry, int index) {
+  NavigationRailDestination _buildDest(
+    PageEntry entry,
+    int index,
+    int currentIndex,
+  ) {
     return NavigationRailDestination(
       icon: MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -134,7 +136,7 @@ class _MainViewState extends State<MainView> {
       selectedIcon: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: AnimatedScale(
-          scale: _currentIndex == index ? 1.1 : 1.0,
+          scale: currentIndex == index ? 1.1 : 1.0,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeInOut,
           child: Icon(
@@ -151,17 +153,18 @@ class _MainViewState extends State<MainView> {
   Widget build(BuildContext context) {
     final playlistNotifier = context.read<PlaylistContentNotifier>();
     final settings = context.watch<SettingsProvider>();
+    final navigationNotifier = context.watch<NavigationNotifier>();
     final hiddenPages = settings.hiddenPages.toSet();
 
     final visibleEntries = _entries
         .where((e) => e.visible(e.label, hiddenPages))
         .toList();
 
-    // 确保当前索引不超过可见项的数量
-    if (_currentIndex >= visibleEntries.length && visibleEntries.isNotEmpty) {
-      _currentIndex = visibleEntries.length - 1;
-    } else if (visibleEntries.isEmpty) {
-      _currentIndex = 0;
+    int currentIndex = visibleEntries.indexWhere(
+      (e) => e.routeName == navigationNotifier.currentRoute,
+    );
+    if (currentIndex == -1) {
+      currentIndex = 0;
     }
 
     return LayoutBuilder(
@@ -174,38 +177,36 @@ class _MainViewState extends State<MainView> {
                   context,
                 ).colorScheme.surfaceContainerHighest,
                 extended: false,
-                selectedIndex: _currentIndex,
+                selectedIndex: currentIndex,
                 onDestinationSelected: (int index) {
-                  switch (visibleEntries[index].page.runtimeType) {
+                  switch (visibleEntries[index].page) {
                     case Playlist _:
                       playlistNotifier.clearActiveDetailView();
                       break;
                     case AllSongs _:
                       playlistNotifier.setActiveAllSongsView();
                       break;
+                    case SongDetails _:
+                      playlistNotifier.clearViewingSong();
+                      break;
                   }
 
-                  if (_currentIndex == index) return;
+                  if (currentIndex == index) return;
 
-                  setState(() {
-                    _currentIndex = index;
-                  });
-
-                  _contentNavKey.currentState?.pushNamedAndRemoveUntil(
+                  navigationNotifier.navigateTo(
                     visibleEntries[index].routeName,
-                    (route) => false,
                   );
                 },
                 destinations: [
                   for (int i = 0; i < visibleEntries.length; i++)
-                    _buildDest(visibleEntries[i], i),
+                    _buildDest(visibleEntries[i], i, currentIndex),
                 ],
               ),
             ),
             Expanded(
               child: visibleEntries.isNotEmpty
                   ? Navigator(
-                      key: _contentNavKey,
+                      key: navigationNotifier.navigatorKey,
                       // initialRoute: visibleEntries[_currentIndex].routeName,
                       onGenerateRoute: (settings) {
                         // 查找与路由匹配的条目

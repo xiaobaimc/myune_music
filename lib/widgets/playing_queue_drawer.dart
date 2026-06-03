@@ -47,6 +47,19 @@ class PlayingQueueDrawerState extends State<PlayingQueueDrawer> {
                       ),
                       const Spacer(),
                       IconButton(
+                        icon: Icon(
+                          Icons.pause_circle_outline,
+                          color: notifier.stopAfterQueue
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).disabledColor,
+                        ),
+                        onPressed: () {
+                          notifier.setStopAfterQueue(!notifier.stopAfterQueue);
+                        },
+                        tooltip:
+                            '播完当前队列后暂停${notifier.playMode == PlayMode.repeatOne ? '\n(单曲循环模式下只会播放当前歌曲)' : ''}\n${notifier.stopAfterQueue ? '当前: 启用' : '当前: 禁用'}',
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.playlist_add),
                         onPressed: queue.isNotEmpty
                             ? () => _showSaveQueueAsPlaylistDialog(
@@ -55,7 +68,7 @@ class PlayingQueueDrawerState extends State<PlayingQueueDrawer> {
                                 queue,
                               )
                             : null,
-                        tooltip: '保存队列为歌单',
+                        tooltip: '保存当前队列为歌单',
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),

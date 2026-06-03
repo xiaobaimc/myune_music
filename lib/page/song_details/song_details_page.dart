@@ -12,7 +12,7 @@ class SongDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Selector<PlaylistContentNotifier, Song?>(
-      selector: (context, notifier) => notifier.currentSong,
+      selector: (context, notifier) => notifier.viewingSong,
       builder: (context, currentSong, child) {
         final notifier = Provider.of<PlaylistContentNotifier>(
           context,

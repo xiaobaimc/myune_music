@@ -89,7 +89,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Song? _currentSong; // 当前播放的歌曲
   Song? get currentSong => _currentSong;
 
+  Song? _viewingSong; // 当前在详情页查看的歌曲
+  Song? get viewingSong => _viewingSong ?? _currentSong;
+
   bool _isAutoPlaying = false; // 是否为自动播放（播放完成后的自动切换）
+  bool _stopAfterQueue = false; // 播完当前队列后是否暂停
+
+  bool get stopAfterQueue => _stopAfterQueue;
+
   PlayMode _playMode = PlayMode.sequence; // 播放模式：顺序、随机、单曲循环
   static const _playModeKey = 'play_mode'; // 存储播放模式的 key
   PlayMode get playMode => _playMode;
@@ -1078,15 +1085,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _normalizePath(_currentSong!.filePath) == cacheKey) {
       return;
     }
-    _updateSongInCollections(filePath, (song) {
-      return Song(
-        title: song.title,
-        artist: song.artist,
-        album: song.album,
-        filePath: song.filePath,
-        albumArt: null,
-        duration: song.duration,
-      );
+    Future.microtask(() {
+      _updateSongInCollections(filePath, (song) {
+        return Song(
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          filePath: song.filePath,
+          albumArt: null,
+          duration: song.duration,
+        );
+      });
     });
   }
 
@@ -1862,6 +1871,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
         // 如果已经播放到列表末尾
         else if (currentShuffledPos == _shuffledIndices.length - 1) {
+          //
+          if (_stopAfterQueue && _isAutoPlaying) {
+            return;
+          }
           // 播放完一轮后重新生成随机列表
           _generateShuffledIndices(count: songCount);
           currentShuffledPos = -1; // 从新的随机列表的第一首开始
@@ -1871,9 +1884,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
             _shuffledIndices[(currentShuffledPos + 1) %
                 _shuffledIndices.length];
       } else if (_playMode == PlayMode.repeatOne && _isAutoPlaying) {
+        if (_stopAfterQueue) {
+          return;
+        }
         // 只有在自动播放且为单曲循环模式时才重复播放当前歌曲
         nextIndex = currentIndex;
       } else {
+        if (currentIndex == songCount - 1 &&
+            _stopAfterQueue &&
+            _isAutoPlaying) {
+          return;
+        }
         // 顺序播放或其他情况（包括手动点击下一首）
         nextIndex = (currentIndex + 1) % songCount;
       }
@@ -1908,6 +1929,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
       // 如果已经播放到列表末尾
       else if (currentShuffledPos == _shuffledIndices.length - 1) {
+        if (_stopAfterQueue && _isAutoPlaying) {
+          return; // 不再播放下一首
+        }
         // 播放完一轮后重新生成随机列表
         _generateShuffledIndices(count: songCount);
         currentShuffledPos = -1; // 从新的随机列表的第一首开始
@@ -1921,9 +1945,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
       nextIndex =
           _shuffledIndices[(currentShuffledPos + 1) % _shuffledIndices.length];
     } else if (_playMode == PlayMode.repeatOne && _isAutoPlaying) {
+      if (_stopAfterQueue) {
+        return; // 不再播放下一首
+      }
       // 只有在自动播放且为单曲循环模式时才重复播放当前歌曲
       nextIndex = currentIndex;
     } else {
+      if (currentIndex == songCount - 1 && _stopAfterQueue && _isAutoPlaying) {
+        return; // 不再播放下一首
+      }
       // 顺序播放或其他情况（包括手动点击下一首）
       nextIndex = (currentIndex + 1) % songCount;
     }
@@ -2660,13 +2690,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 排序歌曲
   Future<void> reorderSong(int oldIndex, int newIndex) async {
     if (_selectedIndex < 0) return;
- 
+
     // 边界检查
     if (oldIndex < 0 || oldIndex >= _currentPlaylistSongs.length) return;
- 
+
     // 确保 newIndex 也在有效范围内
     if (newIndex < 0 || newIndex >= _currentPlaylistSongs.length) return;
- 
+
     final song = _currentPlaylistSongs.removeAt(oldIndex);
     _currentPlaylistSongs.insert(newIndex, song);
 
@@ -4167,12 +4197,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 这个方法是专门给歌曲详情页用的
   Future<SongDetails?> getCurrentSongDetails() async {
-    if (_currentSong == null) {
+    final targetSong = viewingSong;
+    if (targetSong == null) {
       // _errorStreamController.add('没有当前播放的歌曲');
       return null;
     }
 
-    final filePath = _currentSong!.filePath;
+    final filePath = targetSong.filePath;
     final normalizedPath = Uri.file(
       filePath,
     ).toFilePath(windows: Platform.isWindows);
@@ -4232,6 +4263,23 @@ class PlaylistContentNotifier extends ChangeNotifier {
         albumArt: null,
         filePath: filePath,
       );
+    }
+  }
+
+  void setViewingSong(Song? song) {
+    _viewingSong = song;
+    notifyListeners();
+  }
+
+  void clearViewingSong() {
+    _viewingSong = null;
+    notifyListeners();
+  }
+
+  void setStopAfterQueue(bool value) {
+    if (_stopAfterQueue != value) {
+      _stopAfterQueue = value;
+      notifyListeners();
     }
   }
 
@@ -4404,54 +4452,47 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // --- 分组歌曲 ---
 
-  // 多歌手识别与分组
-  Map<String, List<Song>> get songsByArtist {
-    final Map<String, List<Song>> grouped = {};
+  // 根据设置的自定义分隔符，将歌手字符串拆分为独立歌手
+  List<String> getIndividualArtists(String artistString) {
+    if (artistString.isEmpty) {
+      return ['未知歌手'];
+    }
 
-    // 使用自定义的分隔符
     final separators = _settingsProvider.artistSeparators;
-    // 增强验证，过滤掉无效分隔符
     final validSeparators = separators
         .where(
           (separator) => separator.isNotEmpty && separator.trim().isNotEmpty,
         )
         .toList();
 
-    if (validSeparators.isNotEmpty) {
-      final pattern = validSeparators.map((s) => RegExp.escape(s)).join('|');
-      final RegExp separatorRegExp = RegExp('[$pattern]');
+    if (validSeparators.isEmpty) {
+      return [artistString];
+    }
 
-      // 遍历所有歌曲
-      for (final song in _allSongs) {
-        // 1. 使用正则表达式拆分 artist 字符串
-        final individualArtists = song.artist
-            .split(separatorRegExp)
-            // 2. 对拆分后的每个名字进行处理，去除首尾的空格
-            .map((artist) => artist.trim())
-            // 3. 过滤掉因连续分隔符而产生的空字符串
-            .where((artist) => artist.isNotEmpty)
-            .toList();
+    final pattern = validSeparators.map((s) => RegExp.escape(s)).join('|');
+    final RegExp separatorRegExp = RegExp('[$pattern]');
 
-        // 如果拆分后没有有效的歌手名 则直接使用原始字段作为唯一的歌手名
-        if (individualArtists.isEmpty) {
-          if (song.artist.isNotEmpty) {
-            individualArtists.add(song.artist);
-          } else {
-            // 如果字段为空 则归类到未知歌手
-            individualArtists.add('未知歌手');
-          }
-        }
+    final individualArtists = artistString
+        .split(separatorRegExp)
+        .map((artist) => artist.trim())
+        .where((artist) => artist.isNotEmpty)
+        .toList();
 
-        // 遍历拆分出的每一个独立歌手名
-        for (final artistName in individualArtists) {
-          // 将当前歌曲添加到这位歌手的列表中
-          grouped.putIfAbsent(artistName, () => []).add(song);
-        }
-      }
-    } else {
-      // 如果没有有效的分隔符，则不进行拆分
-      for (final song in _allSongs) {
-        final artistName = song.artist.isNotEmpty ? song.artist : '未知歌手';
+    if (individualArtists.isEmpty) {
+      return [artistString];
+    }
+
+    return individualArtists;
+  }
+
+  // 多歌手识别与分组
+  Map<String, List<Song>> get songsByArtist {
+    final Map<String, List<Song>> grouped = {};
+
+    for (final song in _allSongs) {
+      final individualArtists = getIndividualArtists(song.artist);
+
+      for (final artistName in individualArtists) {
         grouped.putIfAbsent(artistName, () => []).add(song);
       }
     }

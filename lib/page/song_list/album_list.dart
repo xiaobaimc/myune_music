@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../layout/navigation_notifier.dart';
 import 'package:provider/provider.dart';
 import 'dart:typed_data';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
@@ -26,15 +27,19 @@ class _AlbumListState extends State<AlbumList> {
   bool _isSearching = false;
   String _searchKeyword = '';
   bool _hideSingleSongAlbums = false;
-  bool _showAlbumDetail = false;
 
   void _closeAlbumDetail() {
     final notifier = context.read<PlaylistContentNotifier>();
+    final navNotifier = context.read<NavigationNotifier>();
+    
     if (notifier.isSearching) {
       notifier.stopSearch();
     }
     notifier.clearActiveDetailView();
-    setState(() => _showAlbumDetail = false);
+    
+    if (navNotifier.canPop) {
+      navNotifier.popRoute();
+    }
   }
 
   void sortAlbums(List<String> albumNames) {
@@ -59,7 +64,6 @@ class _AlbumListState extends State<AlbumList> {
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
     final showAlbumDetail =
-        _showAlbumDetail &&
         notifier.currentDetailViewContext == DetailViewContext.album;
 
     return AnimatedSwitcher(
@@ -222,7 +226,6 @@ class _AlbumListState extends State<AlbumList> {
                                 return InkWell(
                                   onTap: () {
                                     notifier.setActiveAlbumView(albumName);
-                                    setState(() => _showAlbumDetail = true);
                                   },
                                   borderRadius: BorderRadius.circular(12.0),
                                   child: Card(
@@ -293,10 +296,12 @@ class _AlbumCoverTile extends StatefulWidget {
 
 class _AlbumCoverTileState extends State<_AlbumCoverTile> {
   String? _requestedCoverPath;
+  late PlaylistContentNotifier _notifier;
 
   @override
   void initState() {
     super.initState();
+    _notifier = context.read<PlaylistContentNotifier>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _requestCover(widget.filePath);
@@ -319,18 +324,20 @@ class _AlbumCoverTileState extends State<_AlbumCoverTile> {
 
   @override
   void dispose() {
-    _requestedCoverPath = null;
+    if (_requestedCoverPath != null) {
+      _releaseCover(_requestedCoverPath!);
+    }
     super.dispose();
   }
 
   void _requestCover(String filePath) {
     _requestedCoverPath = filePath;
-    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+    _notifier.requestSongCover(filePath);
   }
 
   void _releaseCover(String filePath) {
     if (_requestedCoverPath == null) return;
-    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _notifier.releaseSongCover(filePath);
     _requestedCoverPath = null;
   }
 

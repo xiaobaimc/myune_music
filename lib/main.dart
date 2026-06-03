@@ -19,6 +19,7 @@ import 'page/setting/settings_provider.dart';
 import 'src/rust/frb_generated.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
 import 'page/statistics_page/statistics_manager.dart';
+import 'layout/navigation_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,6 +123,7 @@ void main() async {
         ChangeNotifierProvider<StatisticsManager>(
           create: (context) => StatisticsManager(),
         ),
+        ChangeNotifierProvider(create: (_) => NavigationNotifier()),
       ],
       child: const MyApp(),
     ),

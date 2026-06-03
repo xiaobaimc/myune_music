@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../layout/navigation_notifier.dart';
 import 'package:pinyin/pinyin.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
@@ -25,15 +26,19 @@ class _ArtistListState extends State<ArtistList> {
   bool _isSearching = false;
   String _searchKeyword = '';
   bool _hideSingleSongArtists = false;
-  bool _showArtistDetail = false;
 
   void _closeArtistDetail() {
     final notifier = context.read<PlaylistContentNotifier>();
+    final navNotifier = context.read<NavigationNotifier>();
+    
     if (notifier.isSearching) {
       notifier.stopSearch();
     }
     notifier.clearActiveDetailView();
-    setState(() => _showArtistDetail = false);
+    
+    if (navNotifier.canPop) {
+      navNotifier.popRoute();
+    }
   }
 
   void sortArtists(List<String> artistNames) {
@@ -58,7 +63,6 @@ class _ArtistListState extends State<ArtistList> {
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
     final showArtistDetail =
-        _showArtistDetail &&
         notifier.currentDetailViewContext == DetailViewContext.artist;
 
     return AnimatedSwitcher(
@@ -217,7 +221,6 @@ class _ArtistListState extends State<ArtistList> {
                                   subtitle: Text('共 ${songs.length} 首歌曲'),
                                   onTap: () {
                                     notifier.setActiveArtistView(artistName);
-                                    setState(() => _showArtistDetail = true);
                                   },
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12.0),
@@ -252,10 +255,12 @@ class _ArtistCoverAvatar extends StatefulWidget {
 
 class _ArtistCoverAvatarState extends State<_ArtistCoverAvatar> {
   String? _requestedCoverPath;
+  late PlaylistContentNotifier _notifier;
 
   @override
   void initState() {
     super.initState();
+    _notifier = context.read<PlaylistContentNotifier>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _requestCover(widget.filePath);
@@ -278,18 +283,20 @@ class _ArtistCoverAvatarState extends State<_ArtistCoverAvatar> {
 
   @override
   void dispose() {
-    _requestedCoverPath = null;
+    if (_requestedCoverPath != null) {
+      _releaseCover(_requestedCoverPath!);
+    }
     super.dispose();
   }
 
   void _requestCover(String filePath) {
     _requestedCoverPath = filePath;
-    context.read<PlaylistContentNotifier>().requestSongCover(filePath);
+    _notifier.requestSongCover(filePath);
   }
 
   void _releaseCover(String filePath) {
     if (_requestedCoverPath == null) return;
-    context.read<PlaylistContentNotifier>().releaseSongCover(filePath);
+    _notifier.releaseSongCover(filePath);
     _requestedCoverPath = null;
   }
 
