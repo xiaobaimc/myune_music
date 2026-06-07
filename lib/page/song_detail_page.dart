@@ -155,7 +155,7 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
   void _manageAnimation(bool shouldAnimate) {
     if (shouldAnimate) {
       if (!_animationController.isAnimating) {
-        _animationController.repeat();
+        _animationController.repeat(reverse: true);// 重复播放，反向播放
       }
     } else {
       if (_animationController.isAnimating) {
