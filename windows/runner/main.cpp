@@ -13,6 +13,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     CreateAndAttachConsole();
   }
 
+  // 创建命名互斥体，用于安装/卸载程序检测进程是否在运行
+  HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"MyuneMusicMutex");
+
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -31,6 +34,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"myune_music", origin, size)) {
+    if (hMutex) CloseHandle(hMutex);
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
@@ -39,6 +43,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   while (::GetMessage(&msg, nullptr, 0, 0)) {
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
+  }
+
+  if (hMutex) {
+    CloseHandle(hMutex);
   }
 
   ::CoUninitialize();

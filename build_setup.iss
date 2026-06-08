@@ -11,6 +11,7 @@ OutputDir=output_setup
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 UninstallDisplayName=MyuneMusic
+AppMutex=MyuneMusicMutex
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
