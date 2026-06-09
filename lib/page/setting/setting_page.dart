@@ -16,6 +16,7 @@ import 'artist_separator.dart';
 import 'about.dart';
 import 'page_visibility_settings.dart';
 import 'playlist_cleaner.dart';
+import 'folder_playlist_refresher.dart';
 
 // 定义应用版本号常量
 const String appVersion = '0.9.0';
@@ -754,6 +755,18 @@ class _SettingPageState extends State<SettingPage>
                     child: Consumer<PlaylistContentNotifier>(
                       builder: (context, notifier, child) {
                         return PlaylistCleaner(notifier: notifier);
+                      },
+                    ),
+                  ),
+                  // 刷新文件夹歌单
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    child: Consumer<PlaylistContentNotifier>(
+                      builder: (context, notifier, child) {
+                        return FolderPlaylistRefresher(notifier: notifier);
                       },
                     ),
                   ),

@@ -1301,7 +1301,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 更新当前播放列表和所有歌曲列表
       if (_selectedIndex == _playlists.indexOf(currentPlaylist)) {
-        _currentPlaylistSongs = List.from(currentPlaylist.songs ?? []);
+        _currentPlaylistSongs = currentPlaylist.songs ?? [];
       }
       await _updateAllSongsList();
 
@@ -1443,7 +1443,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       // 如果当前选中的就是这个播放列表，则更新当前播放列表歌曲
       if (_selectedIndex == _playlists.indexOf(playlist)) {
-        _currentPlaylistSongs = List.from(playlist.songs ?? []);
+        _currentPlaylistSongs = playlist.songs ?? [];
       }
 
       // 更新所有歌曲列表
@@ -1463,6 +1463,84 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _isLoadingSongs = false;
       notifyListeners();
     }
+  }
+
+  /// 通过歌单ID刷新指定的文件夹歌单，返回新增和移除的文件路径
+  Future<({List<String> added, List<String> removed})>
+      refreshFolderPlaylistById(String playlistId) async {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index < 0) return (added: <String>[], removed: <String>[]);
+
+    final playlist = _playlists[index];
+    if (!playlist.isFolderBased) return (added: <String>[], removed: <String>[]);
+
+    final Set<String> songPaths = <String>{};
+
+    for (final folderPath in playlist.folderPaths) {
+      try {
+        final directory = Directory(folderPath);
+        if (await directory.exists()) {
+          await for (final file in directory.list(
+            recursive: true,
+            followLinks: false,
+          ).handleError((_) {})) {
+            if (file is File) {
+              final extension = p.extension(file.path).toLowerCase();
+              if (_supportedAudioExtensions.contains(extension)) {
+                songPaths.add(p.normalize(file.path));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('扫描目录失败: $folderPath, $e');
+      }
+    }
+
+    final oldSongPaths =
+        playlist.songFilePaths.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+    final newSongPaths =
+        songPaths.map((fp) => fp.toLowerCase()).toSet();
+
+    final addedSongPaths = newSongPaths.difference(oldSongPaths).toList();
+    final removedSongPaths = oldSongPaths.difference(newSongPaths);
+
+    playlist.songFilePaths.removeWhere(
+      (path) => removedSongPaths.contains(p.normalize(path).toLowerCase()),
+    );
+
+    // addedSongPaths 是小写差集，需从原始 songPaths 中找回实际路径
+    final actualAddedPaths = songPaths
+        .where((fp) => addedSongPaths.contains(fp.toLowerCase()))
+        .toList();
+    playlist.songFilePaths.addAll(actualAddedPaths);
+
+    if (playlist.songs != null) {
+      playlist.songs!.removeWhere(
+        (song) => removedSongPaths.contains(p.normalize(song.filePath).toLowerCase()),
+      );
+
+      final parsedSongs = await Future.wait(
+        actualAddedPaths.map((path) => _parseSongMetadata(path)),
+      );
+      playlist.songs!.addAll(parsedSongs);
+    } else {
+      final parsedSongs = await Future.wait(
+        playlist.songFilePaths.map((path) => _parseSongMetadata(path)),
+      );
+      playlist.songs = parsedSongs.toList();
+    }
+
+    await _savePlaylists();
+
+    if (_selectedIndex == index) {
+      _currentPlaylistSongs = playlist.songs ?? [];
+    }
+
+    await _updateAllSongsList();
+    notifyListeners();
+
+    return (added: actualAddedPaths, removed: removedSongPaths.toList());
   }
 
   // 更新播放列表的文件夹路径
@@ -1682,12 +1760,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 查找歌单中不存在的文件
-  Future<Map<String, List<String>>> findInvalidFiles() async {
-    final Map<String, List<String>> invalidFiles = {};
+  // [playlistIds] 为空时扫描所有歌单
+  // 返回 Map<歌单ID, MapEntry<歌单名, 无效文件路径列表>>
+  Future<Map<String, MapEntry<String, List<String>>>> findInvalidFiles({List<String>? playlistIds}) async {
+    final Map<String, MapEntry<String, List<String>>> invalidFiles = {};
+    final targetIds = playlistIds?.toSet();
 
     for (final playlist in _playlists) {
-      // 跳过基于文件夹的歌单
-      if (playlist.isFolderBased) continue;
+      if (targetIds != null && !targetIds.contains(playlist.id)) continue;
 
       final invalidPaths = <String>[];
 
@@ -1699,38 +1779,73 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
 
       if (invalidPaths.isNotEmpty) {
-        invalidFiles[playlist.name] = invalidPaths;
+        invalidFiles[playlist.id] = MapEntry(playlist.name, invalidPaths);
       }
     }
 
     return invalidFiles;
   }
 
-  // 清理歌单中不存在的文件
-  Future<int> cleanInvalidFiles() async {
+  // 清理歌单中指定的文件路径
+  // [filesToRemove] key为歌单ID，value为要删除的文件路径集合
+  Future<int> cleanInvalidFiles({Map<String, Set<String>>? filesToRemove}) async {
     int totalRemoved = 0;
+    final affectedIndices = <int>{};
 
-    for (final playlist in _playlists) {
-      // 跳过基于文件夹的歌单
-      if (playlist.isFolderBased) continue;
+    for (int i = 0; i < _playlists.length; i++) {
+      final playlist = _playlists[i];
 
+      final targetSet = filesToRemove?[playlist.id];
       final originalLength = playlist.songFilePaths.length;
-      final updatedPaths = <String>[];
-      for (final path in playlist.songFilePaths) {
-        final file = File(path);
-        if (await file.exists()) {
-          updatedPaths.add(path);
-        }
-      }
-      playlist.songFilePaths = updatedPaths;
 
-      totalRemoved += originalLength - playlist.songFilePaths.length;
+      Set<String> removedNormalized;
+      if (targetSet != null && targetSet.isNotEmpty) {
+        // 移除指定的文件路径
+        removedNormalized = targetSet.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+        playlist.songFilePaths = playlist.songFilePaths.where((path) {
+          return !removedNormalized.contains(p.normalize(path).toLowerCase());
+        }).toList();
+      } else if (filesToRemove == null) {
+        // 未提供过滤条件时，移除所有不存在的文件（兼容旧行为）
+        final updatedPaths = <String>[];
+        final removedPaths = <String>[];
+        for (final path in playlist.songFilePaths) {
+          final file = File(path);
+          if (await file.exists()) {
+            updatedPaths.add(path);
+          } else {
+            removedPaths.add(path);
+          }
+        }
+        playlist.songFilePaths = updatedPaths;
+        removedNormalized = removedPaths.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+      } else {
+        continue;
+      }
+
+      final removed = originalLength - playlist.songFilePaths.length;
+      if (removed > 0) {
+        // 同步更新 songs 列表
+        if (playlist.songs != null) {
+          playlist.songs!.removeWhere(
+            (song) => removedNormalized.contains(p.normalize(song.filePath).toLowerCase()),
+          );
+        }
+        affectedIndices.add(i);
+        totalRemoved += removed;
+      }
     }
 
-    await _savePlaylists();
-    await _updateAllSongsList();
+    if (totalRemoved > 0) {
+      await _savePlaylists();
 
-    notifyListeners();
+      if (affectedIndices.contains(_selectedIndex)) {
+        _currentPlaylistSongs = _playlists[_selectedIndex].songs ?? [];
+      }
+
+      await _updateAllSongsList();
+      notifyListeners();
+    }
 
     return totalRemoved;
   }
@@ -3990,13 +4105,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return;
     }
 
-    final newSongList = List<Song>.from(_currentPlaylistSongs);
-    final songToMove = newSongList.removeAt(index);
-    newSongList.insert(0, songToMove);
-    _currentPlaylistSongs = newSongList; // 指向新列表
+    final songToMove = _currentPlaylistSongs.removeAt(index);
+    _currentPlaylistSongs.insert(0, songToMove);
 
-    final songPath = _playlists[_selectedIndex].songFilePaths.removeAt(index);
-    _playlists[_selectedIndex].songFilePaths.insert(0, songPath);
+    // 同步更新 playlist.songs 以保持引用一致
+    final playlist = _playlists[_selectedIndex];
+    if (playlist.songs != null && identical(_currentPlaylistSongs, playlist.songs)) {
+      // _currentPlaylistSongs 就是 playlist.songs 的引用，已同步
+    } else if (playlist.songs != null) {
+      playlist.songs!.removeAt(index);
+      playlist.songs!.insert(0, songToMove);
+    }
+
+    final songPath = playlist.songFilePaths.removeAt(index);
+    playlist.songFilePaths.insert(0, songPath);
 
     // 如果当前播放的歌曲被移动，更新 currentSongIndex
     if (_currentSongIndex == index) {
@@ -4161,6 +4283,101 @@ class PlaylistContentNotifier extends ChangeNotifier {
         : '成功添加 ${newSongPaths.length} 首歌曲到歌单"${targetPlaylist.name}"';
 
     _infoStreamController.add(message);
+  }
+
+  // 按歌单ID添加歌曲路径（支持所有歌单类型，包括文件夹歌单）
+  // 返回实际新增的歌曲数量
+  Future<int> addSongsToPlaylistById(
+    String playlistId,
+    List<String> songPaths,
+  ) async {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index < 0) return 0;
+
+    final targetPlaylist = _playlists[index];
+
+    // 过滤掉已经存在的路径
+    final existingSet = targetPlaylist.songFilePaths.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+    final newPaths = songPaths
+        .where((path) => !existingSet.contains(p.normalize(path).toLowerCase()))
+        .toList();
+
+    if (newPaths.isEmpty) return 0;
+
+    // 添加新歌曲路径
+    targetPlaylist.songFilePaths.addAll(newPaths);
+
+    // 如果歌单已解析过歌曲，则解析并添加新歌曲
+    if (targetPlaylist.songs != null) {
+      final parsedSongs = await Future.wait(
+        newPaths.map((path) => _parseSongMetadata(path)),
+      );
+      targetPlaylist.songs!.addAll(parsedSongs);
+    }
+
+    await _savePlaylists();
+
+    if (_selectedIndex == index) {
+      if (targetPlaylist.songs != null) {
+        _currentPlaylistSongs = targetPlaylist.songs!;
+      } else {
+        await _loadCurrentPlaylistSongs();
+      }
+    }
+
+    await _updateAllSongsList();
+    notifyListeners();
+
+    return newPaths.length;
+  }
+
+  /// 批量为多个歌单添加歌曲，仅执行一次保存和更新
+  Future<int> addSongsToPlaylists(Map<String, List<String>> songsMap) async {
+    int totalAdded = 0;
+    final affectedIndices = <int>{};
+
+    for (final entry in songsMap.entries) {
+      final playlistId = entry.key;
+      final songPaths = entry.value;
+      final index = _playlists.indexWhere((p) => p.id == playlistId);
+      if (index < 0) continue;
+
+      final targetPlaylist = _playlists[index];
+      final existingSet = targetPlaylist.songFilePaths
+          .map((fp) => p.normalize(fp).toLowerCase())
+          .toSet();
+      final newPaths = songPaths
+          .where(
+              (path) => !existingSet.contains(p.normalize(path).toLowerCase()))
+          .toList();
+
+      if (newPaths.isEmpty) continue;
+
+      targetPlaylist.songFilePaths.addAll(newPaths);
+
+      if (targetPlaylist.songs != null) {
+        final parsedSongs = await Future.wait(
+          newPaths.map((path) => _parseSongMetadata(path)),
+        );
+        targetPlaylist.songs!.addAll(parsedSongs);
+      }
+
+      affectedIndices.add(index);
+      totalAdded += newPaths.length;
+    }
+
+    if (totalAdded == 0) return 0;
+
+    await _savePlaylists();
+
+    if (affectedIndices.contains(_selectedIndex)) {
+      await _loadCurrentPlaylistSongs();
+    }
+
+    await _updateAllSongsList();
+    notifyListeners();
+
+    return totalAdded;
   }
 
   // -------
