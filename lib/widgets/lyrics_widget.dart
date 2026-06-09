@@ -1,4 +1,4 @@
-﻿/* 
+﻿/*
 FIXME: 假设以下格式
 `
 [00:08.220]First [00:08.412]things [00:08.882]first[00:09.378]
@@ -87,6 +87,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool _didElasticPointerMove = false;
   bool _frameScheduled = false;
 
+  int _previousIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -140,7 +142,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 当前行变化，滚动到对应行
     if (widget.currentIndex != oldWidget.currentIndex) {
       _scrollToCurrentLine();
-      _animateElasticToCurrent();
+      _animateElasticToCurrent(
+        previousIndex: oldWidget.currentIndex,
+      ); // 👈 传入旧索引
+      _previousIndex = oldWidget.currentIndex;
     }
     // 当歌词列表发生变化时（如切换歌曲），滚动到顶部
     else if (widget.lyrics != oldWidget.lyrics) {
@@ -1177,17 +1182,42 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (mounted) setState(() {});
   }
 
-  void _animateElasticToCurrent({double? viewportHeight}) {
+  void _animateElasticToCurrent({double? viewportHeight, int? previousIndex}) {
     if (!_hasValidElasticIndex || _isUserScrolling) return;
 
-    final double center = (viewportHeight ?? _currentViewportHeight) * 0.38;
+    final double vh = viewportHeight ?? _currentViewportHeight;
+    final double center = vh * 0.38;
     final double offsetToCenter =
         center - _elasticBaseYPositions[widget.currentIndex];
 
-    final int generation = ++_elasticAnimationGeneration;
-    final int anchorIndex = _estimateElasticAnchorIndex(
-      viewportHeight ?? _currentViewportHeight,
+    // 用两句之间的位移距离计算ratio
+    final int fromIndex = previousIndex ?? _previousIndex;
+    final double fromY =
+        (fromIndex >= 0 && fromIndex < _elasticBaseYPositions.length)
+        ? _elasticBaseYPositions[fromIndex]
+        : _elasticBaseYPositions[widget.currentIndex];
+    final double toY = _elasticBaseYPositions[widget.currentIndex];
+
+    final double stepDistance = (toY - fromY).abs();
+
+    // _estimatedElasticItemHeight 就是"一步"的参考单位
+    final double ratio = (stepDistance / _estimatedElasticItemHeight).clamp(
+      0.5,
+      4.0,
     );
+
+    final int durationMs = (480 * math.pow(ratio, 0.55)).round().clamp(
+      300,
+      750,
+    );
+    final double omega = (10.5 * math.pow(ratio, 0.45)).clamp(6.5, 15.5);
+    const double zeta = 0.91;
+
+    final curve = LyricSpringCurve(omega: omega, zeta: zeta);
+    final duration = Duration(milliseconds: durationMs);
+
+    final int generation = ++_elasticAnimationGeneration;
+    final int anchorIndex = _estimateElasticAnchorIndex(vh);
 
     for (int i = 0; i < widget.lyrics.length; i++) {
       if (i >= _elasticControllers.length) break;
@@ -1214,12 +1244,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           }
 
           controller.stop();
-
-          controller.animateTo(
-            targetY,
-            duration: const Duration(milliseconds: 550),
-            curve: const LyricSpringCurve(),
-          );
+          controller.animateTo(targetY, duration: duration, curve: curve);
         },
       );
     }
@@ -1639,40 +1664,25 @@ class _LyricsClipper extends CustomClipper<Rect> {
 }
 
 class LyricSpringCurve extends Curve {
-  final double speedFactor;
-  final double dampingFactor;
+  final double omega;
+  final double zeta;
 
-  const LyricSpringCurve({this.speedFactor = 1.2, this.dampingFactor = 0.88});
+  const LyricSpringCurve({this.omega = 12.0, this.zeta = 0.95});
 
   @override
   double transformInternal(double t) {
     if (t <= 0.0) return 0.0;
     if (t >= 1.0) return 1.0;
 
-    // 指数1.8保证了在t=1.0时，x对t的导数（时钟变化率）严格为0
-    final double warpedT = 1.0 - math.pow(1.0 - t, 1.8);
+    final double wd = omega * math.sqrt(1.0 - zeta * zeta);
+    final double envelope = math.exp(-zeta * omega * t);
+    final double phase =
+        math.cos(wd * t) +
+        (zeta / math.sqrt(1.0 - zeta * zeta)) * math.sin(wd * t);
 
-    final double durationScale = 4.8 * speedFactor;
-    final double x = warpedT * durationScale;
-
-    final double zeta = dampingFactor.clamp(0.01, 0.999);
-    const double omegaN = 1.0;
-    final double omegaD = omegaN * math.sqrt(1.0 - zeta * zeta);
-
-    double getSpring(double time) {
-      final double envelope = math.exp(-zeta * omegaN * time);
-      final double oscillator =
-          math.cos(omegaD * time) +
-          (zeta * omegaN / omegaD) * math.sin(omegaD * time);
-      return 1.0 - envelope * oscillator;
-    }
-
-    final double rawSpring = getSpring(x);
-    final double endRaw = getSpring(durationScale);
-    return rawSpring / endRaw;
+    return (1.0 - envelope * phase).clamp(0.0, 1.0);
   }
 }
-
 
 // class LyricSpringCurve extends Curve {
 //   final double stiffnessFactor;

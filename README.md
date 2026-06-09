@@ -52,7 +52,7 @@ sudo apt install libmpv-dev mpv
 
 启用后，将在未读取到**内联歌词**和本地 `.lrc` 文件自动获取歌词
 
-软件内默认提供了两个歌词源可供选择
+软件内默认提供了三个歌词源可供选择
 
 实现参考 [通过歌曲名获取原文+翻译歌词](https://www.showby.top/archives/624)
 
