@@ -9,7 +9,8 @@ class FolderPlaylistRefresher extends StatefulWidget {
   const FolderPlaylistRefresher({super.key, required this.notifier});
 
   @override
-  State<FolderPlaylistRefresher> createState() => _FolderPlaylistRefresherState();
+  State<FolderPlaylistRefresher> createState() =>
+      _FolderPlaylistRefresherState();
 }
 
 class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
@@ -62,8 +63,9 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
 
     final changes = <String, ({List<String> added, List<String> removed})>{};
     for (final playlist in folderPlaylists) {
-      final result =
-          await widget.notifier.refreshFolderPlaylistById(playlist.id);
+      final result = await widget.notifier.refreshFolderPlaylistById(
+        playlist.id,
+      );
       if (!mounted) return;
       if (result.added.isNotEmpty || result.removed.isNotEmpty) {
         changes[playlist.name] = result;
@@ -118,7 +120,8 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
   }
 
   Widget _buildChangeContent(
-      Map<String, ({List<String> added, List<String> removed})> changes) {
+    Map<String, ({List<String> added, List<String> removed})> changes,
+  ) {
     final children = <Widget>[];
     for (final entry in changes.entries) {
       final name = entry.key;
@@ -132,7 +135,10 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
             children: [
               Text(
                 '歌单 "$name"',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
               ),
               if (removed.isNotEmpty) ...[
                 Padding(
@@ -142,15 +148,19 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
                     style: TextStyle(color: Colors.red.shade700, fontSize: 15),
                   ),
                 ),
-                ...removed.map((path) => Padding(
-                      padding: const EdgeInsets.only(left: 24),
-                      child: Text(
-                        '• ${p.basename(path)}',
-                        style: TextStyle(
-                            color: Colors.red.shade700, fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
+                ...removed.map(
+                  (path) => Padding(
+                    padding: const EdgeInsets.only(left: 24),
+                    child: Text(
+                      '• ${p.basename(path)}',
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontSize: 14,
                       ),
-                    )),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ],
               if (added.isNotEmpty) ...[
                 Padding(
@@ -158,18 +168,24 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
                   child: Text(
                     '新增 ${added.length} 首:',
                     style: TextStyle(
-                        color: Colors.green.shade700, fontSize: 15),
+                      color: Colors.green.shade700,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
-                ...added.map((path) => Padding(
-                      padding: const EdgeInsets.only(left: 24),
-                      child: Text(
-                        '• ${p.basename(path)}',
-                        style: TextStyle(
-                            color: Colors.green.shade700, fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
+                ...added.map(
+                  (path) => Padding(
+                    padding: const EdgeInsets.only(left: 24),
+                    child: Text(
+                      '• ${p.basename(path)}',
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 14,
                       ),
-                    )),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
@@ -188,7 +204,7 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('刷新文件夹歌单', style: Theme.of(context).textTheme.titleMedium),
+        Text('刷新所有文件夹歌单', style: Theme.of(context).textTheme.titleMedium),
         ElevatedButton.icon(
           onPressed: _isRefreshing ? null : _showRefreshDialog,
           icon: _isRefreshing
@@ -291,9 +307,7 @@ class _FolderSelectionDialogState extends State<_FolderSelectionDialog> {
                         ),
                       ],
                     ),
-                    subtitle: Text(
-                      '${playlist.songFilePaths.length} 首歌曲',
-                    ),
+                    subtitle: Text('${playlist.songFilePaths.length} 首歌曲'),
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
                   );

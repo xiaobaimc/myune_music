@@ -99,8 +99,9 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
   ) async {
     try {
       final idList = playlistIds.toList();
-      final invalidFiles =
-          await widget.notifier.findInvalidFiles(playlistIds: idList);
+      final invalidFiles = await widget.notifier.findInvalidFiles(
+        playlistIds: idList,
+      );
 
       if (!dialogContext.mounted) return;
       setDialogState(() {
@@ -167,8 +168,8 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
       );
     }
 
-    final invalidCount = _invalidFiles?.values.fold<int>(
-            0, (sum, e) => sum + e.value.length) ??
+    final invalidCount =
+        _invalidFiles?.values.fold<int>(0, (sum, e) => sum + e.value.length) ??
         0;
 
     if (invalidCount == 0) {
@@ -205,8 +206,9 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
               }
             }
           }
-          final cleaned =
-              await widget.notifier.cleanInvalidFiles(filesToRemove: removeMap);
+          final cleaned = await widget.notifier.cleanInvalidFiles(
+            filesToRemove: removeMap,
+          );
 
           if (!mounted || !ctx.mounted) return;
           navigator.pop();
@@ -254,7 +256,7 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('清理普通歌单无效文件', style: Theme.of(context).textTheme.titleMedium),
+        Text('清理无效文件', style: Theme.of(context).textTheme.titleMedium),
         ElevatedButton.icon(
           onPressed: () {
             _showCleanDialog();
@@ -340,13 +342,8 @@ class _PlaylistSelectionDialogState extends State<_PlaylistSelectionDialog> {
                   return CheckboxListTile(
                     value: _selectedIds.contains(playlist.id),
                     onChanged: (_) => _togglePlaylist(playlist.id),
-                    title: Text(
-                      playlist.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      '${playlist.songFilePaths.length} 首歌曲',
-                    ),
+                    title: Text(playlist.name, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${playlist.songFilePaths.length} 首歌曲'),
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
                   );
@@ -377,10 +374,7 @@ class _ResultDialog extends StatefulWidget {
   final Map<String, MapEntry<String, List<String>>>? invalidFiles;
   final Future<void> Function(Set<String> checkedInvalidPaths) onApply;
 
-  const _ResultDialog({
-    required this.invalidFiles,
-    required this.onApply,
-  });
+  const _ResultDialog({required this.invalidFiles, required this.onApply});
 
   @override
   State<_ResultDialog> createState() => _ResultDialogState();
@@ -402,13 +396,17 @@ class _ResultDialogState extends State<_ResultDialog> {
   }
 
   bool get _isAllInvalidSelected {
-    if (widget.invalidFiles == null || widget.invalidFiles!.isEmpty) return false;
+    if (widget.invalidFiles == null || widget.invalidFiles!.isEmpty) {
+      return false;
+    }
     return _invalidTotal > 0 && _invalidTotal == _checkedInvalidPaths.length;
   }
 
   int get _invalidTotal =>
       widget.invalidFiles?.values.fold<int>(
-          0, (sum, e) => sum + e.value.length) ??
+        0,
+        (sum, e) => sum + e.value.length,
+      ) ??
       0;
 
   void _toggleAllInvalid() {
@@ -449,9 +447,9 @@ class _ResultDialogState extends State<_ResultDialog> {
         CheckboxListTile(
           value: _isAllInvalidSelected,
           onChanged: (_) => _toggleAllInvalid(),
-          title: Text(_isAllInvalidSelected
-              ? '取消全选无效文件'
-              : '全选无效文件 ($invalidCount)'),
+          title: Text(
+            _isAllInvalidSelected ? '取消全选无效文件' : '全选无效文件 ($invalidCount)',
+          ),
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
         ),

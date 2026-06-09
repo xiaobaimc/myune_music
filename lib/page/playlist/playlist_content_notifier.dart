@@ -1476,12 +1476,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   /// 通过歌单ID刷新指定的文件夹歌单，返回新增和移除的文件路径
   Future<({List<String> added, List<String> removed})>
-      refreshFolderPlaylistById(String playlistId) async {
+  refreshFolderPlaylistById(String playlistId) async {
     final index = _playlists.indexWhere((p) => p.id == playlistId);
     if (index < 0) return (added: <String>[], removed: <String>[]);
 
     final playlist = _playlists[index];
-    if (!playlist.isFolderBased) return (added: <String>[], removed: <String>[]);
+    if (!playlist.isFolderBased) {
+      return (added: <String>[], removed: <String>[]);
+    }
 
     final Set<String> songPaths = <String>{};
 
@@ -1489,10 +1491,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       try {
         final directory = Directory(folderPath);
         if (await directory.exists()) {
-          await for (final file in directory.list(
-            recursive: true,
-            followLinks: false,
-          ).handleError((_) {})) {
+          await for (final file
+              in directory
+                  .list(recursive: true, followLinks: false)
+                  .handleError((_) {})) {
             if (file is File) {
               final extension = p.extension(file.path).toLowerCase();
               if (_supportedAudioExtensions.contains(extension)) {
@@ -1506,10 +1508,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
     }
 
-    final oldSongPaths =
-        playlist.songFilePaths.map((fp) => p.normalize(fp).toLowerCase()).toSet();
-    final newSongPaths =
-        songPaths.map((fp) => fp.toLowerCase()).toSet();
+    final oldSongPaths = playlist.songFilePaths
+        .map((fp) => p.normalize(fp).toLowerCase())
+        .toSet();
+    final newSongPaths = songPaths.map((fp) => fp.toLowerCase()).toSet();
 
     final addedSongPaths = newSongPaths.difference(oldSongPaths).toList();
     final removedSongPaths = oldSongPaths.difference(newSongPaths);
@@ -1526,7 +1528,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     if (playlist.songs != null) {
       playlist.songs!.removeWhere(
-        (song) => removedSongPaths.contains(p.normalize(song.filePath).toLowerCase()),
+        (song) =>
+            removedSongPaths.contains(p.normalize(song.filePath).toLowerCase()),
       );
 
       final parsedSongs = await Future.wait(
@@ -1771,7 +1774,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 查找歌单中不存在的文件
   // [playlistIds] 为空时扫描所有歌单
   // 返回 Map<歌单ID, MapEntry<歌单名, 无效文件路径列表>>
-  Future<Map<String, MapEntry<String, List<String>>>> findInvalidFiles({List<String>? playlistIds}) async {
+  Future<Map<String, MapEntry<String, List<String>>>> findInvalidFiles({
+    List<String>? playlistIds,
+  }) async {
     final Map<String, MapEntry<String, List<String>>> invalidFiles = {};
     final targetIds = playlistIds?.toSet();
 
@@ -1797,7 +1802,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 清理歌单中指定的文件路径
   // [filesToRemove] key为歌单ID，value为要删除的文件路径集合
-  Future<int> cleanInvalidFiles({Map<String, Set<String>>? filesToRemove}) async {
+  Future<int> cleanInvalidFiles({
+    Map<String, Set<String>>? filesToRemove,
+  }) async {
     int totalRemoved = 0;
     final affectedIndices = <int>{};
 
@@ -1810,7 +1817,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       Set<String> removedNormalized;
       if (targetSet != null && targetSet.isNotEmpty) {
         // 移除指定的文件路径
-        removedNormalized = targetSet.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+        removedNormalized = targetSet
+            .map((fp) => p.normalize(fp).toLowerCase())
+            .toSet();
         playlist.songFilePaths = playlist.songFilePaths.where((path) {
           return !removedNormalized.contains(p.normalize(path).toLowerCase());
         }).toList();
@@ -1827,7 +1836,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
           }
         }
         playlist.songFilePaths = updatedPaths;
-        removedNormalized = removedPaths.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+        removedNormalized = removedPaths
+            .map((fp) => p.normalize(fp).toLowerCase())
+            .toSet();
       } else {
         continue;
       }
@@ -1837,7 +1848,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
         // 同步更新 songs 列表
         if (playlist.songs != null) {
           playlist.songs!.removeWhere(
-            (song) => removedNormalized.contains(p.normalize(song.filePath).toLowerCase()),
+            (song) => removedNormalized.contains(
+              p.normalize(song.filePath).toLowerCase(),
+            ),
           );
         }
         affectedIndices.add(i);
@@ -3737,12 +3750,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
           final nextLine = lines[i + 1];
           final gap = nextLine.timestamp - currentLine.timestamp;
           if (gap.inMilliseconds > 8000) {
-            result.add(LyricLine(
-              timestamp: currentLine.timestamp,
-              texts: [],
-              isInterlude: true,
-              interludeDuration: gap,
-            ));
+            result.add(
+              LyricLine(
+                timestamp: currentLine.timestamp,
+                texts: [],
+                isInterlude: true,
+                interludeDuration: gap,
+              ),
+            );
           }
         }
         // 如果不是间奏，或者在最后一行，直接丢弃空行，保持原有逻辑
@@ -3765,12 +3780,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
           final gap = nextLine.timestamp - currentEndTime;
           if (gap.inMilliseconds > 8000) {
-            result.add(LyricLine(
-              timestamp: currentEndTime,
-              texts: [],
-              isInterlude: true,
-              interludeDuration: gap,
-            ));
+            result.add(
+              LyricLine(
+                timestamp: currentEndTime,
+                texts: [],
+                isInterlude: true,
+                interludeDuration: gap,
+              ),
+            );
           }
         }
       }
@@ -4199,7 +4216,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 同步更新 playlist.songs 以保持引用一致
     final playlist = _playlists[_selectedIndex];
-    if (playlist.songs != null && identical(_currentPlaylistSongs, playlist.songs)) {
+    if (playlist.songs != null &&
+        identical(_currentPlaylistSongs, playlist.songs)) {
       // _currentPlaylistSongs 就是 playlist.songs 的引用，已同步
     } else if (playlist.songs != null) {
       playlist.songs!.removeAt(index);
@@ -4386,7 +4404,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final targetPlaylist = _playlists[index];
 
     // 过滤掉已经存在的路径
-    final existingSet = targetPlaylist.songFilePaths.map((fp) => p.normalize(fp).toLowerCase()).toSet();
+    final existingSet = targetPlaylist.songFilePaths
+        .map((fp) => p.normalize(fp).toLowerCase())
+        .toSet();
     final newPaths = songPaths
         .where((path) => !existingSet.contains(p.normalize(path).toLowerCase()))
         .toList();
@@ -4437,7 +4457,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
           .toSet();
       final newPaths = songPaths
           .where(
-              (path) => !existingSet.contains(p.normalize(path).toLowerCase()))
+            (path) => !existingSet.contains(p.normalize(path).toLowerCase()),
+          )
           .toList();
 
       if (newPaths.isEmpty) continue;
