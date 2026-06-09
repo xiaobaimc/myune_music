@@ -17,6 +17,8 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
   bool _isRefreshing = false;
 
   Future<void> _showRefreshDialog() async {
+    if (_isRefreshing) return;
+
     final folderPlaylists = widget.notifier.playlists
         .where((p) => p.isFolderBased)
         .toList();
@@ -237,11 +239,18 @@ class _FolderSelectionDialog extends StatefulWidget {
 
 class _FolderSelectionDialogState extends State<_FolderSelectionDialog> {
   late Set<String> _selectedIds;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _selectedIds = widget.playlists.map((p) => p.id).toSet();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   bool get _isAllSelected => _selectedIds.length == widget.playlists.length;
@@ -272,8 +281,8 @@ class _FolderSelectionDialogState extends State<_FolderSelectionDialog> {
       title: const Text('选择文件夹歌单'),
       content: SizedBox(
         width: 400,
+        height: MediaQuery.of(context).size.height * 0.5,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CheckboxListTile(
@@ -284,34 +293,39 @@ class _FolderSelectionDialogState extends State<_FolderSelectionDialog> {
               dense: true,
             ),
             const Divider(height: 1),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: widget.playlists.length,
-                itemBuilder: (context, index) {
-                  final playlist = widget.playlists[index];
-                  return CheckboxListTile(
-                    value: _selectedIds.contains(playlist.id),
-                    onChanged: (_) => _togglePlaylist(playlist.id),
-                    title: Row(
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4),
-                          child: Icon(Icons.folder, size: 16),
-                        ),
-                        Flexible(
-                          child: Text(
-                            playlist.name,
-                            overflow: TextOverflow.ellipsis,
+            Expanded(
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: widget.playlists.length,
+                  itemBuilder: (context, index) {
+                    final playlist = widget.playlists[index];
+                    return CheckboxListTile(
+                      value: _selectedIds.contains(playlist.id),
+                      onChanged: (_) => _togglePlaylist(playlist.id),
+                      title: Row(
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: Icon(Icons.folder, size: 16),
                           ),
-                        ),
-                      ],
-                    ),
-                    subtitle: Text('${playlist.songFilePaths.length} 首歌曲'),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                  );
-                },
+                          Flexible(
+                            child: Text(
+                              playlist.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text('${playlist.songFilePaths.length} 首歌曲'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                    );
+                  },
+                ),
               ),
             ),
           ],
