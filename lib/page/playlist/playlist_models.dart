@@ -128,8 +128,16 @@ class LyricLine {
   final List<String> texts;
 
   final List<List<LyricToken>>? tokens;
+  final bool isInterlude;
+  final Duration? interludeDuration;
 
-  LyricLine({required this.timestamp, required this.texts, this.tokens});
+  LyricLine({
+    required this.timestamp,
+    required this.texts,
+    this.tokens,
+    this.isInterlude = false,
+    this.interludeDuration,
+  });
 
   bool get isKaraoke => tokens != null && tokens!.isNotEmpty;
 }

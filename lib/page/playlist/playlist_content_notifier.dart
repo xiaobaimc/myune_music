@@ -3465,7 +3465,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
             '',
           );
 
-          if (cleanedText.isEmpty) continue;
+          if (cleanedText.isEmpty) {
+            groupedLyrics.putIfAbsent(timestamp, () => []);
+            continue;
+          }
           groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
         }
       } catch (e) {
@@ -3485,7 +3488,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    return parsedLyrics;
+    return _processInterludes(parsedLyrics);
   }
 
   List<LyricLine>? _checkAndParseAwlrcFirst(List<String> lines) {
@@ -3581,7 +3584,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
             '',
           );
 
-          if (cleanedText.isEmpty) continue;
+          if (cleanedText.isEmpty) {
+            groupedLyrics.putIfAbsent(timestamp, () => []);
+            continue;
+          }
           groupedLyrics.putIfAbsent(timestamp, () => []).add(cleanedText);
         }
       } catch (e) {
@@ -3601,7 +3607,60 @@ class PlaylistContentNotifier extends ChangeNotifier {
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    return parsedLyrics;
+    return _processInterludes(parsedLyrics);
+  }
+
+  // 处理间奏
+  List<LyricLine> _processInterludes(List<LyricLine> lines) {
+    final List<LyricLine> result = [];
+    for (int i = 0; i < lines.length; i++) {
+      final currentLine = lines[i];
+
+      // 如果是空行（表示上一句的结束），且是普通LRC
+      if (!currentLine.isKaraoke && currentLine.texts.isEmpty) {
+        if (i < lines.length - 1) {
+          final nextLine = lines[i + 1];
+          final gap = nextLine.timestamp - currentLine.timestamp;
+          if (gap.inMilliseconds > 8000) {
+            result.add(LyricLine(
+              timestamp: currentLine.timestamp,
+              texts: [],
+              isInterlude: true,
+              interludeDuration: gap,
+            ));
+          }
+        }
+        // 如果不是间奏，或者在最后一行，直接丢弃空行，保持原有逻辑
+      } else {
+        result.add(currentLine);
+
+        // 如果是逐字歌词，检查当前句结束和下一句开始之间的间隔
+        if (currentLine.isKaraoke && i < lines.length - 1) {
+          final nextLine = lines[i + 1];
+          Duration currentEndTime = currentLine.timestamp;
+          if (currentLine.tokens != null) {
+            for (final tokenList in currentLine.tokens!) {
+              for (final token in tokenList) {
+                if (token.end > currentEndTime) {
+                  currentEndTime = token.end;
+                }
+              }
+            }
+          }
+
+          final gap = nextLine.timestamp - currentEndTime;
+          if (gap.inMilliseconds > 8000) {
+            result.add(LyricLine(
+              timestamp: currentEndTime,
+              texts: [],
+              isInterlude: true,
+              interludeDuration: gap,
+            ));
+          }
+        }
+      }
+    }
+    return result;
   }
 
   // 预处理LRC行，处理awlrc标签

@@ -51,7 +51,16 @@ class SingleLineLyricWidget extends StatelessWidget {
       );
     }
 
-    final LyricLine currentLine = lyrics[currentIndex];
+    int effectiveIndex = currentIndex;
+    while (effectiveIndex >= 0 && lyrics[effectiveIndex].isInterlude) {
+      effectiveIndex--;
+    }
+
+    if (effectiveIndex < 0) {
+      return const SizedBox.shrink();
+    }
+
+    final LyricLine currentLine = lyrics[effectiveIndex];
     final visibleTexts = currentLine.texts.take(maxLinesPerLyric);
 
     final List<Widget> textWidgets = visibleTexts.map((text) {

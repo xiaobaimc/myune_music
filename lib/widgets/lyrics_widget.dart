@@ -41,6 +41,7 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
+import 'interlude_animation_widget.dart';
 
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
@@ -395,7 +396,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final int maxAllowed = widget.maxLinesPerLyric;
     final int karaokeCount = (line.tokens != null) ? line.tokens!.length : 0;
 
-    if (isCurrent && line.isKaraoke) {
+    if (line.isInterlude) {
+      // 间奏逻辑延后到最后处理，因为它需要直接包裹整个 Padding
+    } else if (isCurrent && line.isKaraoke) {
       final int linesToTake = (karaokeCount > maxAllowed)
           ? maxAllowed
           : karaokeCount;
@@ -499,7 +502,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       }
     }
 
-    return Padding(
+    Widget itemWidget = Padding(
       padding: EdgeInsets.symmetric(
         vertical: lyricVerticalSpacing + 0.4 * (fontSize / 2),
         horizontal: 4,
@@ -552,6 +555,71 @@ class _LyricsWidgetState extends State<LyricsWidget>
         ),
       ),
     );
+
+    if (line.isInterlude) {
+      if (isCurrent) {
+        final playlistNotifier = Provider.of<PlaylistContentNotifier>(
+          context,
+          listen: false,
+        );
+        itemWidget = Padding(
+          padding: EdgeInsets.symmetric(
+            vertical: lyricVerticalSpacing + 0.4 * (fontSize / 2),
+            horizontal: 4,
+          ),
+          child: Align(
+            alignment: _getAlignmentFromTextAlign(lyricAlignment),
+            child: SizedBox(
+              width: maxWidth,
+              child: _withLyricEffects(
+                lyricAlignment: lyricAlignment,
+                isCurrent: isCurrent,
+                shouldBlur: shouldBlur,
+                distance: distance,
+                blurStrength: blurStrength,
+                child: Container(
+                  height: fontSize * 1.5,
+                  alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                  padding: EdgeInsets.only(
+                    left: lyricAlignment == TextAlign.left ? fontSize * 0.5 : 0,
+                    right: lyricAlignment == TextAlign.right
+                        ? fontSize * 0.5
+                        : 0,
+                  ),
+                  child: InterludeAnimationWidget(
+                    isCurrent: isCurrent,
+                    baseColor: colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.65,
+                    ),
+                    highlightColor: colorScheme.primary.withValues(alpha: 0.88),
+                    startTime: line.timestamp,
+                    interludeDuration: line.interludeDuration ?? Duration.zero,
+                    currentTime: playlistNotifier.currentPosition,
+                    isPlaying: playlistNotifier.isPlaying,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        return TweenAnimationBuilder<double>(
+          key: ValueKey('interlude_elastic_$lyricIndex'),
+          tween: Tween<double>(begin: 0.0, end: 1.0),
+          // 前 300ms 等待弹性滚动推开，后 200ms 淡入并放大圆点
+          duration: const Duration(milliseconds: 500),
+          builder: (context, value, child) {
+            final double dotValue = ((value - 0.6) / 0.4).clamp(0.0, 1.0);
+            return Opacity(opacity: dotValue, child: child);
+          },
+          child: itemWidget,
+        );
+      }
+
+      return const SizedBox.shrink();
+    }
+
+    return itemWidget;
   }
 
   Widget _buildElasticLyrics({
@@ -786,7 +854,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     ? line.tokens!.length
                     : 0;
 
-                if (isCurrent && line.isKaraoke) {
+                if (line.isInterlude) {
+                  // 间奏逻辑由外层统一包裹 AnimatedSize 处理
+                } else if (isCurrent && line.isKaraoke) {
                   // 限制卡拉OK显示的行数，不能超过总限制
                   final int linesToTake = (karaokeCount > maxAllowed)
                       ? maxAllowed
@@ -975,7 +1045,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   }
                 }
 
-                return Padding(
+                Widget itemWidget = Padding(
                   padding: EdgeInsets.symmetric(
                     vertical:
                         lyricVerticalSpacing +
@@ -1036,6 +1106,99 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     ),
                   ),
                 );
+
+                if (line.isInterlude) {
+                  if (isCurrent) {
+                    final playlistNotifier =
+                        Provider.of<PlaylistContentNotifier>(
+                          context,
+                          listen: false,
+                        );
+                    final Widget interludeWidget = Container(
+                      height: fontSize * 1.5,
+                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                      padding: EdgeInsets.only(
+                        left: lyricAlignment == TextAlign.left
+                            ? fontSize * 0.5
+                            : 0,
+                        right: lyricAlignment == TextAlign.right
+                            ? fontSize * 0.5
+                            : 0,
+                      ),
+                      child: InterludeAnimationWidget(
+                        isCurrent: isCurrent,
+                        baseColor: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.65,
+                        ),
+                        highlightColor: colorScheme.primary.withValues(
+                          alpha: 0.88,
+                        ),
+                        startTime: line.timestamp,
+                        interludeDuration:
+                            line.interludeDuration ?? Duration.zero,
+                        currentTime: playlistNotifier.currentPosition,
+                        isPlaying: playlistNotifier.isPlaying,
+                      ),
+                    );
+
+                    itemWidget = Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: lyricVerticalSpacing + 0.4 * (fontSize / 2),
+                        horizontal: 4,
+                      ),
+                      child: Align(
+                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                        child: SizedBox(
+                          width: maxWidth,
+                          child: AnimatedScale(
+                            alignment: _getAlignmentFromTextAlign(
+                              lyricAlignment,
+                            ),
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeInOutSine,
+                            scale: 1.02,
+                            child: isCurrent || !shouldBlur
+                                ? interludeWidget
+                                : ImageFiltered(
+                                    imageFilter: ui.ImageFilter.blur(
+                                      sigmaX: calculateSigma(distance),
+                                      sigmaY: calculateSigma(distance),
+                                    ),
+                                    child: interludeWidget,
+                                  ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  return AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    onEnd: () {
+                      if (!isCurrent && mounted && !enableLyricElasticScroll) {
+                        // 在普通滚动模式下，间奏折叠（高度从完整变0）会导致后续列表项瞬间上移
+                        // 从而导致原本居中对齐的目标位置偏上
+                        // 在高度收缩动画结束后，再补发一次滚动，将位置修正回来
+                        _scrollToCurrentLine();
+                      }
+                    },
+                    child: isCurrent
+                        ? TweenAnimationBuilder<double>(
+                            key: ValueKey('interlude_normal_$lyricIndex'),
+                            tween: Tween<double>(begin: 0.0, end: 1.0),
+                            duration: const Duration(milliseconds: 500),
+                            builder: (context, value, child) {
+                              final double dotValue = ((value - 0.6) / 0.4)
+                                  .clamp(0.0, 1.0);
+                              return Opacity(opacity: dotValue, child: child);
+                            },
+                            child: itemWidget,
+                          )
+                        : const SizedBox.shrink(),
+                  );
+                }
+
+                return itemWidget;
               },
             ),
           ),
