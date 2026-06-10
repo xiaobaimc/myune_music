@@ -83,7 +83,14 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
           builder: (ctx, setDialogState) {
             if (!hasStarted) {
               hasStarted = true;
-              _runScan(ctx, setDialogState, playlistIds);
+              _runScan(ctx, setDialogState, playlistIds).catchError((e) {
+                if (ctx.mounted) {
+                  setDialogState(() {
+                    _isScanning = false;
+                    _error = e.toString();
+                  });
+                }
+              });
             }
             return _buildProgressDialog(ctx, setDialogState);
           },
@@ -213,6 +220,7 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
           if (!mounted || !ctx.mounted) return;
           navigator.pop();
           if (mounted) {
+            setState(() => _isApplying = false);
             await showDialog(
               context: context,
               builder: (c) => AlertDialog(
@@ -228,10 +236,11 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
             );
           }
         } catch (e) {
-          setDialogState(() {
-            _isApplying = false;
-          });
+          if (ctx.mounted) {
+            navigator.pop();
+          }
           if (mounted) {
+            setState(() => _isApplying = false);
             await showDialog(
               context: context,
               builder: (c) => AlertDialog(
@@ -258,10 +267,15 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
       children: [
         Text('清理无效文件', style: Theme.of(context).textTheme.titleMedium),
         ElevatedButton.icon(
-          onPressed: () {
-            _showCleanDialog();
-          },
-          icon: const Icon(Icons.cleaning_services, size: 20),
+          onPressed:
+              (_isScanning || _isApplying) ? null : _showCleanDialog,
+          icon: (_isScanning || _isApplying)
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.cleaning_services, size: 20),
           label: const Text('开始扫描'),
         ),
       ],
@@ -286,11 +300,18 @@ class _PlaylistSelectionDialog extends StatefulWidget {
 
 class _PlaylistSelectionDialogState extends State<_PlaylistSelectionDialog> {
   late Set<String> _selectedIds;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _selectedIds = widget.playlists.map((p) => p.id).toSet();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   bool get _isAllSelected => _selectedIds.length == widget.playlists.length;
@@ -321,8 +342,8 @@ class _PlaylistSelectionDialogState extends State<_PlaylistSelectionDialog> {
       title: const Text('选择歌单'),
       content: SizedBox(
         width: 400,
+        height: MediaQuery.of(context).size.height * 0.5,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CheckboxListTile(
@@ -333,21 +354,26 @@ class _PlaylistSelectionDialogState extends State<_PlaylistSelectionDialog> {
               dense: true,
             ),
             const Divider(height: 1),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: widget.playlists.length,
-                itemBuilder: (context, index) {
-                  final playlist = widget.playlists[index];
-                  return CheckboxListTile(
-                    value: _selectedIds.contains(playlist.id),
-                    onChanged: (_) => _togglePlaylist(playlist.id),
-                    title: Text(playlist.name, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('${playlist.songFilePaths.length} 首歌曲'),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                  );
-                },
+            Expanded(
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: widget.playlists.length,
+                  itemBuilder: (context, index) {
+                    final playlist = widget.playlists[index];
+                    return CheckboxListTile(
+                      value: _selectedIds.contains(playlist.id),
+                      onChanged: (_) => _togglePlaylist(playlist.id),
+                      title: Text(playlist.name, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${playlist.songFilePaths.length} 首歌曲'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                    );
+                  },
+                ),
               ),
             ),
           ],

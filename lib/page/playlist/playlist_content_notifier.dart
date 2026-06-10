@@ -1448,7 +1448,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         playlist.songs = songs;
       }
 
-      _savePlaylists();
+      await _savePlaylists();
 
       // 如果当前选中的就是这个播放列表，则更新当前播放列表歌曲
       if (_selectedIndex == _playlists.indexOf(playlist)) {
@@ -2828,8 +2828,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final song = _currentPlaylistSongs.removeAt(oldIndex);
     _currentPlaylistSongs.insert(newIndex, song);
 
-    // 确保数据同步
+    // 同步更新 playlist.songs（引用一致时已随 _currentPlaylistSongs 同步）
     final currentPlaylist = _playlists[_selectedIndex];
+    if (currentPlaylist.songs != null &&
+        !identical(_currentPlaylistSongs, currentPlaylist.songs) &&
+        oldIndex >= 0 && oldIndex < currentPlaylist.songs!.length &&
+        newIndex >= 0 && newIndex <= currentPlaylist.songs!.length) {
+      currentPlaylist.songs!.removeAt(oldIndex);
+      currentPlaylist.songs!.insert(newIndex, song);
+    }
+
     final movedPath = currentPlaylist.songFilePaths.removeAt(oldIndex);
     currentPlaylist.songFilePaths.insert(newIndex, movedPath);
 
@@ -4214,12 +4222,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final songToMove = _currentPlaylistSongs.removeAt(index);
     _currentPlaylistSongs.insert(0, songToMove);
 
-    // 同步更新 playlist.songs 以保持引用一致
+    // 同步更新 playlist.songs（引用一致时已随 _currentPlaylistSongs 同步）
     final playlist = _playlists[_selectedIndex];
     if (playlist.songs != null &&
-        identical(_currentPlaylistSongs, playlist.songs)) {
-      // _currentPlaylistSongs 就是 playlist.songs 的引用，已同步
-    } else if (playlist.songs != null) {
+        !identical(_currentPlaylistSongs, playlist.songs) &&
+        index >= 0 && index < playlist.songs!.length) {
       playlist.songs!.removeAt(index);
       playlist.songs!.insert(0, songToMove);
     }
