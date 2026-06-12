@@ -19,7 +19,7 @@ import 'playlist_cleaner.dart';
 import 'folder_playlist_refresher.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.9.0';
+const String appVersion = '0.9.1';
 
 bool get isLinux => Platform.isLinux;
 

@@ -1179,7 +1179,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         // 在普通滚动模式下，间奏折叠（高度从完整变0）会导致后续列表项瞬间上移
                         // 从而导致原本居中对齐的目标位置偏上
                         // 在高度收缩动画结束后，再补发一次滚动，将位置修正回来
-                        _scrollToCurrentLine();
+                        // _scrollToCurrentLine();
                       }
                     },
                     child: isCurrent
