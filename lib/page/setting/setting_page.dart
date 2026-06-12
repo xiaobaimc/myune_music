@@ -736,7 +736,7 @@ class _SettingPageState extends State<SettingPage>
                             showDialog(
                               context: context,
                               builder: (BuildContext context) {
-                                return const AudioDeviceSelector();
+                                return const DeviceSelector();
                               },
                             );
                           },
@@ -793,19 +793,18 @@ class _SettingPageState extends State<SettingPage>
                     ),
                   ),
                   // 独占模式设置
-                  if (!isLinux) // 仅在非Linux平台显示
-                    Consumer<PlaylistContentNotifier>(
-                      builder: (context, playlistNotifier, child) {
-                        return SwitchListTile(
-                          title: const Row(
-                            children: [
-                              Text('启用独占模式'),
-                              SizedBox(width: 4),
-                              InfoIcon(
-                                '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这会导致其他应用无法播放音频\n仅在播放器处于活跃状态时可用',
-                              ),
-                            ],
-                          ),
+                  Consumer<PlaylistContentNotifier>(
+                    builder: (context, playlistNotifier, child) {
+                      return SwitchListTile(
+                        title: const Row(
+                          children: [
+                            Text('启用独占模式'),
+                            SizedBox(width: 4),
+                            InfoIcon(
+                              '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这会导致其他应用无法播放音频',
+                            ),
+                          ],
+                        ),
                           value: playlistNotifier.isExclusiveModeEnabled,
                           onChanged: playlistNotifier.toggleExclusiveMode,
                         );

@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  media_kit_libs_windows_audio
+  mpv_audio_kit
   screen_retriever_windows
   tray_manager
   url_launcher_windows
