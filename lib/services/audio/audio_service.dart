@@ -11,7 +11,9 @@ class AudioService {
         // configuration: const PlayerConfiguration(autoPlay: false),
         // Wait, default autoPlay is false anyway.
         configuration: const PlayerConfiguration(),
-      );
+      ) {
+    init();
+  }
 
   Future<void> init() async {
     try {
@@ -25,9 +27,7 @@ class AudioService {
 
   Future<void> dispose() async {
     await _player.stop();
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _player.dispose();
-    });
+    await _player.dispose();
   }
 
   Future<void> playSong(
