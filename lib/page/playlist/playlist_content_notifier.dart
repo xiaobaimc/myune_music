@@ -2441,37 +2441,27 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 启用独占模式
-
-  void toggleExclusiveMode(bool? value) {
+  Future<void> toggleExclusiveMode(bool? value) async {
     if (value == null) return;
 
-    _isExclusiveModeEnabled = value;
-
     if (value) {
-      // 立即启用独占模式
-      _enableExclusiveNow();
+      try {
+        await _audioService.player.setAudioExclusive(true);
+        _isExclusiveModeEnabled = true;
+      } catch (e) {
+        _errorStreamController.add('启用独占模式失败: $e');
+        _isExclusiveModeEnabled = false;
+      }
     } else {
-      // 禁用独占模式
-      _disableExclusiveMode();
+      try {
+        await _audioService.player.setAudioExclusive(false);
+        _isExclusiveModeEnabled = false;
+      } catch (e) {
+        _errorStreamController.add('禁用独占模式失败: $e');
+      }
     }
 
     notifyListeners();
-  }
-
-  Future<void> _enableExclusiveNow() async {
-    try {
-      await _audioService.player.setAudioExclusive(true);
-    } catch (e) {
-      _errorStreamController.add('启用独占模式失败: $e');
-    }
-  }
-
-  Future<void> _disableExclusiveMode() async {
-    try {
-      await _audioService.player.setAudioExclusive(false);
-    } catch (e) {
-      _errorStreamController.add('禁用独占模式失败: $e');
-    }
   }
 
   // 加载可用的音频设备
