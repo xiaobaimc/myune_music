@@ -1340,6 +1340,56 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return true; // 成功
   }
 
+  /// 跨平台路径差异计算：使用 Map<小写路径, Set<实际路径>> 处理大小写敏感/不敏感差异
+  /// - 大小写不敏感系统(Windows/macOS)：同名不同大小写视为同一文件，保留旧路径
+  /// - 大小写敏感系统(Linux)：保留所有实际路径的差异
+  ({List<String> added, List<String> removed}) _computePathDiff(
+    List<String> oldPaths,
+    Set<String> newRawPaths,
+  ) {
+    final oldMap = _buildPathMap(oldPaths);
+    final newMap = _buildPathMap(newRawPaths.toList());
+
+    final oldKeys = oldMap.keys.toSet();
+    final newKeys = newMap.keys.toSet();
+    final commonKeys = newKeys.intersection(oldKeys);
+
+    final added = <String>[];
+    final removed = <String>[];
+
+    // 键仅在旧集合中 -> 删除
+    for (final key in oldKeys.difference(newKeys)) {
+      removed.addAll(oldMap[key]!);
+    }
+    // 键仅在新集合中 -> 新增
+    for (final key in newKeys.difference(oldKeys)) {
+      added.addAll(newMap[key]!);
+    }
+    // 共有键：大小写敏感系统(Linux)上需要检查实际路径差异
+    if (Platform.isLinux) {
+      for (final key in commonKeys) {
+        final oldActual = oldMap[key]!;
+        final newActual = newMap[key]!;
+        for (final fp in oldActual) {
+          if (!newActual.contains(fp)) removed.add(fp);
+        }
+        for (final fp in newActual) {
+          if (!oldActual.contains(fp)) added.add(fp);
+        }
+      }
+    }
+
+    return (added: added, removed: removed);
+  }
+
+  Map<String, Set<String>> _buildPathMap(List<String> paths) {
+    final map = <String, Set<String>>{};
+    for (final fp in paths) {
+      map.putIfAbsent(p.normalize(fp).toLowerCase(), () => {}).add(fp);
+    }
+    return map;
+  }
+
   // 扫描文件夹并添加歌曲
   Future<void> _scanFoldersAndAddSongs(List<String> folderPaths) async {
     if (_selectedIndex < 0 || _selectedIndex >= _playlists.length) return;
@@ -1360,7 +1410,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           await for (final file in directory.list(
             recursive: true,
             followLinks: false,
-          )) {
+          ).handleError((_) {})) {
             if (file is File) {
               final extension = p.extension(file.path).toLowerCase();
               // 检查是否为支持的音频文件格式
@@ -1372,26 +1422,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
       }
 
-      // 比较新旧歌曲路径集合，只添加或删除变化的部分
-      final oldSongPaths = playlist.songFilePaths.toSet();
-      final newSongPaths = songPaths;
-
-      // 找出新增的歌曲路径
-      final addedSongPaths = newSongPaths.difference(oldSongPaths);
-      // 找出删除的歌曲路径
-      final removedSongPaths = oldSongPaths.difference(newSongPaths);
+      // 使用跨平台路径差异计算
+      final diff = _computePathDiff(playlist.songFilePaths, songPaths);
+      final addedPaths = diff.added;
+      final removedPathsSet = diff.removed.toSet();
 
       // 从现有列表中移除已删除的歌曲
-      playlist.songFilePaths.removeWhere(
-        (path) => removedSongPaths.contains(path),
-      );
+      playlist.songFilePaths.removeWhere((path) => removedPathsSet.contains(path));
 
       // 添加新增的歌曲到末尾
-      playlist.songFilePaths.addAll(addedSongPaths);
+      playlist.songFilePaths.addAll(addedPaths);
 
       // 解析新增歌曲的元数据
       final List<Song> newSongs = [];
-      for (final path in addedSongPaths) {
+      for (final path in addedPaths) {
         final song = await _parseSongMetadata(path);
         newSongs.add(song);
       }
@@ -1400,7 +1444,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       if (playlist.songs != null) {
         // 移除已删除的歌曲对象
         playlist.songs!.removeWhere(
-          (song) => removedSongPaths.contains(song.filePath),
+          (song) => removedPathsSet.contains(song.filePath),
         );
         // 添加新增的歌曲对象
         playlist.songs!.addAll(newSongs);
@@ -1425,9 +1469,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _updateAllSongsList();
 
       // 显示操作结果信息
-      if (addedSongPaths.isNotEmpty || removedSongPaths.isNotEmpty) {
+      if (addedPaths.isNotEmpty || removedPathsSet.isNotEmpty) {
         _infoStreamController.add(
-          '刷新完成：新增 ${addedSongPaths.length} 首歌曲，移除 ${removedSongPaths.length} 首歌曲',
+          '刷新完成：新增 ${addedPaths.length} 首歌曲，移除 ${removedPathsSet.length} 首歌曲',
         );
       } else {
         _infoStreamController.add('刷新完成：没有发现变化');
@@ -1474,32 +1518,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
     }
 
-    final oldSongPaths = playlist.songFilePaths
-        .map((fp) => p.normalize(fp).toLowerCase())
-        .toSet();
-    final newSongPaths = songPaths.map((fp) => fp.toLowerCase()).toSet();
+    final diff = _computePathDiff(playlist.songFilePaths, songPaths);
+    final addedPaths = diff.added;
+    final removedPathsSet = diff.removed.toSet();
 
-    final addedSongPaths = newSongPaths.difference(oldSongPaths).toList();
-    final removedSongPaths = oldSongPaths.difference(newSongPaths);
-
-    playlist.songFilePaths.removeWhere(
-      (path) => removedSongPaths.contains(p.normalize(path).toLowerCase()),
-    );
-
-    // addedSongPaths 是小写差集，需从原始 songPaths 中找回实际路径
-    final actualAddedPaths = songPaths
-        .where((fp) => addedSongPaths.contains(fp.toLowerCase()))
-        .toList();
-    playlist.songFilePaths.addAll(actualAddedPaths);
+    playlist.songFilePaths.removeWhere((path) => removedPathsSet.contains(path));
+    playlist.songFilePaths.addAll(addedPaths);
 
     if (playlist.songs != null) {
       playlist.songs!.removeWhere(
-        (song) =>
-            removedSongPaths.contains(p.normalize(song.filePath).toLowerCase()),
+        (song) => removedPathsSet.contains(song.filePath),
       );
 
       final parsedSongs = await Future.wait(
-        actualAddedPaths.map((path) => _parseSongMetadata(path)),
+        addedPaths.map((path) => _parseSongMetadata(path)),
       );
       playlist.songs!.addAll(parsedSongs);
     } else {
@@ -1518,7 +1550,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _updateAllSongsList();
     notifyListeners();
 
-    return (added: actualAddedPaths, removed: removedSongPaths.toList());
+    return (added: addedPaths, removed: diff.removed);
   }
 
   // 更新播放列表的文件夹路径

@@ -97,6 +97,14 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
         );
       },
     );
+
+    // 确保对话框关闭后重置状态并重建父组件，同步按钮状态
+    if (mounted) {
+      setState(() {
+        _isScanning = false;
+        _isApplying = false;
+      });
+    }
   }
 
   Future<void> _runScan(
