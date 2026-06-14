@@ -83,20 +83,21 @@ class _PlaylistCleanerState extends State<PlaylistCleaner> {
           builder: (ctx, setDialogState) {
             if (!hasStarted) {
               hasStarted = true;
-              _runScan(ctx, setDialogState, playlistIds).catchError((e) {
-                if (ctx.mounted) {
-                  setDialogState(() {
-                    _isScanning = false;
-                    _error = e.toString();
-                  });
-                }
-              });
+              _runScan(ctx, setDialogState, playlistIds);
             }
             return _buildProgressDialog(ctx, setDialogState);
           },
         );
       },
     );
+
+    // 确保对话框关闭后重置状态并重建父组件，同步按钮状态
+    if (mounted) {
+      setState(() {
+        _isScanning = false;
+        _isApplying = false;
+      });
+    }
   }
 
   Future<void> _runScan(

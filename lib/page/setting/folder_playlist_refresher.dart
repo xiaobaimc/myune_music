@@ -64,13 +64,20 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
         .toList();
 
     final changes = <String, ({List<String> added, List<String> removed})>{};
+    final failedNames = <String>[];
     for (final playlist in folderPlaylists) {
-      final result = await widget.notifier.refreshFolderPlaylistById(
-        playlist.id,
-      );
-      if (!mounted) return;
-      if (result.added.isNotEmpty || result.removed.isNotEmpty) {
-        changes[playlist.name] = result;
+      try {
+        final result = await widget.notifier.refreshFolderPlaylistById(
+          playlist.id,
+        );
+        if (!mounted) return;
+        if (result.added.isNotEmpty || result.removed.isNotEmpty) {
+          changes[playlist.name] = result;
+        }
+      } catch (e) {
+        debugPrint('刷新歌单 "${playlist.name}" 失败: $e');
+        failedNames.add(playlist.name);
+        if (!mounted) return;
       }
     }
 
@@ -78,7 +85,7 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
 
     if (!mounted) return;
 
-    if (changes.isEmpty) {
+    if (changes.isEmpty && failedNames.isEmpty) {
       await showDialog(
         context: context,
         builder: (c) => AlertDialog(
@@ -105,7 +112,7 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
                 thumbVisibility: true,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  child: _buildChangeContent(changes),
+                  child: _buildChangeContent(changes, failedNames),
                 ),
               ),
             ),
@@ -123,6 +130,7 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
 
   Widget _buildChangeContent(
     Map<String, ({List<String> added, List<String> removed})> changes,
+    List<String> failedNames,
   ) {
     final children = <Widget>[];
     for (final entry in changes.entries) {
@@ -191,6 +199,38 @@ class _FolderPlaylistRefresherState extends State<FolderPlaylistRefresher> {
               ],
             ],
           ),
+        ),
+      );
+    }
+    if (failedNames.isNotEmpty) {
+      children.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '刷新失败 (${failedNames.length} 个):',
+                style: TextStyle(
+                  color: Colors.orange.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            ...failedNames.map(
+              (name) => Padding(
+                padding: const EdgeInsets.only(left: 24),
+                child: Text(
+                  '• $name',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
