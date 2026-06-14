@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mpv_audio_kit/mpv_audio_kit.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../page/playlist/playlist_content_notifier.dart';
@@ -272,6 +272,10 @@ class _PlaybarState extends State<Playbar> {
                                     .round(),
                           );
                           player.seek(seekPosition); // 拖动结束后才实际 seek
+                          playlistNotifier.smtcManager?.updateTimeline(
+                            position: seekPosition,
+                            duration: totalDuration,
+                          );
                           // 拖动结束后，立即更新滑块到最终位置，即使定时器还未触发
                           setState(() {
                             _currentSliderValue =

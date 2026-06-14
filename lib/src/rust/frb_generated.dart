@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/audio_info.dart';
+import 'api/smtc.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -62,7 +63,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.10.0';
 
   @override
-  int get rustContentHash => -1116985668;
+  int get rustContentHash => -541531855;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -73,12 +74,47 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<void> crateApiSmtcSmtcFlutterClose({required SmtcFlutter that});
+
+  SmtcFlutter crateApiSmtcSmtcFlutterNew();
+
+  Stream<SMTCControlEvent> crateApiSmtcSmtcFlutterSubscribeToControlEvents({
+    required SmtcFlutter that,
+  });
+
+  Future<void> crateApiSmtcSmtcFlutterUpdateDisplay({
+    required SmtcFlutter that,
+    required String title,
+    required String artist,
+    String? imagePath,
+    Uint8List? imageData,
+  });
+
+  Future<void> crateApiSmtcSmtcFlutterUpdateState({
+    required SmtcFlutter that,
+    required SMTCState state,
+  });
+
+  Future<void> crateApiSmtcSmtcFlutterUpdateTimeline({
+    required SmtcFlutter that,
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
+  });
+
   Future<AudioInfoOptions> crateApiAudioInfoAudioInfoOptionsDefault();
 
   Future<AudioInfo> crateApiAudioInfoReadAudioInfo({
     required String path,
     required AudioInfoOptions options,
   });
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_SmtcFlutter;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_SmtcFlutter;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_SmtcFlutterPtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -90,6 +126,223 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<void> crateApiSmtcSmtcFlutterClose({required SmtcFlutter that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSmtcSmtcFlutterCloseConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterCloseConstMeta =>
+      const TaskConstMeta(debugName: "SmtcFlutter_close", argNames: ["that"]);
+
+  @override
+  SmtcFlutter crateApiSmtcSmtcFlutterNew() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSmtcSmtcFlutterNewConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterNewConstMeta =>
+      const TaskConstMeta(debugName: "SmtcFlutter_new", argNames: []);
+
+  @override
+  Stream<SMTCControlEvent> crateApiSmtcSmtcFlutterSubscribeToControlEvents({
+    required SmtcFlutter that,
+  }) {
+    final sink = RustStreamSink<SMTCControlEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+              that,
+              serializer,
+            );
+            sse_encode_StreamSink_smtc_control_event_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 3,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiSmtcSmtcFlutterSubscribeToControlEventsConstMeta,
+          argValues: [that, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterSubscribeToControlEventsConstMeta =>
+      const TaskConstMeta(
+        debugName: "SmtcFlutter_subscribe_to_control_events",
+        argNames: ["that", "sink"],
+      );
+
+  @override
+  Future<void> crateApiSmtcSmtcFlutterUpdateDisplay({
+    required SmtcFlutter that,
+    required String title,
+    required String artist,
+    String? imagePath,
+    Uint8List? imageData,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+            that,
+            serializer,
+          );
+          sse_encode_String(title, serializer);
+          sse_encode_String(artist, serializer);
+          sse_encode_opt_String(imagePath, serializer);
+          sse_encode_opt_list_prim_u_8_strict(imageData, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSmtcSmtcFlutterUpdateDisplayConstMeta,
+        argValues: [that, title, artist, imagePath, imageData],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterUpdateDisplayConstMeta =>
+      const TaskConstMeta(
+        debugName: "SmtcFlutter_update_display",
+        argNames: ["that", "title", "artist", "imagePath", "imageData"],
+      );
+
+  @override
+  Future<void> crateApiSmtcSmtcFlutterUpdateState({
+    required SmtcFlutter that,
+    required SMTCState state,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+            that,
+            serializer,
+          );
+          sse_encode_smtc_state(state, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSmtcSmtcFlutterUpdateStateConstMeta,
+        argValues: [that, state],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterUpdateStateConstMeta =>
+      const TaskConstMeta(
+        debugName: "SmtcFlutter_update_state",
+        argNames: ["that", "state"],
+      );
+
+  @override
+  Future<void> crateApiSmtcSmtcFlutterUpdateTimeline({
+    required SmtcFlutter that,
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+            that,
+            serializer,
+          );
+          sse_encode_i_64(position, serializer);
+          sse_encode_i_64(duration, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSmtcSmtcFlutterUpdateTimelineConstMeta,
+        argValues: [that, position, duration],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSmtcSmtcFlutterUpdateTimelineConstMeta =>
+      const TaskConstMeta(
+        debugName: "SmtcFlutter_update_timeline",
+        argNames: ["that", "position", "duration"],
+      );
+
+  @override
   Future<AudioInfoOptions> crateApiAudioInfoAudioInfoOptionsDefault() {
     return handler.executeNormal(
       NormalTask(
@@ -98,7 +351,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 7,
             port: port_,
           );
         },
@@ -133,7 +386,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 8,
             port: port_,
           );
         },
@@ -153,6 +406,55 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "read_audio_info",
         argNames: ["path", "options"],
       );
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_SmtcFlutter => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_SmtcFlutter => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter;
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AnyhowException(raw as String);
+  }
+
+  @protected
+  SmtcFlutter
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SmtcFlutterImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  SmtcFlutter
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SmtcFlutterImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  SmtcFlutter
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SmtcFlutterImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  RustStreamSink<SMTCControlEvent> dco_decode_StreamSink_smtc_control_event_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
 
   @protected
   String dco_decode_String(dynamic raw) {
@@ -222,6 +524,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
@@ -252,6 +566,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SMTCControlEvent dco_decode_smtc_control_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SMTCControlEvent.values[raw as int];
+  }
+
+  @protected
+  SMTCState dco_decode_smtc_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SMTCState.values[raw as int];
+  }
+
+  @protected
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -273,6 +599,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_String(deserializer);
+    return AnyhowException(inner);
+  }
+
+  @protected
+  SmtcFlutter
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SmtcFlutterImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  SmtcFlutter
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SmtcFlutterImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  SmtcFlutter
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SmtcFlutterImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  RustStreamSink<SMTCControlEvent> sse_decode_StreamSink_smtc_control_event_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
   }
 
   @protected
@@ -357,6 +740,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final len_ = sse_decode_i_32(deserializer);
@@ -408,6 +803,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SMTCControlEvent sse_decode_smtc_control_event(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return SMTCControlEvent.values[inner];
+  }
+
+  @protected
+  SMTCState sse_decode_smtc_state(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return SMTCState.values[inner];
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -431,9 +840,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
+    return deserializer.buffer.getBigUint64();
+  }
+
+  @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    SmtcFlutter self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SmtcFlutterImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    SmtcFlutter self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SmtcFlutterImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSmtcFlutter(
+    SmtcFlutter self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SmtcFlutterImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_StreamSink_smtc_control_event_Sse(
+    RustStreamSink<SMTCControlEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_smtc_control_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
   }
 
   @protected
@@ -500,6 +974,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -553,6 +1039,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_smtc_control_event(
+    SMTCControlEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_smtc_state(SMTCState self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint32(self);
@@ -576,8 +1077,62 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
+    serializer.buffer.putBigUint64(self);
   }
+}
+
+@sealed
+class SmtcFlutterImpl extends RustOpaque implements SmtcFlutter {
+  // Not to be used by end users
+  SmtcFlutterImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  SmtcFlutterImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_SmtcFlutter,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_SmtcFlutter,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_SmtcFlutterPtr,
+  );
+
+  Future<void> close() =>
+      RustLib.instance.api.crateApiSmtcSmtcFlutterClose(that: this);
+
+  Stream<SMTCControlEvent> subscribeToControlEvents() => RustLib.instance.api
+      .crateApiSmtcSmtcFlutterSubscribeToControlEvents(that: this);
+
+  /// 更新 SMTC 显示信息
+  /// 两种方式都支持：image_path (封面路径) 或 image_data (封面字节)
+  Future<void> updateDisplay({
+    required String title,
+    required String artist,
+    String? imagePath,
+    Uint8List? imageData,
+  }) => RustLib.instance.api.crateApiSmtcSmtcFlutterUpdateDisplay(
+    that: this,
+    title: title,
+    artist: artist,
+    imagePath: imagePath,
+    imageData: imageData,
+  );
+
+  Future<void> updateState({required SMTCState state}) => RustLib.instance.api
+      .crateApiSmtcSmtcFlutterUpdateState(that: this, state: state);
+
+  /// 更新时间轴信息
+  Future<void> updateTimeline({
+    required PlatformInt64 position,
+    required PlatformInt64 duration,
+  }) => RustLib.instance.api.crateApiSmtcSmtcFlutterUpdateTimeline(
+    that: this,
+    position: position,
+    duration: duration,
+  );
 }

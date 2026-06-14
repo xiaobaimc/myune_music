@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:mpv_audio_kit/mpv_audio_kit.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
@@ -47,7 +47,7 @@ void main() async {
   PaintingBinding.instance.imageCache.maximumSize = 200;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
 
-  MpvAudioKit.ensureInitialized();
+  MediaKit.ensureInitialized();
 
   await RustLib.init();
 

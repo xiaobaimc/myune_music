@@ -8,9 +8,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:mpv_audio_kit/mpv_audio_kit.dart' hide Playlist;
-import '../../services/audio/audio_service.dart';
+import 'package:media_kit/media_kit.dart' hide Playlist;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:colorgram/colorgram.dart';
@@ -18,7 +16,7 @@ import 'package:pinyin/pinyin.dart';
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
-
+import '../../media_service/smtc_manager.dart';
 import '../setting/settings_provider.dart';
 import '../../theme/theme_provider.dart';
 import '../statistics_page/playback_tracker.dart';
@@ -75,8 +73,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
   bool _coverWorkerRunning = false;
 
   // --- 播放器相关 ---
-  final AudioService _audioService = AudioService();
-  Player get mediaPlayer => _audioService.player;
+  final Player _mediaPlayer = Player(
+    configuration: const PlayerConfiguration(
+      pitch: true, // 启用音调控制功能
+    ),
+  ); // Media-Kit 播放器实例
+  Player get mediaPlayer => _mediaPlayer;
 
   StreamSubscription<bool>? _exclusiveModeSubscription; // 用于管理独占模式的流订阅
 
@@ -194,8 +196,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // --- 独占模式相关 ---
   bool _isExclusiveModeEnabled = false;
+  bool _isExclusiveModeAvailable = false;
 
   bool get isExclusiveModeEnabled => _isExclusiveModeEnabled;
+  bool get isExclusiveModeAvailable => _isExclusiveModeAvailable;
 
   // --- 多选相关 ---
   bool _isMultiSelectMode = false; // 是否处于多选模式
@@ -229,14 +233,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
   ];
 
   // --- SMTC ---
+  SmtcManager? _smtcManager;
+  SmtcManager? get smtcManager => _smtcManager;
 
   // --- 音频设备相关 ---
-  List<Device> _availableDevices = [];
-  Device? _selectedDevice;
+  List<AudioDevice> _availableAudioDevices = [];
+  AudioDevice? _selectedAudioDevice;
   bool _hasAttemptedRestore = false; // 防止每次设备列表变动都重复执行恢复逻辑
 
-  List<Device> get availableDevices => _availableDevices;
-  Device? get selectedDevice => _selectedDevice;
+  List<AudioDevice> get availableAudioDevices => _availableAudioDevices;
+  AudioDevice? get selectedAudioDevice => _selectedAudioDevice;
 
   // --- 视图上下文管理 ---
   DetailViewContext _currentDetailViewContext = DetailViewContext.playlist;
@@ -272,7 +278,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Stream<String> get errorStream => _errorStreamController.stream;
   Stream<String> get infoStream => _infoStreamController.stream;
 
-  DateTime? _lastDeviceErrorLogged;
+  DateTime? _lastAudioDeviceErrorLogged;
   // 限制日志写入间隔
   static const Duration _audioDeviceErrorInterval = Duration(seconds: 5);
 
@@ -280,17 +286,29 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _setupMediaPlayerListeners(); // 设置 media-kit 的监听器
     _initLogFile();
     _loadAllData(); // 使用一个统一的方法来加载所有数据
-    _loadDevices(); // 加载音频设备
+    _listenToPlayingState();
+    _loadAudioDevices(); // 加载音频设备
+    _smtcManager = SmtcManager(
+      onPlay: play,
+      onPause: pause,
+      onNext: playNext,
+      onPrevious: playPrevious,
+      onSeek: (position) async {
+        await _mediaPlayer.seek(position);
+      },
+      onSetPosition: (trackId, position) async {
+        await _mediaPlayer.seek(position);
+      },
+    );
   }
 
   Future<void> _initLogFile() async {
     try {
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final logDir = Directory(p.join(appDocDir.path, 'myune_music', 'logs'));
+      final logDir = Directory('logs');
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
       }
-      _logFile = File(p.join(logDir.path, 'errors.log'));
+      _logFile = File('${logDir.path}/errors.log');
     } catch (e) {
       // 如果无法创建日志文件，继续运行但不记录日志
     }
@@ -303,15 +321,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (errorString.contains('Could not open/initialize audio device')) {
       // 检查上次记录该错误的时间
       final now = DateTime.now();
-      if (_lastDeviceErrorLogged != null) {
-        final timeSinceLastLog = now.difference(_lastDeviceErrorLogged!);
+      if (_lastAudioDeviceErrorLogged != null) {
+        final timeSinceLastLog = now.difference(_lastAudioDeviceErrorLogged!);
         if (timeSinceLastLog < _audioDeviceErrorInterval) {
           // 距离上次记录少于5秒不记录
           return;
         }
       }
       // 更新最后记录时间
-      _lastDeviceErrorLogged = now;
+      _lastAudioDeviceErrorLogged = now;
     }
 
     try {
@@ -430,14 +448,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
         ? defaultLastVolume
         : storedLastVolume;
 
-    await _audioService.player.setVolume(_volume);
+    await _mediaPlayer.setVolume(_volume);
   }
 
   Future<void> setVolume(double newVolume) async {
     _volume = _sanitizeVolume(newVolume, 0.0);
     if (_volume > 1.0) _lastVolumeBeforeMute = _volume;
 
-    await _audioService.player.setVolume(_volume);
+    await _mediaPlayer.setVolume(_volume);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_volumeKey, _volume);
@@ -506,8 +524,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _equalizerGains = List<double>.from(preset.gains);
     }
 
-    await _audioService.player.setPitch(_currentPitch);
-    await _audioService.player.setRate(_currentPlaybackRate);
+    await _mediaPlayer.setPitch(_currentPitch);
+    await _mediaPlayer.setRate(_currentPlaybackRate);
     await _applyEqualizer();
   }
 
@@ -526,11 +544,31 @@ class PlaylistContentNotifier extends ChangeNotifier {
     });
   }
 
+  bool _isEqualizerFlat() {
+    return _equalizerGains.every((gain) => gain.abs() < 0.05);
+  }
+
   Future<void> _applyEqualizer() async {
-    await _audioService.applyEqualizer(
-      gains: _equalizerGains,
-      frequencies: equalizerFrequencies,
-    );
+    if (_mediaPlayer.platform is! NativePlayer) return;
+
+    final platform = _mediaPlayer.platform as dynamic;
+    try {
+      if (_isEqualizerFlat()) {
+        await platform.setProperty('af', '');
+        return;
+      }
+
+      final filters = <String>[];
+      for (var i = 0; i < equalizerFrequencies.length; i++) {
+        filters.add(
+          'equalizer=f=${equalizerFrequencies[i]}:t=q:w=1:g=${_equalizerGains[i].toStringAsFixed(1)}',
+        );
+      }
+
+      await platform.setProperty('af', 'lavfi=[${filters.join(',')}]');
+    } catch (e) {
+      //
+    }
   }
 
   @override
@@ -551,16 +589,21 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   void _safeDispose() {
-    _audioService.dispose();
+    _mediaPlayer.stop();
+    // 延迟500毫秒销毁播放器
+    // 这是为了解决更新到 Flutter 3.38+ 之后某些情况下的崩溃问题
+    // 参考https://github.com/media-kit/media-kit/issues/1340
+    Future.delayed(const Duration(milliseconds: 500));
+    _mediaPlayer.dispose();
   }
 
   void _setupMediaPlayerListeners() {
-    _audioService.player.stream.playing.listen((playing) {
+    _mediaPlayer.stream.playing.listen((playing) {
       _isPlaying = playing; // 更新内部状态
       notifyListeners();
     });
 
-    _audioService.player.stream.completed.listen((completed) async {
+    _mediaPlayer.stream.completed.listen((completed) async {
       if (completed) {
         _isPlaying = false; // 更新内部状态
         notifyListeners();
@@ -570,43 +613,32 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
     });
 
-    _audioService.player.stream.position.listen((position) {
+    _mediaPlayer.stream.position.listen((position) {
       _currentPosition = position; // 更新当前位置
       updateLyricLine(position);
-
+      _smtcManager?.updateTimeline(
+        position: position,
+        duration: _totalDuration,
+      );
       // notifyListeners();
     });
 
-    _audioService.player.stream.duration.listen((duration) {
+    _mediaPlayer.stream.duration.listen((duration) {
       _totalDuration = duration; // 更新总时长
+      _smtcManager?.updateTimeline(
+        position: _currentPosition,
+        duration: duration,
+      );
       // notifyListeners();
     });
 
-    // 监听系统媒体控制的指令
-    _audioService.player.stream.mediaSessionCommands.listen((command) {
-      if (command is MediaSessionCommandNext) {
-        playNext();
-      } else if (command is MediaSessionCommandPrevious) {
-        playPrevious();
-      }
-    });
-
-    _audioService.player.stream.error.listen((error) {
+    _mediaPlayer.stream.error.listen((error) {
       final errorString = error.toString();
-
-      // windows 在使用独占模式播放有损压缩的音频格式时
-      // mpv会报：MpvLogError(prefix: ao/wasapi, level: LogLevel.error, text: Error initializing device: AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED (0x88890019))
-      // 但实际不影响播放 直接把它过滤掉
-      // 每次用 libmpv 都会遇上神秘bug😡
-      if (errorString.contains('AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED')) {
-        // _writeErrorToLog("", error);
-        return;
-      }
 
       // 检测音频设备错误：当用户选择了特定设备且该设备不可用时，自动回退到自动选择
       if (errorString.contains('Could not open/initialize audio device') &&
           !_settingsProvider.audioDeviceIsAuto) {
-        useAutoDevice();
+        useAutoAudioDevice();
         _infoStreamController.add('所选音频设备不可用，已自动切换到默认设备');
         return;
       }
@@ -637,7 +669,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     });
   }
 
-  Future<void> _cleanupSmtc() async {}
+  Future<void> _cleanupSmtc() async {
+    await _smtcManager?.dispose();
+  }
 
   // --- 歌单相关 ---
 
@@ -1841,30 +1875,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 播放控制 ---
   Future<void> play() async {
     if (!_isPlaying) {
-      await _audioService.player.play(); // 开始播放
+      await _mediaPlayer.play(); // 开始播放
       _isPlaying = true; // 立即更新状态
 
       // 恢复播放跟踪
       PlaybackTracker().resumeTracking();
     }
-
+    await _smtcManager?.updateState(true);
     notifyListeners();
   }
 
   Future<void> pause() async {
     if (_isPlaying) {
-      await _audioService.player.pause();
+      await _mediaPlayer.pause();
       _isPlaying = false; // 立即更新状态
 
       // 暂停播放跟踪
       PlaybackTracker().pauseTracking();
     }
-
+    await _smtcManager?.updateState(false);
     notifyListeners();
   }
 
   Future<void> stop() async {
-    await _audioService.player.stop();
+    await _mediaPlayer.stop();
     _currentSong = null;
     _currentSongIndex = -1;
     _currentLyrics = [];
@@ -1872,12 +1906,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
     _isPlaying = false;
+    await _smtcManager?.updateState(false);
+    await _smtcManager?.updateTimeline(
+      position: Duration.zero,
+      duration: Duration.zero,
+    );
   }
 
   Future<void> setPitch(double pitch) async {
     if (pitch < 0.5 || pitch > 1.5) return;
     _currentPitch = pitch;
-    await _audioService.player.setPitch(pitch);
+    await _mediaPlayer.setPitch(pitch);
     await _saveAudioControlSettings();
     notifyListeners(); // 通知 UI 更新
   }
@@ -1885,7 +1924,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> setPlaybackRate(double rate) async {
     if (rate < 0.5 || rate > 2.0) return;
     _currentPlaybackRate = rate;
-    await _audioService.player.setRate(rate);
+    await _mediaPlayer.setRate(rate);
     await _saveAudioControlSettings();
     notifyListeners(); // 通知 UI 更新
   }
@@ -1928,8 +1967,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentPlaybackRate = 1.0;
     _equalizerPresetName = '默认';
     _equalizerGains = List<double>.filled(equalizerFrequencies.length, 0.0);
-    await _audioService.player.setPitch(_currentPitch);
-    await _audioService.player.setRate(_currentPlaybackRate);
+    await _mediaPlayer.setPitch(_currentPitch);
+    await _mediaPlayer.setRate(_currentPlaybackRate);
     await _applyEqualizer();
     await _saveAudioControlSettings();
     notifyListeners();
@@ -2401,34 +2440,57 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _currentSong = songToPlay;
 
     try {
-      final session = MediaSession(
-        appName: 'MyuneMusic',
-        title: songToPlay.title,
-        artist: songToPlay.artist,
-        album: songToPlay.album,
-        autoApplyPlaylistNavigation: false,
-      );
-      await _audioService.player.setMediaSession(session);
-
-      await _audioService.playSong(
-        songFilePath,
-        pitch: _currentPitch,
-        rate: _currentPlaybackRate,
-        eqGains: _equalizerGains,
-        eqFrequencies: equalizerFrequencies,
-        exclusiveMode: _isExclusiveModeEnabled,
-      );
-
+      await _mediaPlayer.stop();
       _currentLyrics = [];
       _currentLyricLineIndex = -1;
 
+      // media-kit 默认会读取同名字幕文件，包括.lrc
+      // 然后不知道为什么又会在错误流抛出读取失败，导致无法播放带有同名 .lrc 的音频文件
+
+      // 这里直接调用底层 mpv 的属性设置
+      if (_mediaPlayer.platform is NativePlayer) {
+        try {
+          await (_mediaPlayer.platform as dynamic).setProperty(
+            'sub-auto',
+            'no',
+          );
+
+          // // 先不设置独占模式，使用默认音频
+          // await (_mediaPlayer.platform as dynamic).setProperty('ao', 'wasapi');
+
+          // 监听播放状态，在开始播放后再启用独占模式
+          if (_isExclusiveModeEnabled) {
+            _enableExclusive();
+          }
+        } catch (e) {
+          //
+        }
+      }
+
+      await _mediaPlayer.open(Media(songFilePath));
+      await _mediaPlayer.setPitch(_currentPitch);
+      await _mediaPlayer.setRate(_currentPlaybackRate);
+      await _applyEqualizer();
+
       _loadLyricsForSong(songFilePath);
+
+      // 在 resume 之前更新SMTC元数据
+      await _smtcManager?.updateMetadata(
+        title: songToPlay.title,
+        artist: songToPlay.artist,
+        album: songToPlay.album,
+        albumArt: songToPlay.albumArt,
+      );
+      // await dumpCover(songToPlay.albumArt!);
+      await _smtcManager?.updateState(true); // 播放状态
 
       // 提取并应用动态主题色
       extractAndApplyDynamicColor(songToPlay.albumArt);
 
       // 开始跟踪播放
       PlaybackTracker().startTracking(songToPlay);
+
+      await _mediaPlayer.play(); // 最后执行播放
 
       // 保存播放状态
       savePlaybackState();
@@ -2441,35 +2503,91 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 启用独占模式
-  Future<void> toggleExclusiveMode(bool? value) async {
+  void _enableExclusive() {
+    // 取消之前的订阅（如果有的话）
+    _exclusiveModeSubscription?.cancel();
+
+    // 添加新的订阅
+    _exclusiveModeSubscription = _mediaPlayer.stream.playing.listen((
+      isPlaying,
+    ) async {
+      if (isPlaying && _isExclusiveModeEnabled) {
+        // 播放开始后，尝试切换到独占模式
+        await Future.delayed(const Duration(milliseconds: 500)); // 等待音频稳定
+
+        try {
+          await (_mediaPlayer.platform as dynamic).setProperty(
+            'audio-exclusive',
+            'yes',
+          );
+        } catch (e) {
+          //
+        }
+      }
+    });
+  }
+
+  void toggleExclusiveMode(bool? value) {
     if (value == null) return;
 
-    if (value) {
-      try {
-        await _audioService.player.setAudioExclusive(true);
-        _isExclusiveModeEnabled = true;
-      } catch (e) {
-        _errorStreamController.add('启用独占模式失败: $e');
-        _isExclusiveModeEnabled = false;
-      }
-    } else {
-      try {
-        await _audioService.player.setAudioExclusive(false);
-        _isExclusiveModeEnabled = false;
-      } catch (e) {
-        _errorStreamController.add('禁用独占模式失败: $e');
-      }
+    // 只有在播放器处于活跃状态时才能启用
+    if (value && !_mediaPlayer.state.playing) {
+      _infoStreamController.add('请先开始播放以启用独占模式');
+      notifyListeners();
+      return;
+    }
+
+    _isExclusiveModeEnabled = value;
+    _isExclusiveModeAvailable = _mediaPlayer.state.playing;
+
+    if (value && _isExclusiveModeAvailable) {
+      // 立即启用独占模式
+      _enableExclusiveNow();
+    } else if (!value) {
+      // 禁用独占模式
+      _disableExclusiveMode();
     }
 
     notifyListeners();
   }
 
+  void _enableExclusiveNow() {
+    try {
+      (_mediaPlayer.platform as dynamic).setProperty('audio-exclusive', 'yes');
+    } catch (e) {
+      _errorStreamController.add('启用独占模式失败: $e');
+    }
+  }
+
+  void _disableExclusiveMode() {
+    try {
+      (_mediaPlayer.platform as dynamic).setProperty('audio-exclusive', 'no');
+    } catch (e) {
+      _errorStreamController.add('禁用独占模式失败: $e');
+    }
+  }
+
+  // 监听播放状态变化，更新独占模式可用性
+  void _listenToPlayingState() {
+    _mediaPlayer.stream.playing.listen((isPlaying) async {
+      _isExclusiveModeAvailable = isPlaying;
+
+      // 如果启用了独占模式且现在开始播放，则启用独占模式
+      if (_isExclusiveModeEnabled && isPlaying) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        _enableExclusiveNow();
+      }
+
+      notifyListeners();
+    });
+  }
+
   // 加载可用的音频设备
-  Future<void> _loadDevices() async {
+  Future<void> _loadAudioDevices() async {
     try {
       // 监听音频设备变化
-      _audioService.player.stream.audioDevices.listen((devices) {
-        _availableDevices = devices;
+      _mediaPlayer.stream.audioDevices.listen((devices) {
+        _availableAudioDevices = devices;
         notifyListeners();
 
         // 如果是第一次获取到设备列表，尝试恢复用户上次的选择
@@ -2480,8 +2598,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       });
 
       // 获取当前选择的音频设备
-      _audioService.player.stream.audioDevice.listen((device) {
-        _selectedDevice = device;
+      _mediaPlayer.stream.audioDevice.listen((device) {
+        _selectedAudioDevice = device;
         notifyListeners();
       });
     } catch (e) {
@@ -2490,13 +2608,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 比对并恢复设备
-  Future<void> _restoreSavedDevice(List<Device> devices) async {
+  Future<void> _restoreSavedDevice(List<AudioDevice> devices) async {
     // 如果上次存的是"自动"，或者没有存储记录，则不做操作(默认为auto)
     if (_settingsProvider.audioDeviceIsAuto) {
       // 使用自动音频设备
-      await _audioService.player.setAudioDevice(
-        const Device(name: 'auto', description: 'Auto'),
-      );
+      await _mediaPlayer.setAudioDevice(AudioDevice.auto());
       return;
     }
 
@@ -2512,8 +2628,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
         return device.name == savedName && device.description == savedDesc;
       });
 
-      await _audioService.player.setAudioDevice(matchedDevice);
-      // 不需要手动设 _selectedDevice，stream.audioDevice 会回调更新
+      await _mediaPlayer.setAudioDevice(matchedDevice);
+      // 不需要手动设 _selectedAudioDevice，stream.audioDevice 会回调更新
     } catch (e) {
       // firstWhere 没找到会抛出异常，说明上次保存的设备当前不可用
       // 此时不做任何操作，保持auto即可
@@ -2523,10 +2639,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 选择音频设备
-  Future<void> selectDevice(Device device) async {
+  Future<void> selectAudioDevice(AudioDevice device) async {
     try {
-      await _audioService.player.setAudioDevice(device);
-      _selectedDevice = device;
+      await _mediaPlayer.setAudioDevice(device);
+      _selectedAudioDevice = device;
       notifyListeners();
 
       _settingsProvider.setAudioDevice(device.name, device.description);
@@ -2536,12 +2652,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 使用自动选择音频设备
-  Future<void> useAutoDevice() async {
+  Future<void> useAutoAudioDevice() async {
     try {
-      await _audioService.player.setAudioDevice(
-        const Device(name: 'auto', description: 'Auto'),
-      );
-      _selectedDevice = const Device(name: 'auto', description: 'Auto');
+      await _mediaPlayer.setAudioDevice(AudioDevice.auto());
+      _selectedAudioDevice = AudioDevice.auto();
       notifyListeners();
 
       _settingsProvider.setAudioDeviceToAuto();
@@ -2610,14 +2724,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
         // 加载歌词
         _loadLyricsForSong(songFilePath);
 
-        final session = MediaSession(
-          appName: 'MyuneMusic',
+        // 更新SMTC元数据
+        await _smtcManager?.updateMetadata(
           title: _currentSong!.title,
           artist: _currentSong!.artist,
-          album: _currentSong!.album,
-          autoApplyPlaylistNavigation: false,
+          albumArt: _currentSong!.albumArt,
         );
-        await _audioService.player.setMediaSession(session);
 
         // 提取并应用动态主题色
         extractAndApplyDynamicColor(_currentSong!.albumArt);
@@ -2627,12 +2739,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
           // 检查文件是否存在
           final songFile = File(songFilePath);
           if (await songFile.exists()) {
-            await _audioService.player.open(
+            await _mediaPlayer.open(
               Media(songFilePath),
               play: false, // 不自动播放
             );
 
-            // 播放状态恢复的后续处理
+            if (_mediaPlayer.platform is NativePlayer) {
+              try {
+                await (_mediaPlayer.platform as dynamic).setProperty(
+                  'sub-auto',
+                  'no',
+                );
+
+                // 监听播放状态，在开始播放后再启用独占模式
+                if (_isExclusiveModeEnabled) {
+                  _enableExclusive();
+                }
+              } catch (e) {
+                //
+              }
+            }
           } else {
             // 如果文件不存在，清除播放状态
             await _playlistManager.clearPlaybackState();
@@ -2706,10 +2832,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final currentPlaylist = _playlists[_selectedIndex];
     if (currentPlaylist.songs != null &&
         !identical(_currentPlaylistSongs, currentPlaylist.songs) &&
-        oldIndex >= 0 &&
-        oldIndex < currentPlaylist.songs!.length &&
-        newIndex >= 0 &&
-        newIndex <= currentPlaylist.songs!.length) {
+        oldIndex >= 0 && oldIndex < currentPlaylist.songs!.length &&
+        newIndex >= 0 && newIndex <= currentPlaylist.songs!.length) {
       currentPlaylist.songs!.removeAt(oldIndex);
       currentPlaylist.songs!.insert(newIndex, song);
     }
@@ -4021,7 +4145,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // // 如果当前是暂停状态，则开始播放
     // if (!_isPlaying) {
-    //   _audioService.player.play();
+    //   _mediaPlayer.play();
     // }
 
     if (newIndex != _currentLyricLineIndex) {
@@ -4102,8 +4226,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final playlist = _playlists[_selectedIndex];
     if (playlist.songs != null &&
         !identical(_currentPlaylistSongs, playlist.songs) &&
-        index >= 0 &&
-        index < playlist.songs!.length) {
+        index >= 0 && index < playlist.songs!.length) {
       playlist.songs!.removeAt(index);
       playlist.songs!.insert(0, songToMove);
     }
@@ -4120,7 +4243,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _infoStreamController.add('已将歌曲“${songToMove.title}”置于顶部');
 
     await _playlistManager.savePlaylists(_playlists);
-
+    await _smtcManager?.updateState(false);
     notifyListeners();
   }
 

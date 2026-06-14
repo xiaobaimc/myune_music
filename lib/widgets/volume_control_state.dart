@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:mpv_audio_kit/mpv_audio_kit.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'hover_overlay_control.dart';

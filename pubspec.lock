@@ -9,6 +9,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
+  archive:
+    dependency: transitive
+    description:
+      name: archive
+      sha256: "2fde1607386ab523f7a36bb3e7edb43bd58e6edaf2ffb29d8a6d578b297fdbbd"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.0.7"
   args:
     dependency: transitive
     description:
@@ -113,14 +121,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.4"
-  fftea:
-    dependency: transitive
-    description:
-      name: fftea
-      sha256: fede501db039de9737d527a28b1f5ede8f68342f2c4e53459dfa372bd271ed6c
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.5.0+1"
   file:
     dependency: transitive
     description:
@@ -296,6 +296,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  image:
+    dependency: transitive
+    description:
+      name: image
+      sha256: "4e973fcf4caae1a4be2fa0a13157aa38a8f9cb049db6529aa00b4d71abc4d928"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.5.4"
   inno_bundle:
     dependency: "direct dev"
     description:
@@ -397,6 +405,62 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.0"
+  media_kit:
+    dependency: "direct main"
+    description:
+      name: media_kit
+      sha256: ae9e79597500c7ad6083a3c7b7b7544ddabfceacce7ae5c9709b0ec16a5d6643
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.6"
+  media_kit_libs_android_audio:
+    dependency: transitive
+    description:
+      name: media_kit_libs_android_audio
+      sha256: "8f8f9759e537e12d66f08bc4d5279eb1bb21a0ccc519ff3442c68a9f3b6dd68b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.8"
+  media_kit_libs_audio:
+    dependency: "direct main"
+    description:
+      name: media_kit_libs_audio
+      sha256: "81bf506c234e81e3ec536ba72f8f700a928543c14c345220210cae0411636316"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.7"
+  media_kit_libs_ios_audio:
+    dependency: transitive
+    description:
+      name: media_kit_libs_ios_audio
+      sha256: "78ccf04e27d6b4ba00a355578ccb39b772f00d48269a6ac3db076edf2d51934f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.4"
+  media_kit_libs_linux:
+    dependency: "direct main"
+    description:
+      name: media_kit_libs_linux
+      sha256: "2b473399a49ec94452c4d4ae51cfc0f6585074398d74216092bf3d54aac37ecf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.1"
+  media_kit_libs_macos_audio:
+    dependency: transitive
+    description:
+      name: media_kit_libs_macos_audio
+      sha256: "3be21844df98f286de32808592835073cdef2c1a10078bac135da790badca950"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.4"
+  media_kit_libs_windows_audio:
+    dependency: "direct main"
+    description:
+      name: media_kit_libs_windows_audio
+      sha256: c2fd558cc87b9d89a801141fcdffe02e338a3b21a41a18fbd63d5b221a1b8e53
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.9"
   menu_base:
     dependency: transitive
     description:
@@ -421,14 +485,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.18.0"
-  mpv_audio_kit:
-    dependency: "direct main"
-    description:
-      name: mpv_audio_kit
-      sha256: "1d066c163e91694e3ecd71064add30db5001ddbc2331ab1aa500016157fc1840"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.6"
   nested:
     dependency: transitive
     description:
@@ -525,6 +581,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
+  posix:
+    dependency: transitive
+    description:
+      name: posix
+      sha256: "6323a5b0fa688b6a010df4905a56b00181479e6d10534cecfecede2aa55add61"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.3"
   process:
     dependency: transitive
     description:
@@ -556,6 +620,14 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  safe_local_storage:
+    dependency: transitive
+    description:
+      name: safe_local_storage
+      sha256: e9a21b6fec7a8aa62cc2585ff4c1b127df42f3185adbd2aca66b47abe2e80236
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   screen_retriever:
     dependency: transitive
     description:
@@ -729,6 +801,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.1"
+  synchronized:
+    dependency: transitive
+    description:
+      name: synchronized
+      sha256: "0669c70faae6270521ee4f05bffd2919892d42d1276e6c495be80174b6bc0ef6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.1"
   system_fonts:
     dependency: "direct main"
     description:
@@ -769,6 +849,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
+  universal_platform:
+    dependency: transitive
+    description:
+      name: universal_platform
+      sha256: "64e16458a0ea9b99260ceb5467a214c1f298d647c659af1bff6d3bf82536b1ec"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
+  uri_parser:
+    dependency: transitive
+    description:
+      name: uri_parser
+      sha256: "051c62e5f693de98ca9f130ee707f8916e2266945565926be3ff20659f7853ce"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.2"
   url_launcher:
     dependency: "direct main"
     description:

@@ -6,18 +6,18 @@
 // https://github.com/flutter/flutter/pull/175654
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:mpv_audio_kit/mpv_audio_kit.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:flutter_web_scroll/flutter_web_scroll.dart';
 import '../playlist/playlist_content_notifier.dart';
 
-class DeviceSelector extends StatefulWidget {
-  const DeviceSelector({super.key});
+class AudioDeviceSelector extends StatefulWidget {
+  const AudioDeviceSelector({super.key});
 
   @override
-  State<DeviceSelector> createState() => _DeviceSelectorState();
+  State<AudioDeviceSelector> createState() => _AudioDeviceSelectorState();
 }
 
-class _DeviceSelectorState extends State<DeviceSelector> {
+class _AudioDeviceSelectorState extends State<AudioDeviceSelector> {
   late final scrollController = ScrollController();
 
   @override
@@ -30,8 +30,8 @@ class _DeviceSelectorState extends State<DeviceSelector> {
   Widget build(BuildContext context) {
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
-        final devices = playlistNotifier.availableDevices;
-        final selectedDevice = playlistNotifier.selectedDevice;
+        final devices = playlistNotifier.availableAudioDevices;
+        final selectedDevice = playlistNotifier.selectedAudioDevice;
 
         return AlertDialog(
           title: const Text('选择音频设备'),
@@ -50,17 +50,17 @@ class _DeviceSelectorState extends State<DeviceSelector> {
                     // 自动选择选项
                     ListTile(
                       title: const Text('自动选择'),
-                      leading: Radio<Device?>(
-                        value: const Device(name: 'auto', description: 'Auto'),
+                      leading: Radio<AudioDevice?>(
+                        value: AudioDevice.auto(),
                         // ignore: deprecated_member_use
                         groupValue: selectedDevice,
                         // ignore: deprecated_member_use
                         onChanged: (device) {
-                          playlistNotifier.useAutoDevice();
+                          playlistNotifier.useAutoAudioDevice();
                         },
                       ),
                       onTap: () {
-                        playlistNotifier.useAutoDevice();
+                        playlistNotifier.useAutoAudioDevice();
                       },
                     ),
                     const Divider(),
@@ -85,19 +85,19 @@ class _DeviceSelectorState extends State<DeviceSelector> {
                       return ListTile(
                         title: titleWidget,
                         subtitle: subtitleWidget,
-                        leading: Radio<Device?>(
+                        leading: Radio<AudioDevice?>(
                           value: device,
                           // ignore: deprecated_member_use
                           groupValue: selectedDevice,
                           // ignore: deprecated_member_use
                           onChanged: (selected) {
                             if (selected != null) {
-                              playlistNotifier.selectDevice(selected);
+                              playlistNotifier.selectAudioDevice(selected);
                             }
                           },
                         ),
                         onTap: () {
-                          playlistNotifier.selectDevice(device);
+                          playlistNotifier.selectAudioDevice(device);
                         },
                       );
                     }),
