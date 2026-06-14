@@ -1,6 +1,58 @@
 import 'dart:async';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 
+class FakePlayerStream implements PlayerStream {
+  @override
+  Stream<Duration> get position => const Stream<Duration>.empty();
+
+  @override
+  Stream<bool> get playing => const Stream<bool>.empty();
+
+  @override
+  Stream<Duration> get duration => const Stream<Duration>.empty();
+
+  @override
+  Stream<bool> get completed => const Stream<bool>.empty();
+
+  @override
+  Stream<MediaSessionCommand> get mediaSessionCommands =>
+      const Stream<MediaSessionCommand>.empty();
+
+  @override
+  Stream<MpvPlayerError> get error => const Stream<MpvPlayerError>.empty();
+
+  @override
+  Stream<List<Device>> get audioDevices => Stream<List<Device>>.value(const []);
+
+  @override
+  Stream<Device> get audioDevice =>
+      Stream<Device>.value(const Device(name: 'auto', description: 'Auto'));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    return const Stream<dynamic>.empty();
+  }
+}
+
+class FakePlayer implements Player {
+  final _stream = FakePlayerStream();
+  final _state = const PlayerState();
+
+  @override
+  PlayerStream get stream => _stream;
+
+  @override
+  PlayerState get state => _state;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.isMethod) {
+      return Future<void>.value();
+    }
+    return null;
+  }
+}
+
 class AudioService {
   final Player _player;
 

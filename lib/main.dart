@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
@@ -293,6 +294,7 @@ class _MyAppState extends State<MyApp> with TrayListener {
 
     // 监听播放进度变化以更新任务栏进度
     _taskbarPositionSubscription = _playlistNotifier.mediaPlayer.stream.position
+        .throttleTime(const Duration(milliseconds: 500))
         .listen((position) async {
           if (!_taskbarReady || !settings.showTaskbarProgress) return;
 
@@ -402,7 +404,7 @@ class _MyAppState extends State<MyApp> with TrayListener {
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
-        return MaterialApp(
+        Widget app = MaterialApp(
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -422,6 +424,15 @@ class _MyAppState extends State<MyApp> with TrayListener {
 
           home: const AppShell(),
         );
+
+        // 在 Windows 平台上排除语义化
+        // https://github.com/flutter/flutter/issues/182444
+        // TODO: 待修复
+        if (Platform.isWindows) {
+          app = ExcludeSemantics(child: app);
+        }
+
+        return app;
       },
     );
   }

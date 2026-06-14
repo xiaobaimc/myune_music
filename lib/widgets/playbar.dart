@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
+import 'package:rxdart/rxdart.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'volume_control_state.dart';
 import '../page/song_detail_page.dart';
@@ -35,12 +35,9 @@ class _PlaybarState extends State<Playbar> {
   double _currentSliderValue = 0.0;
   bool _isDraggingSlider = false; // 判断用户是否正在拖动滑块
 
-  Timer? _progressTimer; // 声明定时器，用于定期更新播放进度
-
   @override
   void initState() {
     super.initState();
-    _startProgressTimer(); // 组件初始化时启动定时器
   }
 
   @override
@@ -50,38 +47,7 @@ class _PlaybarState extends State<Playbar> {
 
   @override
   void dispose() {
-    _progressTimer?.cancel(); // 在组件销毁时取消定时器
     super.dispose();
-  }
-
-  void _startProgressTimer() {
-    _progressTimer?.cancel(); // 确保只有一个定时器在运行
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 200), (
-      timer,
-    ) async {
-      // 检查组件是否仍然挂载在widget树上，避免在dispose后调用setState
-      if (!mounted) return;
-
-      final playlistNotifier = Provider.of<PlaylistContentNotifier>(
-        context,
-        listen: false,
-      );
-      final Player player = playlistNotifier.mediaPlayer;
-
-      // 如果用户正在拖动滑块，则暂停自动更新，避免UI跳动
-      if (!_isDraggingSlider) {
-        // 获取当前播放位置和总时长
-        final currentPosition = player.state.position;
-        final totalDuration = player.state.duration;
-
-        setState(() {
-          // 根据当前位置和总时长计算滑块的值
-          _currentSliderValue = totalDuration.inMilliseconds == 0
-              ? 0.0
-              : currentPosition.inMilliseconds / totalDuration.inMilliseconds;
-        });
-      }
-    });
   }
 
   @override
@@ -236,50 +202,75 @@ class _PlaybarState extends State<Playbar> {
                         thumbColor: accentColor,
                         showValueIndicator: ShowValueIndicator.onDrag,
                       ),
-                      child: Slider(
-                        value: _currentSliderValue,
-                        min: 0.0,
-                        max: 1.0,
-                        label: _isDraggingSlider
-                            ? _formatDuration(
-                                Duration(
-                                  milliseconds:
-                                      (player.state.duration.inMilliseconds *
-                                              _currentSliderValue)
-                                          .round(),
-                                ),
-                              )
-                            : null,
-                        onChanged: (double newValue) {
-                          // 用户拖动时，只更新内部状态
-                          setState(() {
-                            _isDraggingSlider = true;
-                            _currentSliderValue = newValue;
-                          });
-                        },
-                        onChangeStart: (double startValue) {
-                          _isDraggingSlider = true; // 开始拖动
-                        },
-                        onChangeEnd: (double endValue) async {
-                          _isDraggingSlider = false; // 结束拖动
-
-                          // 获取当前总时长，用于计算seek位置
+                      child: StreamBuilder<Duration?>(
+                        stream: player.stream.position.throttleTime(
+                          const Duration(milliseconds: 200),
+                        ),
+                        initialData: player.state.position,
+                        builder: (context, snapshot) {
+                          final currentPosition =
+                              snapshot.data ?? Duration.zero;
                           final totalDuration = player.state.duration;
+                          double sliderValue = 0.0;
 
-                          final seekPosition = Duration(
-                            milliseconds:
-                                (totalDuration.inMilliseconds * endValue)
-                                    .round(),
-                          );
-                          player.seek(seekPosition); // 拖动结束后才实际 seek
-                          // 拖动结束后，立即更新滑块到最终位置，即使定时器还未触发
-                          setState(() {
-                            _currentSliderValue =
-                                totalDuration.inMilliseconds == 0
+                          if (_isDraggingSlider) {
+                            sliderValue = _currentSliderValue;
+                          } else {
+                            sliderValue = totalDuration.inMilliseconds == 0
                                 ? 0.0
-                                : seekPosition.inMilliseconds /
+                                : currentPosition.inMilliseconds /
                                       totalDuration.inMilliseconds;
-                          });
+                          }
+
+                          return Slider(
+                            value: sliderValue.clamp(0.0, 1.0),
+                            min: 0.0,
+                            max: 1.0,
+                            label: _isDraggingSlider
+                                ? _formatDuration(
+                                    Duration(
+                                      milliseconds:
+                                          (player
+                                                      .state
+                                                      .duration
+                                                      .inMilliseconds *
+                                                  sliderValue)
+                                              .round(),
+                                    ),
+                                  )
+                                : null,
+                            onChanged: (double newValue) {
+                              // 用户拖动时，只更新内部状态
+                              setState(() {
+                                _isDraggingSlider = true;
+                                _currentSliderValue = newValue;
+                              });
+                            },
+                            onChangeStart: (double startValue) {
+                              _isDraggingSlider = true; // 开始拖动
+                            },
+                            onChangeEnd: (double endValue) async {
+                              _isDraggingSlider = false; // 结束拖动
+
+                              // 获取当前总时长，用于计算seek位置
+                              final totalDuration = player.state.duration;
+
+                              final seekPosition = Duration(
+                                milliseconds:
+                                    (totalDuration.inMilliseconds * endValue)
+                                        .round(),
+                              );
+                              player.seek(seekPosition); // 拖动结束后才实际 seek
+                              // 拖动结束后，立即更新滑块到最终位置，即使定时器还未触发
+                              setState(() {
+                                _currentSliderValue =
+                                    totalDuration.inMilliseconds == 0
+                                    ? 0.0
+                                    : seekPosition.inMilliseconds /
+                                          totalDuration.inMilliseconds;
+                              });
+                            },
+                          );
                         },
                       ),
                     ),
@@ -333,7 +324,9 @@ class _PlaybarState extends State<Playbar> {
                   children: <Widget>[
                     // 播放时间显示 (当前时间 / 总时长)
                     StreamBuilder<Duration?>(
-                      stream: player.stream.position, // 监听当前位置
+                      stream: player.stream.position.throttleTime(
+                        const Duration(milliseconds: 200),
+                      ), // 监听当前位置
                       initialData: playlistNotifier
                           .currentPosition, // 使用 Notifier 中的同步数据
                       builder: (context, positionSnapshot) {
@@ -346,11 +339,13 @@ class _PlaybarState extends State<Playbar> {
                           builder: (context, totalDurationSnapshot) {
                             final totalDuration =
                                 totalDurationSnapshot.data ?? Duration.zero;
-                            return Text(
-                              '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
-                              style: TextStyle(
-                                color: onBarColor.withValues(alpha: 0.7),
-                                fontSize: 12,
+                            return RepaintBoundary(
+                              child: Text(
+                                '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
+                                style: TextStyle(
+                                  color: onBarColor.withValues(alpha: 0.7),
+                                  fontSize: 12,
+                                ),
                               ),
                             );
                           },
