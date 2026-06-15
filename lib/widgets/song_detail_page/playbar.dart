@@ -27,6 +27,7 @@ class Playbar extends StatefulWidget {
 class _PlaybarState extends State<Playbar> {
   double _currentSliderValue = 0.0;
   bool _isDraggingSlider = false; // 判断用户是否正在拖动滑块
+  int _dragSessionId = 0;
 
   @override
   void initState() {
@@ -140,22 +141,28 @@ class _PlaybarState extends State<Playbar> {
                       });
                     },
                     onChangeStart: (double startValue) {
+                      _dragSessionId++;
                       _isDraggingSlider = true; // 开始拖动
                     },
                     onChangeEnd: (double endValue) async {
-                      _isDraggingSlider = false; // 结束拖动
+                      final currentSessionId = _dragSessionId;
                       final totalDuration = player.state.duration;
                       final seekPosition = Duration(
                         milliseconds: (totalDuration.inMilliseconds * endValue)
                             .round(),
                       );
                       player.seek(seekPosition); // 拖动结束后才实际 seek
-                      setState(() {
-                        _currentSliderValue = totalDuration.inMilliseconds == 0
-                            ? 0.0
-                            : seekPosition.inMilliseconds /
-                                  totalDuration.inMilliseconds;
-                      });
+                      await Future.delayed(const Duration(milliseconds: 200));
+                      if (mounted && _dragSessionId == currentSessionId) {
+                        setState(() {
+                          _isDraggingSlider = false; // 结束拖动
+                          _currentSliderValue =
+                              totalDuration.inMilliseconds == 0
+                              ? 0.0
+                              : seekPosition.inMilliseconds /
+                                    totalDuration.inMilliseconds;
+                        });
+                      }
                     },
                   );
                 },
@@ -256,6 +263,7 @@ class PortraitPlaybar extends StatefulWidget {
 class _PortraitPlaybarState extends State<PortraitPlaybar> {
   double _currentSliderValue = 0.0;
   bool _isDraggingSlider = false; // 判断用户是否正在拖动滑块
+  int _dragSessionId = 0;
 
   @override
   void initState() {
@@ -372,23 +380,28 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                         });
                       },
                       onChangeStart: (double startValue) {
+                        _dragSessionId++;
                         _isDraggingSlider = true; // 开始拖动
                       },
                       onChangeEnd: (double endValue) async {
-                        _isDraggingSlider = false; // 结束拖动
+                        final currentSessionId = _dragSessionId;
                         final totalDuration = player.state.duration;
                         final seekPosition = Duration(
                           milliseconds:
                               (totalDuration.inMilliseconds * endValue).round(),
                         );
                         player.seek(seekPosition); // 拖动结束后才实际 seek
-                        setState(() {
-                          _currentSliderValue =
-                              totalDuration.inMilliseconds == 0
-                              ? 0.0
-                              : seekPosition.inMilliseconds /
-                                    totalDuration.inMilliseconds;
-                        });
+                        await Future.delayed(const Duration(milliseconds: 200));
+                        if (mounted && _dragSessionId == currentSessionId) {
+                          setState(() {
+                            _isDraggingSlider = false; // 结束拖动
+                            _currentSliderValue =
+                                totalDuration.inMilliseconds == 0
+                                ? 0.0
+                                : seekPosition.inMilliseconds /
+                                      totalDuration.inMilliseconds;
+                          });
+                        }
                       },
                     );
                   },

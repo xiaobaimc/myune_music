@@ -34,6 +34,7 @@ class Playbar extends StatefulWidget {
 class _PlaybarState extends State<Playbar> {
   double _currentSliderValue = 0.0;
   bool _isDraggingSlider = false; // 判断用户是否正在拖动滑块
+  int _dragSessionId = 0; // 用于追踪拖动会话，避免在连续拖动时提早结束拖动状态
 
   @override
   void initState() {
@@ -247,10 +248,11 @@ class _PlaybarState extends State<Playbar> {
                               });
                             },
                             onChangeStart: (double startValue) {
+                              _dragSessionId++;
                               _isDraggingSlider = true; // 开始拖动
                             },
                             onChangeEnd: (double endValue) async {
-                              _isDraggingSlider = false; // 结束拖动
+                              final currentSessionId = _dragSessionId;
 
                               // 获取当前总时长，用于计算seek位置
                               final totalDuration = player.state.duration;
@@ -261,14 +263,24 @@ class _PlaybarState extends State<Playbar> {
                                         .round(),
                               );
                               player.seek(seekPosition); // 拖动结束后才实际 seek
+
+                              // 等待一小段时间，让播放器状态流更新，避免进度条闪烁
+                              await Future.delayed(
+                                const Duration(milliseconds: 200),
+                              );
+
                               // 拖动结束后，立即更新滑块到最终位置，即使定时器还未触发
-                              setState(() {
-                                _currentSliderValue =
-                                    totalDuration.inMilliseconds == 0
-                                    ? 0.0
-                                    : seekPosition.inMilliseconds /
-                                          totalDuration.inMilliseconds;
-                              });
+                              if (mounted &&
+                                  _dragSessionId == currentSessionId) {
+                                setState(() {
+                                  _isDraggingSlider = false; // 结束拖动
+                                  _currentSliderValue =
+                                      totalDuration.inMilliseconds == 0
+                                      ? 0.0
+                                      : seekPosition.inMilliseconds /
+                                            totalDuration.inMilliseconds;
+                                });
+                              }
                             },
                           );
                         },
