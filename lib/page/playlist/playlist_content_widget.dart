@@ -1250,11 +1250,11 @@ class _SongTileWidgetState extends State<SongTileWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                IconButton(
-                  tooltip: '置于顶部',
-                  icon: Icon(Icons.arrow_circle_up_rounded, color: iconColor),
-                  onPressed: () => Navigator.pop(context, 'moveToTop'),
-                ),
+                // IconButton(
+                //   tooltip: '置于顶部',
+                //   icon: Icon(Icons.arrow_circle_up_rounded, color: iconColor),
+                //   onPressed: () => Navigator.pop(context, 'moveToTop'),
+                // ),
                 IconButton(
                   tooltip: '添加到播放队列',
                   icon: Icon(
@@ -1419,16 +1419,17 @@ class _SongTileWidgetState extends State<SongTileWidget> {
 
     if (!mounted || result == null) return;
 
-    if (result == 'moveToTop') {
-      final isAllSongsContext =
-          widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
-      // 根据页面判断调用哪个方法
-      if (isAllSongsContext) {
-        await notifier.moveSongToTopInAllSongs(widget.index);
-      } else {
-        await notifier.moveSongToTop(widget.index);
-      }
-    } else if (result == 'addToQueue') {
+    // if (result == 'moveToTop') {
+    //   final isAllSongsContext =
+    //       widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
+    //   // 根据页面判断调用哪个方法
+    //   if (isAllSongsContext) {
+    //     await notifier.moveSongToTopInAllSongs(widget.index);
+    //   } else {
+    //     await notifier.moveSongToTop(widget.index);
+    //   }
+    // } else
+    if (result == 'addToQueue') {
       // 添加到播放队列
       await notifier.addToPlayingQueue(widget.song);
     } else if (result == 'nextSong') {
