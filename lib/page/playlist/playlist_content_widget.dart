@@ -1250,11 +1250,11 @@ class _SongTileWidgetState extends State<SongTileWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                IconButton(
-                  tooltip: '置于顶部',
-                  icon: Icon(Icons.arrow_circle_up_rounded, color: iconColor),
-                  onPressed: () => Navigator.pop(context, 'moveToTop'),
-                ),
+                // IconButton(
+                //   tooltip: '置于顶部',
+                //   icon: Icon(Icons.arrow_circle_up_rounded, color: iconColor),
+                //   onPressed: () => Navigator.pop(context, 'moveToTop'),
+                // ),
                 IconButton(
                   tooltip: '添加到播放队列',
                   icon: Icon(
@@ -1275,6 +1275,12 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                   tooltip: '显示文件',
                   icon: Icon(Icons.folder_outlined, color: iconColor),
                   onPressed: () => Navigator.pop(context, 'showInExplorer'),
+                ),
+                // 添加到歌单按钮
+                IconButton(
+                  tooltip: '添加到歌单',
+                  icon: Icon(Icons.playlist_add, color: iconColor),
+                  onPressed: () => Navigator.pop(context, 'addToPlaylist'),
                 ),
                 if (!isFolderBasedPlaylist)
                   IconButton(
@@ -1413,16 +1419,17 @@ class _SongTileWidgetState extends State<SongTileWidget> {
 
     if (!mounted || result == null) return;
 
-    if (result == 'moveToTop') {
-      final isAllSongsContext =
-          widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
-      // 根据页面判断调用哪个方法
-      if (isAllSongsContext) {
-        await notifier.moveSongToTopInAllSongs(widget.index);
-      } else {
-        await notifier.moveSongToTop(widget.index);
-      }
-    } else if (result == 'addToQueue') {
+    // if (result == 'moveToTop') {
+    //   final isAllSongsContext =
+    //       widget.contextPlaylist.id == notifier.allSongsVirtualPlaylist.id;
+    //   // 根据页面判断调用哪个方法
+    //   if (isAllSongsContext) {
+    //     await notifier.moveSongToTopInAllSongs(widget.index);
+    //   } else {
+    //     await notifier.moveSongToTop(widget.index);
+    //   }
+    // } else
+    if (result == 'addToQueue') {
       // 添加到播放队列
       await notifier.addToPlayingQueue(widget.song);
     } else if (result == 'nextSong') {
@@ -1503,7 +1510,89 @@ class _SongTileWidgetState extends State<SongTileWidget> {
       if (context.mounted) {
         context.read<NavigationNotifier>().pushRoute('/artists');
       }
+      // 添加到歌单：弹出歌单选择对话框，用户选择目标歌单后调用 addSongsToPlaylistById
+    } else if (result == 'addToPlaylist') {
+      _showSelectPlaylistDialog(context, notifier, [widget.song.filePath]);
     }
+  }
+
+  /// 弹出歌单选择对话框，将指定歌曲路径添加到用户选择的歌单中。
+  ///
+  /// [songPaths] 是要添加的歌曲文件路径列表，支持单曲或多曲。
+  /// 会排除当前所在歌单和基于文件夹的歌单
+  void _showSelectPlaylistDialog(
+    BuildContext context,
+    PlaylistContentNotifier notifier,
+    List<String> songPaths,
+  ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('添加到歌单'),
+          content: Selector<PlaylistContentNotifier, List<Playlist>>(
+            selector: (context, notifier) => notifier.playlists,
+            builder: (context, playlists, _) {
+              final scrollController = ScrollController();
+              final currentPlaylistIndex = notifier.selectedIndex;
+              final currentPlaylist = currentPlaylistIndex >= 0
+                  ? playlists[currentPlaylistIndex]
+                  : null;
+
+              // 过滤出可选的目标歌单：排除当前歌单和文件夹歌单
+              final targetPlaylists = playlists.where((playlist) {
+                return playlist != currentPlaylist && !playlist.isFolderBased;
+              }).toList();
+
+              if (targetPlaylists.isEmpty) {
+                return const Text('没有可添加的歌单');
+              }
+
+              return Container(
+                width: 300,
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: Scrollbar(
+                  controller: scrollController,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    controller: scrollController,
+                    itemCount: targetPlaylists.length,
+                    itemBuilder: (context, index) {
+                      final playlist = targetPlaylists[index];
+                      return ListTile(
+                        title: Text(playlist.name),
+                        onTap: () async {
+                          // 调用 API 添加歌曲到目标歌单，返回实际新增数量
+                          final addedCount = await notifier.addSongsToPlaylistById(
+                            playlist.id,
+                            songPaths,
+                          );
+                          if (dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop();
+                            // 根据返回值给出不同提示
+                            if (addedCount > 0) {
+                              notifier.postInfo('已添加到歌单「${playlist.name}」');
+                            } else {
+                              notifier.postInfo('歌曲已存在于歌单「${playlist.name}」');
+                            }
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
