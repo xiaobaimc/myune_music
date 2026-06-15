@@ -61,7 +61,9 @@ dependencies:
       ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
 
   mpv_audio_kit:
-    path: E:/Flutter_app/mpv_audio_kit
+    git:
+      url: https://github.com/xiaobaimc/mpv_audio_kit.git
+      ref: efe4d60b66de1cef63172bd9c76007ade61aac77
 
   # audiotags:
   #   git:

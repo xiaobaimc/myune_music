@@ -408,9 +408,11 @@ packages:
   mpv_audio_kit:
     dependency: "direct main"
     description:
-      path: "E:/Flutter_app/mpv_audio_kit"
-      relative: false
-    source: path
+      path: "."
+      ref: efe4d60b66de1cef63172bd9c76007ade61aac77
+      resolved-ref: efe4d60b66de1cef63172bd9c76007ade61aac77
+      url: "https://github.com/xiaobaimc/mpv_audio_kit.git"
+    source: git
     version: "0.3.6"
   nested:
     dependency: transitive
