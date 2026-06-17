@@ -51,7 +51,7 @@ dependencies:
   pinyin: ^3.3.0
   # flutter_web_scroll: ^1.0.1
   markdown_widget: ^2.3.2+8
-  mpv_audio_kit: ^0.4.0
+  # mpv_audio_kit: ^0.4.0
   show_fps: ^1.1.0
 
 
@@ -62,10 +62,10 @@ dependencies:
       url: https://github.com/xiaobaimc/flutter_web_scroll.git
       ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
 
-  # mpv_audio_kit:
-  #   git:
-  #     url: https://github.com/xiaobaimc/mpv_audio_kit.git
-  #     ref: 44ec9273891d295aceecc4f0f8f7d3d7ea3a35e5
+  mpv_audio_kit:
+    git:
+      url: https://github.com/xiaobaimc/mpv_audio_kit.git
+      ref: 44ec9273891d295aceecc4f0f8f7d3d7ea3a35e5
 
   # audiotags:
   #   git:
