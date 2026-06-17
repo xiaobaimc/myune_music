@@ -51,6 +51,8 @@ dependencies:
   pinyin: ^3.3.0
   # flutter_web_scroll: ^1.0.1
   markdown_widget: ^2.3.2+8
+  # mpv_audio_kit: ^0.4.0
+  show_fps: ^1.1.0
 
 
   rxdart: ^0.28.0
@@ -63,7 +65,7 @@ dependencies:
   mpv_audio_kit:
     git:
       url: https://github.com/xiaobaimc/mpv_audio_kit.git
-      ref: efe4d60b66de1cef63172bd9c76007ade61aac77
+      ref: 44ec9273891d295aceecc4f0f8f7d3d7ea3a35e5
 
   # audiotags:
   #   git:

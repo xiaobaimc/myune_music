@@ -34,21 +34,25 @@ class SingleLineLyricWidget extends StatelessWidget {
     }
   }
 
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    return Text(
+      '暂未获取到歌词',
+      textAlign: textAlign,
+      style: TextStyle(
+        fontSize: fontSize,
+        height: 1.6,
+        color: colorScheme.primary,
+        fontWeight: const FontWeight(640),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
     if (lyrics.isEmpty || currentIndex < 0 || currentIndex >= lyrics.length) {
-      return Text(
-        '暂未获取到歌词',
-        textAlign: textAlign,
-        style: TextStyle(
-          fontSize: fontSize,
-          height: 1.6,
-          color: colorScheme.primary,
-          fontWeight: const FontWeight(640),
-        ),
-      );
+      return _buildPlaceholder(colorScheme);
     }
 
     int effectiveIndex = currentIndex;
@@ -57,7 +61,7 @@ class SingleLineLyricWidget extends StatelessWidget {
     }
 
     if (effectiveIndex < 0) {
-      return const SizedBox.shrink();
+      return _buildPlaceholder(colorScheme);
     }
 
     final LyricLine currentLine = lyrics[effectiveIndex];

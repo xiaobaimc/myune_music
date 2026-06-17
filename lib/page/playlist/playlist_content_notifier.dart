@@ -79,6 +79,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Player get mediaPlayer => _audioService.player;
 
   StreamSubscription<bool>? _exclusiveModeSubscription; // 用于管理独占模式的流订阅
+  StreamSubscription? _loudnessSubscription; // 用于管理音量响度平衡的流订阅
 
   bool _isPlaying = false; // 播放器状态
   bool get isPlaying => _isPlaying;
@@ -337,6 +338,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _loadVolumeSetting();
     // 加载音高、倍速和均衡器设置
     await _loadAudioControlSettings();
+    // 初始化响度平衡流订阅
+    _updateLoudnessSubscription();
     // 恢复播放状态
     await _restorePlaybackState();
   }
@@ -533,12 +536,45 @@ class PlaylistContentNotifier extends ChangeNotifier {
     );
   }
 
+  void _updateLoudnessSubscription() {
+    _loudnessSubscription?.cancel();
+    _loudnessSubscription = null;
+
+    if (_settingsProvider.enableLoudness) {
+      _loudnessSubscription = _audioService.player.stream.loudness.listen((
+        scan,
+      ) {
+        if (scan == null) {
+          return;
+        }
+
+        if (scan.state == LoudnessScanState.ready && scan.integrated != null) {
+          final targetGain = (-16.0 - scan.integrated!).clamp(-24.0, 24.0);
+
+          _audioService.player.setVolumeGain(targetGain);
+
+          // debugPrint("$targetGain dB");
+        } else if (scan.state == LoudnessScanState.unavailable) {
+          _audioService.player.setVolumeGain(0.0);
+        }
+      });
+    } else {
+      // 只有用户彻底关闭功能时，才重置为 0.0
+      _audioService.player.setVolumeGain(0.0);
+    }
+  }
+
+  void updateLoudnessSettings() {
+    _updateLoudnessSubscription();
+  }
+
   @override
   // --- 播放器相关 ---
   void dispose() {
     _lyricLineIndexController.close();
     _errorStreamController.close();
     _exclusiveModeSubscription?.cancel(); // 取消独占模式订阅
+    _loudnessSubscription?.cancel(); // 取消响度流订阅
     _safeDispose(); // 释放播放器资源
     _cleanupSmtc();
     _metadataCacheSaveTimer?.cancel();
@@ -1407,10 +1443,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       for (final folderPath in folderPaths) {
         final directory = Directory(folderPath);
         if (await directory.exists()) {
-          await for (final file in directory.list(
-            recursive: true,
-            followLinks: false,
-          ).handleError((_) {})) {
+          await for (final file
+              in directory
+                  .list(recursive: true, followLinks: false)
+                  .handleError((_) {})) {
             if (file is File) {
               final extension = p.extension(file.path).toLowerCase();
               // 检查是否为支持的音频文件格式
@@ -1442,7 +1478,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // 所有解析成功后，统一修改 playlist 状态
       // 从现有列表中移除已删除的歌曲
       playlist.songFilePaths.removeWhere(
-        (path) => removedPathsNormalized.contains(p.normalize(path).toLowerCase()),
+        (path) =>
+            removedPathsNormalized.contains(p.normalize(path).toLowerCase()),
       );
 
       // 添加新增的歌曲到末尾
@@ -1535,7 +1572,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 所有解析成功后，统一修改 playlist 状态
     playlist.songFilePaths.removeWhere(
-      (path) => removedPathsNormalized.contains(p.normalize(path).toLowerCase()),
+      (path) =>
+          removedPathsNormalized.contains(p.normalize(path).toLowerCase()),
     );
     playlist.songFilePaths.addAll(addedPaths);
 
@@ -3663,45 +3701,83 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 处理间奏
   List<LyricLine> _processInterludes(List<LyricLine> lines) {
-    final List<LyricLine> result = [];
-    for (int i = 0; i < lines.length; i++) {
-      final currentLine = lines[i];
+    if (lines.isEmpty) return lines;
 
-      // 如果是空行（表示上一句的结束），且是普通LRC
-      if (!currentLine.isKaraoke && currentLine.texts.isEmpty) {
-        if (i < lines.length - 1) {
-          final nextLine = lines[i + 1];
-          final gap = nextLine.timestamp - currentLine.timestamp;
-          if (gap.inMilliseconds > 8000) {
-            result.add(
-              LyricLine(
-                timestamp: currentLine.timestamp,
-                texts: [],
-                isInterlude: true,
-                interludeDuration: gap,
-              ),
-            );
-          }
-        }
-        // 如果不是间奏，或者在最后一行，直接丢弃空行，保持原有逻辑
-      } else {
+    final List<LyricLine> result = [];
+
+    int firstRealIndex = -1;
+    for (int i = 0; i < lines.length; i++) {
+      if (lines[i].isKaraoke || lines[i].texts.isNotEmpty) {
+        firstRealIndex = i;
+        break;
+      }
+    }
+
+    if (firstRealIndex == -1) {
+      return lines;
+    }
+
+    // 检查第零秒到第一句真实歌词之间是否大于 8 秒，如果是则插入间奏
+    final firstReal = lines[firstRealIndex];
+    if (firstReal.timestamp.inMilliseconds > 8000) {
+      result.add(
+        LyricLine(
+          timestamp: Duration.zero,
+          texts: [],
+          isInterlude: true,
+          interludeDuration: firstReal.timestamp,
+        ),
+      );
+    }
+
+    // 遍历 lines，把真实歌词加入 result，并在真实歌词之间检测并插入间奏
+    for (int i = firstRealIndex; i < lines.length; i++) {
+      final currentLine = lines[i];
+      final isCurrentReal =
+          currentLine.isKaraoke || currentLine.texts.isNotEmpty;
+
+      if (isCurrentReal) {
         result.add(currentLine);
 
-        // 如果是逐字歌词，检查当前句结束和下一句开始之间的间隔
-        if (currentLine.isKaraoke && i < lines.length - 1) {
-          final nextLine = lines[i + 1];
-          Duration currentEndTime = currentLine.timestamp;
-          if (currentLine.tokens != null) {
-            for (final tokenList in currentLine.tokens!) {
-              for (final token in tokenList) {
-                if (token.end > currentEndTime) {
-                  currentEndTime = token.end;
+        // 寻找下一句真实歌词
+        int nextRealIndex = -1;
+        for (int j = i + 1; j < lines.length; j++) {
+          if (lines[j].isKaraoke || lines[j].texts.isNotEmpty) {
+            nextRealIndex = j;
+            break;
+          }
+        }
+
+        if (nextRealIndex != -1) {
+          final nextReal = lines[nextRealIndex];
+
+          // 确定当前真实歌词的结束/清除时间
+          Duration currentEndTime;
+          if (currentLine.isKaraoke) {
+            currentEndTime = currentLine.timestamp;
+            if (currentLine.tokens != null) {
+              for (final tokenList in currentLine.tokens!) {
+                for (final token in tokenList) {
+                  if (token.end > currentEndTime) {
+                    currentEndTime = token.end;
+                  }
                 }
               }
             }
+          } else {
+            // 普通歌词：如果在当前真实行与下一真实行之间存在空歌词占位，则以第一个空歌词时间戳为结束时间
+            Duration? firstEmptyTimestamp;
+            for (int j = i + 1; j < nextRealIndex; j++) {
+              if (!lines[j].isKaraoke && lines[j].texts.isEmpty) {
+                firstEmptyTimestamp = lines[j].timestamp;
+                break;
+              }
+            }
+            currentEndTime = firstEmptyTimestamp ?? nextReal.timestamp;
           }
 
-          final gap = nextLine.timestamp - currentEndTime;
+          // 计算空档时间
+          final gap = nextReal.timestamp - currentEndTime;
           if (gap.inMilliseconds > 8000) {
             result.add(
               LyricLine(
@@ -3715,6 +3791,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
       }
     }
+
     return result;
   }
 

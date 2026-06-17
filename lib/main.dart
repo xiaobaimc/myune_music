@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:show_fps/show_fps.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -422,7 +423,12 @@ class _MyAppState extends State<MyApp> with TrayListener {
             return DragToResizeArea(child: Hotkeys(child: materialAppChild!));
           },
 
-          home: const AppShell(),
+          home: ShowFPS(
+            alignment: Alignment.topRight,
+            visible: true,
+            showChart: true,
+            child: const AppShell(),
+          ),
         );
 
         // 在 Windows 平台上排除语义化
