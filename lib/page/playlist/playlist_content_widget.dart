@@ -815,6 +815,13 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                                 }
                               },
                             ),
+                            IconButton(
+                              icon: const Icon(Icons.graphic_eq),
+                              tooltip: '扫描并写入 ReplayGain 标签',
+                              onPressed: notifier.isWritingReplayGain
+                                  ? null
+                                  : () => _showReplayGainDialog(context),
+                            ),
                             // 只有不是基于文件夹的歌单才显示删除按钮
                             if (!notifier
                                 .playlists[notifier.selectedIndex]
@@ -1050,6 +1057,232 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
               child: const Text('移除'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showReplayGainDialog(BuildContext context) async {
+    final notifier = context.read<PlaylistContentNotifier>();
+    final selectedCount = notifier.selectedSongs.length;
+    if (selectedCount == 0) {
+      notifier.postInfo('未选择任何歌曲');
+      return;
+    }
+
+    final targetLufs = await showDialog<double>(
+      context: context,
+      builder: (BuildContext context) {
+        double selectedTarget = -16.0;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('扫描并写入 ReplayGain 标签'),
+              content: StatefulBuilder(
+                builder: (BuildContext context, StateSetter dialogSetState) {
+                  return RadioGroup<double>(
+                    groupValue: selectedTarget,
+                    onChanged: (value) {
+                      if (value != null) {
+                        dialogSetState(() => selectedTarget = value);
+                      }
+                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('选择期望的响度基准线：'),
+                        const SizedBox(height: 12),
+                        const RadioListTile<double>(
+                          value: -14.0,
+                          title: Text('-14.0 LUFS'),
+                          subtitle: Text('现代流行/电音'),
+                        ),
+                        const RadioListTile<double>(
+                          value: -16.0,
+                          title: Text('-16.0 LUFS'),
+                          subtitle: Text('大多流媒体标准'),
+                        ),
+                        const RadioListTile<double>(
+                          value: -18.0,
+                          title: Text('-18.0 LUFS'),
+                          subtitle: Text('ReplayGain 规范'),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '这将会物理修改选中的音频文件标签',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(selectedTarget),
+                  child: Text('开始扫描($selectedCount首)'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (targetLufs == null || !context.mounted) {
+      return;
+    }
+
+    // 不在此处await，以让 UI 继续执行弹出进度框
+    context.read<PlaylistContentNotifier>().writeReplayGainTagsForSelectedSongs(
+      targetLufs: targetLufs,
+    );
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 必须等待或完成后点击关闭
+      builder: (BuildContext dialogContext) {
+        return Consumer<PlaylistContentNotifier>(
+          builder: (context, playlistNotifier, child) {
+            final total = playlistNotifier.replayGainTotal;
+            final current = playlistNotifier.replayGainCurrent;
+            final isDone = !playlistNotifier.isWritingReplayGain;
+            final progress = total > 0 ? current / total : 0.0;
+            final title = isDone ? 'ReplayGain 扫描完成' : '正在扫描并写入 ReplayGain...';
+
+            return AlertDialog(
+              title: Text(title),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!isDone) ...[
+                      LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.3),
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('进度: $current / $total'),
+                          Text('${(progress * 100).toStringAsFixed(0)}%'),
+                        ],
+                      ),
+                      if (playlistNotifier
+                          .replayGainCurrentTitle
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '正在处理: ${playlistNotifier.replayGainCurrentTitle}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ] else ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '处理完成：成功 ${total - playlistNotifier.replayGainFailures.length} 首，失败/跳过 ${playlistNotifier.replayGainFailures.length} 首',
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (playlistNotifier.replayGainFailures.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      const Text('失败/跳过列表:'),
+                      const SizedBox(height: 8),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 150),
+                        width: double.maxFinite,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: 0.1),
+                        ),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: playlistNotifier.replayGainFailures.length,
+                          itemBuilder: (context, index) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4.0,
+                                horizontal: 8.0,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: 14,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      playlistNotifier
+                                          .replayGainFailures[index],
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                if (isDone)
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('关闭'),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1563,10 +1796,8 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                         title: Text(playlist.name),
                         onTap: () async {
                           // 调用 API 添加歌曲到目标歌单，返回实际新增数量
-                          final addedCount = await notifier.addSongsToPlaylistById(
-                            playlist.id,
-                            songPaths,
-                          );
+                          final addedCount = await notifier
+                              .addSongsToPlaylistById(playlist.id, songPaths);
                           if (dialogContext.mounted) {
                             Navigator.of(dialogContext).pop();
                             // 根据返回值给出不同提示

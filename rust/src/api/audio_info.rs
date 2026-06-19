@@ -3,12 +3,12 @@ use serde::Serialize;
 use std::path::Path;
 
 // Lofty 相关的导入
-use lofty::config::{ParseOptions, ParsingMode};
-use lofty::file::TaggedFile;
+use lofty::config::{ParseOptions, ParsingMode, WriteOptions};
+use lofty::file::{TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::probe::Probe;
 use lofty::read_from_path;
-use lofty::tag::{Accessor, ItemKey};
+use lofty::tag::{Accessor, ItemKey, Tag};
 
 #[derive(Default, Debug)]
 #[frb(non_opaque)]
@@ -144,4 +144,28 @@ pub fn read_audio_info(path: String, options: AudioInfoOptions) -> Result<AudioI
     }
 
     Ok(info)
+}
+
+#[frb]
+pub fn write_replay_gain_tags(path: String, gain_db: f64, peak: f64) -> Result<(), String> {
+    let mut tagged_file = Probe::open(&path)
+        .map_err(|e| e.to_string())?
+        .read()
+        .map_err(|e| e.to_string())?;
+
+    if tagged_file.primary_tag().is_none() {
+        let tag = Tag::new(tagged_file.primary_tag_type());
+        tagged_file.insert_tag(tag);
+    }
+
+    let tag = tagged_file
+        .primary_tag_mut()
+        .ok_or_else(|| "无法创建或读取主标签".to_string())?;
+
+    tag.insert_text(ItemKey::ReplayGainTrackGain, format!("{:.2} dB", gain_db));
+    tag.insert_text(ItemKey::ReplayGainTrackPeak, format!("{:.6}", peak));
+
+    tagged_file
+        .save_to_path(&path, WriteOptions::default())
+        .map_err(|e| e.to_string())
 }

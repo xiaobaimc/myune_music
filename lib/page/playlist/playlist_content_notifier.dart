@@ -30,6 +30,28 @@ enum PlayMode { sequence, shuffle, repeatOne }
 
 enum DetailViewContext { playlist, allSongs, artist, album }
 
+class ReplayGainWriteSummary {
+  final int total;
+  final int success;
+  final int failed;
+
+  const ReplayGainWriteSummary({
+    required this.total,
+    required this.success,
+    required this.failed,
+  });
+}
+
+class _ReplayGainScanResult {
+  final double integratedLufs;
+  final double peak;
+
+  const _ReplayGainScanResult({
+    required this.integratedLufs,
+    required this.peak,
+  });
+}
+
 class EqualizerPreset {
   final String name;
   final List<double> gains;
@@ -73,6 +95,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   final Set<String> _pendingCoverRequests = {};
   final ListQueue<String> _coverQueue = ListQueue<String>();
   bool _coverWorkerRunning = false;
+
+  // --- 封面内存缓存 ---
+  final Map<String, Uint8List?> _coverCache = {};
+  final Set<String> _evictableCoverPaths = {};
+  static const int _maxCoverCacheSize = 100;
 
   // --- 播放器相关 ---
   final AudioService _audioService = AudioService();
@@ -201,9 +228,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 多选相关 ---
   bool _isMultiSelectMode = false; // 是否处于多选模式
   final Set<String> _selectedSongPaths = <String>{}; // 选中的歌曲路径集合
+  bool _isWritingReplayGain = false;
+  int _replayGainTotal = 0;
+  int _replayGainCurrent = 0;
+  String _replayGainCurrentTitle = '';
+  final List<String> _replayGainFailures = [];
 
   bool get isMultiSelectMode => _isMultiSelectMode;
   Set<String> get selectedSongPaths => _selectedSongPaths;
+  bool get isWritingReplayGain => _isWritingReplayGain;
+  int get replayGainTotal => _replayGainTotal;
+  int get replayGainCurrent => _replayGainCurrent;
+  String get replayGainCurrentTitle => _replayGainCurrentTitle;
+  List<String> get replayGainFailures => _replayGainFailures;
   List<Song> get selectedSongs => _currentPlaylistSongs
       .where((song) => _selectedSongPaths.contains(song.filePath))
       .toList();
@@ -540,7 +577,29 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _loudnessSubscription?.cancel();
     _loudnessSubscription = null;
 
-    if (_settingsProvider.enableLoudness) {
+    if (_settingsProvider.enableReplayGain) {
+      _audioService.player.setVolumeGain(0.0);
+      _audioService.player.setReplayGain(
+        const ReplayGainSettings(
+          mode: ReplayGain.track,
+          preamp: 0.0,
+          fallback: 0.0,
+          clip: false,
+        ),
+      );
+    } else {
+      _audioService.player.setReplayGain(
+        const ReplayGainSettings(
+          mode: ReplayGain.no,
+          preamp: 0.0,
+          fallback: 0.0,
+          clip: false,
+        ),
+      );
+    }
+
+    if (_settingsProvider.enableLoudness &&
+        !_settingsProvider.enableReplayGain) {
       _loudnessSubscription = _audioService.player.stream.loudness.listen((
         scan,
       ) {
@@ -565,6 +624,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   void updateLoudnessSettings() {
+    _updateLoudnessSubscription();
+  }
+
+  void updateReplayGainSettings() {
     _updateLoudnessSubscription();
   }
 
@@ -1063,15 +1126,25 @@ class PlaylistContentNotifier extends ChangeNotifier {
   void requestSongCover(String filePath) {
     final cacheKey = _normalizePath(filePath);
     _visibleCoverPaths.add(cacheKey);
+    _evictableCoverPaths.remove(cacheKey);
 
+    // 缓存命中：直接应用，无需磁盘读取
+    if (_coverCache.containsKey(cacheKey)) {
+      _applyCachedCover(cacheKey);
+      return;
+    }
+
+    // 歌曲对象上已有封面数据
+    final song = _findSongByPath(filePath);
+    if (song?.albumArt != null) {
+      _coverCache[cacheKey] = song!.albumArt;
+      return;
+    }
+
+    // 需要从磁盘加载
     if (_pendingCoverRequests.contains(cacheKey)) {
       return;
     }
-    final song = _findSongByPath(filePath);
-    if (song?.albumArt != null) {
-      return;
-    }
-
     _pendingCoverRequests.add(cacheKey);
     _coverQueue.add(cacheKey);
     _processCoverQueue();
@@ -1083,22 +1156,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _visibleCoverPaths.remove(cacheKey);
     _pendingCoverRequests.remove(cacheKey);
     _removeFromCoverQueue(cacheKey);
+
     if (_currentSong != null &&
         _normalizePath(_currentSong!.filePath) == cacheKey) {
       return;
     }
-    Future.microtask(() {
-      _updateSongInCollections(filePath, (song) {
-        return Song(
-          title: song.title,
-          artist: song.artist,
-          album: song.album,
-          filePath: song.filePath,
-          albumArt: null,
-          duration: song.duration,
-        );
-      });
-    });
+
+    // 不再立即置空 albumArt
+    _evictableCoverPaths.add(cacheKey);
+    _scheduleCoverEviction();
   }
 
   // 寻找歌曲
@@ -1145,6 +1211,50 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _coverQueue.addAll(remaining);
   }
 
+  void _applyCachedCover(String cacheKey) {
+    final cachedCover = _coverCache[cacheKey];
+    if (cachedCover == null) return;
+    final song = _findSongByPath(cacheKey);
+    if (song?.albumArt == cachedCover) return;
+
+    _updateSongInCollections(cacheKey, (song) {
+      return Song(
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        filePath: song.filePath,
+        albumArt: cachedCover,
+        duration: song.duration,
+      );
+    });
+  }
+
+  void _scheduleCoverEviction() {
+    if (_coverCache.length <= _maxCoverCacheSize) return;
+
+    final toEvict = _coverCache.keys
+        .where((key) => _evictableCoverPaths.contains(key))
+        .take(_coverCache.length - _maxCoverCacheSize)
+        .toList();
+
+    if (toEvict.isEmpty) return;
+
+    for (final key in toEvict) {
+      _coverCache.remove(key);
+      _evictableCoverPaths.remove(key);
+      _updateSongInCollections(key, (song) {
+        return Song(
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          filePath: song.filePath,
+          albumArt: null,
+          duration: song.duration,
+        );
+      });
+    }
+  }
+
   void _processCoverQueue() {
     if (_coverWorkerRunning) {
       return;
@@ -1177,6 +1287,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
         );
 
         if (metadata.cover != null && metadata.cover!.isNotEmpty) {
+          _coverCache[cacheKey] = metadata.cover;
+          _evictableCoverPaths.remove(cacheKey);
           _updateSongInCollections(filePath, (song) {
             return Song(
               title: song.title,
@@ -1942,7 +2054,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   Future<void> stop() async {
     await _audioService.player.stop();
-    _currentSong = null;
+    if (_currentSong != null) {
+      final oldPath = _normalizePath(_currentSong!.filePath);
+      _currentSong = null;
+      if (!_visibleCoverPaths.contains(oldPath)) {
+        _evictableCoverPaths.add(oldPath);
+        _scheduleCoverEviction();
+      }
+    } else {
+      _currentSong = null;
+    }
     _currentSongIndex = -1;
     _currentLyrics = [];
     _currentLyricLineIndex = -1;
@@ -2475,7 +2596,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return;
     }
 
+    // 切换播放歌曲时管理封面缓存
+    final oldSongPath = _currentSong != null
+        ? _normalizePath(_currentSong!.filePath)
+        : null;
+    final newSongPath = _normalizePath(songFilePath);
+
     _currentSong = songToPlay;
+    _evictableCoverPaths.remove(newSongPath);
+    if (oldSongPath != null &&
+        oldSongPath != newSongPath &&
+        !_visibleCoverPaths.contains(oldSongPath)) {
+      _evictableCoverPaths.add(oldSongPath);
+      _scheduleCoverEviction();
+    }
 
     try {
       final session = MediaSession(
@@ -2684,6 +2818,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
         final songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
         _currentSong = await _prepareSongForPlayback(songFilePath);
 
+        // 钉选当前播放歌曲的封面
+        _evictableCoverPaths.remove(_normalizePath(songFilePath));
+
         // 加载歌词
         _loadLyricsForSong(songFilePath);
 
@@ -2716,7 +2853,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
             await _playlistManager.clearPlaybackQueue();
             _playingPlaylist = null;
             _playingSongIndex = -1;
-            _currentSong = null;
+            if (_currentSong != null) {
+              final oldPath = _normalizePath(_currentSong!.filePath);
+              _currentSong = null;
+              if (!_visibleCoverPaths.contains(oldPath)) {
+                _evictableCoverPaths.add(oldPath);
+                _scheduleCoverEviction();
+              }
+            } else {
+              _currentSong = null;
+            }
             _currentPosition = Duration.zero;
           }
         } catch (e) {
@@ -2725,7 +2871,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
           await _playlistManager.clearPlaybackQueue();
           _playingPlaylist = null;
           _playingSongIndex = -1;
-          _currentSong = null;
+          if (_currentSong != null) {
+            final oldPath = _normalizePath(_currentSong!.filePath);
+            _currentSong = null;
+            if (!_visibleCoverPaths.contains(oldPath)) {
+              _evictableCoverPaths.add(oldPath);
+              _scheduleCoverEviction();
+            }
+          } else {
+            _currentSong = null;
+          }
           _currentPosition = Duration.zero;
         }
 
@@ -4329,6 +4484,155 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _selectedSongPaths.clear();
     notifyListeners();
+  }
+
+  Future<ReplayGainWriteSummary> writeReplayGainTagsForSelectedSongs({
+    required double targetLufs,
+  }) async {
+    if (_isWritingReplayGain) {
+      _infoStreamController.add('ReplayGain 标签写入任务正在进行中');
+      return const ReplayGainWriteSummary(total: 0, success: 0, failed: 0);
+    }
+    if (_selectedSongPaths.isEmpty) {
+      _infoStreamController.add('未选择任何歌曲');
+      return const ReplayGainWriteSummary(total: 0, success: 0, failed: 0);
+    }
+
+    final selectedSongs = this.selectedSongs;
+    if (selectedSongs.isEmpty) {
+      _infoStreamController.add('未选择任何歌曲');
+      return const ReplayGainWriteSummary(total: 0, success: 0, failed: 0);
+    }
+
+    _isWritingReplayGain = true;
+    _replayGainTotal = selectedSongs.length;
+    _replayGainCurrent = 0;
+    _replayGainCurrentTitle = '';
+    _replayGainFailures.clear();
+    notifyListeners();
+
+    // 需要第2个player进行扫描
+    final scanner = Player(
+      configuration: const PlayerConfiguration(resumePlayback: false),
+    );
+    StreamSubscription? loudnessSubscription;
+    var success = 0;
+    var failed = 0;
+
+    try {
+      await scanner.setAudioNullUntimed(true);
+      await scanner.setAudioStreamSilence(true);
+    } catch (_) {
+      // 扫描播放器不需要实际输出音频
+    }
+
+    try {
+      for (var i = 0; i < selectedSongs.length; i++) {
+        final song = selectedSongs[i];
+        _replayGainCurrent = i + 1;
+        _replayGainCurrentTitle = song.title;
+        notifyListeners();
+
+        if (_currentSong?.filePath == song.filePath && _isPlaying) {
+          failed++;
+          _replayGainFailures.add(song.title);
+          notifyListeners();
+          continue;
+        }
+
+        try {
+          final scan = await _scanReplayGainForSong(
+            scanner,
+            song.filePath,
+            loudnessSubscriptionSetter: (subscription) {
+              loudnessSubscription = subscription;
+            },
+          );
+
+          final gainDb = targetLufs - scan.integratedLufs;
+          await writeReplayGainTags(
+            path: song.filePath,
+            gainDb: gainDb,
+            peak: scan.peak,
+          );
+
+          success++;
+        } catch (e) {
+          failed++;
+          _replayGainFailures.add(song.title);
+          notifyListeners();
+          debugPrint('ReplayGain 写入失败: ${song.filePath}, $e');
+        }
+      }
+    } finally {
+      await loudnessSubscription?.cancel();
+      try {
+        await scanner.stop();
+      } catch (_) {
+        //
+      }
+      await scanner.dispose();
+      _isWritingReplayGain = false;
+      notifyListeners();
+    }
+
+    _infoStreamController.add('ReplayGain 写入完成：成功 $success 首，失败 $failed 首');
+
+    return ReplayGainWriteSummary(
+      total: selectedSongs.length,
+      success: success,
+      failed: failed,
+    );
+  }
+
+  Future<_ReplayGainScanResult> _scanReplayGainForSong(
+    Player scanner,
+    String filePath, {
+    required void Function(StreamSubscription subscription)
+    loudnessSubscriptionSetter,
+  }) async {
+    final completer = Completer<_ReplayGainScanResult>();
+
+    await scanner.stop();
+
+    final subscription = scanner.stream.loudness.listen((scan) {
+      if (scan == null || completer.isCompleted) {
+        return;
+      }
+
+      if (scan.state == LoudnessScanState.ready && scan.integrated != null) {
+        final peak = _normalizeReplayGainPeak(scan.truePeak ?? scan.samplePeak);
+        completer.complete(
+          _ReplayGainScanResult(integratedLufs: scan.integrated!, peak: peak),
+        );
+      } else if (scan.state == LoudnessScanState.unavailable) {
+        completer.completeError('无法扫描该音频文件的响度');
+      }
+    });
+    loudnessSubscriptionSetter(subscription);
+
+    try {
+      await scanner.open(Media(filePath), play: false);
+      return await completer.future.timeout(
+        const Duration(seconds: 45),
+        onTimeout: () => throw TimeoutException('扫描 ReplayGain 超时'),
+      );
+    } finally {
+      await subscription.cancel();
+    }
+  }
+
+  double _normalizeReplayGainPeak(double? peak) {
+    if (peak == null || peak.isNaN || peak.isInfinite || peak <= 0) {
+      return 1.0;
+    }
+
+    // 若底层返回 dBTP，通常会落在 -100..0 dB 附近
+    if (peak <= 0) {
+      return pow(10, peak / 20).toDouble();
+    }
+
+    return peak;
   }
 
   // 直接添加歌曲到指定歌单（通过路径列表）

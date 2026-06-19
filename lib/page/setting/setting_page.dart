@@ -635,17 +635,44 @@ class _SettingPageState extends State<SettingPage> {
                           children: [
                             Text('平衡歌曲音量'),
                             SizedBox(width: 4),
-                            InfoIcon('启用后可能会损失部分音质'),
+                            InfoIcon('启用后将平衡为-16 LUFS\n这可能会损失部分音质'),
                           ],
                         ),
                         value: settings.enableLoudness,
                         onChanged: (value) {
+                          final playlistNotifier = context
+                              .read<PlaylistContentNotifier>();
+                          if (value && settings.enableReplayGain) {
+                            playlistNotifier.postInfo('与 "重放增益" 冲突');
+                            return;
+                          }
                           context.read<SettingsProvider>().setEnableLoudness(
                             value,
                           );
-                          context
-                              .read<PlaylistContentNotifier>()
-                              .updateLoudnessSettings();
+                          playlistNotifier.updateLoudnessSettings();
+                        },
+                      ),
+                      // 重放增益设置
+                      SwitchListTile(
+                        title: const Row(
+                          children: [
+                            Text('重放增益'),
+                            SizedBox(width: 4),
+                            InfoIcon('需要歌曲包含 ReplayGain 标签\n可在 歌单-多选 中批量扫描写入'),
+                          ],
+                        ),
+                        value: settings.enableReplayGain,
+                        onChanged: (value) {
+                          final playlistNotifier = context
+                              .read<PlaylistContentNotifier>();
+                          if (value && settings.enableLoudness) {
+                            playlistNotifier.postInfo('与 "平衡歌曲音量" 冲突');
+                            return;
+                          }
+                          context.read<SettingsProvider>().setEnableReplayGain(
+                            value,
+                          );
+                          playlistNotifier.updateReplayGainSettings();
                         },
                       ),
                     ],

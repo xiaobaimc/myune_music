@@ -22,8 +22,7 @@ class SettingsProvider with ChangeNotifier {
   static const _artistSeparatorsKey = 'artistSeparators'; // 艺术家分隔符设置的 key
   static const _minimizeToTrayKey = 'minimizeToTray'; // 最小化到托盘设置的 key
   static const _enableLyricBlurKey = 'enableLyricBlur'; // 歌词模糊效果设置的 key
-  static const _lyricBlurStrengthKey =
-      'lyricBlurStrength'; // 歌词模糊强度设置的 key
+  static const _lyricBlurStrengthKey = 'lyricBlurStrength'; // 歌词模糊强度设置的 key
   static const _showTaskbarProgressKey =
       'showTaskbarProgress'; // 任务栏进度显示设置的 key
   static const _hiddenPagesKey = 'hiddenPages'; // 隐藏页面设置的 key
@@ -37,6 +36,7 @@ class SettingsProvider with ChangeNotifier {
 
   static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
   static const _enableLoudnessKey = 'enableLoudness';
+  static const _enableReplayGainKey = 'enableReplayGain';
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 22.0; // 默认字体大小
@@ -59,6 +59,7 @@ class SettingsProvider with ChangeNotifier {
   bool _preferExternalLyrics = false; // 默认不优先读取外置LRC歌词
   bool _enableLyricElasticScroll = false;
   bool _enableLoudness = false;
+  bool _enableReplayGain = false;
 
   bool _showTaskbarProgress = false;
   bool _enableOnlineLyrics = false; // 默认不启用从网络获取歌词
@@ -103,6 +104,7 @@ class SettingsProvider with ChangeNotifier {
   bool get preferExternalLyrics => _preferExternalLyrics; // 获取优先读取外置LRC歌词设置
   bool get enableLyricElasticScroll => _enableLyricElasticScroll;
   bool get enableLoudness => _enableLoudness;
+  bool get enableReplayGain => _enableReplayGain;
 
   SettingsProvider() {
     _loadFromPrefs();
@@ -124,7 +126,8 @@ class SettingsProvider with ChangeNotifier {
     _addLyricPadding = prefs.getBool(_addLyricPaddingKey) ?? true; // 加载歌词上下补位设置
     _minimizeToTray = prefs.getBool(_minimizeToTrayKey) ?? false; // 加载最小化到托盘设置
     _enableLyricBlur = prefs.getBool(_enableLyricBlurKey) ?? true; // 加载歌词模糊效果设置
-    _lyricBlurStrength = prefs.getDouble(_lyricBlurStrengthKey) ?? 2.5; // 加载歌词模糊强度设置
+    _lyricBlurStrength =
+        prefs.getDouble(_lyricBlurStrengthKey) ?? 2.5; // 加载歌词模糊强度设置
     _primaryLyricSource =
         prefs.getString(_primaryLyricSourceKey) ?? 'qq'; // 加载主要歌词源设置
     _secondaryLyricSource =
@@ -142,6 +145,11 @@ class SettingsProvider with ChangeNotifier {
     _enableLyricElasticScroll =
         prefs.getBool(_enableLyricElasticScrollKey) ?? false;
     _enableLoudness = prefs.getBool(_enableLoudnessKey) ?? false;
+    _enableReplayGain = prefs.getBool(_enableReplayGainKey) ?? false;
+    if (_enableLoudness && _enableReplayGain) {
+      _enableReplayGain = false;
+      await prefs.setBool(_enableReplayGainKey, false);
+    }
 
     // 加载隐藏页面设置
     final hiddenPagesList = prefs.getStringList(_hiddenPagesKey);
@@ -361,8 +369,27 @@ class SettingsProvider with ChangeNotifier {
 
   void setEnableLoudness(bool value) async {
     _enableLoudness = value;
+    if (value) {
+      _enableReplayGain = false;
+    }
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableLoudnessKey, value);
+    if (value) {
+      await prefs.setBool(_enableReplayGainKey, false);
+    }
+  }
+
+  void setEnableReplayGain(bool value) async {
+    _enableReplayGain = value;
+    if (value) {
+      _enableLoudness = false;
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableReplayGainKey, value);
+    if (value) {
+      await prefs.setBool(_enableLoudnessKey, false);
+    }
   }
 }

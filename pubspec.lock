@@ -408,12 +408,11 @@ packages:
   mpv_audio_kit:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "44ec9273891d295aceecc4f0f8f7d3d7ea3a35e5"
-      resolved-ref: "44ec9273891d295aceecc4f0f8f7d3d7ea3a35e5"
-      url: "https://github.com/xiaobaimc/mpv_audio_kit.git"
-    source: git
-    version: "0.4.0"
+      name: mpv_audio_kit
+      sha256: "4cca4e285abd0e4b2284f7edd70ced5894c99757a5999a33b3c41b7f458fa488"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.2"
   nested:
     dependency: transitive
     description:

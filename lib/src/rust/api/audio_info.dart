@@ -17,6 +17,16 @@ Future<AudioInfo> readAudioInfo({
   options: options,
 );
 
+Future<void> writeReplayGainTags({
+  required String path,
+  required double gainDb,
+  required double peak,
+}) => RustLib.instance.api.crateApiAudioInfoWriteReplayGainTags(
+  path: path,
+  gainDb: gainDb,
+  peak: peak,
+);
+
 class AudioInfo {
   final String? title;
   final String? artist;
