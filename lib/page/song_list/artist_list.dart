@@ -17,6 +17,9 @@ class ArtistList extends StatefulWidget {
 
 class _ArtistListState extends State<ArtistList> {
   late final ScrollController _scrollController = ScrollController();
+  double _savedScrollOffset = 0.0;
+  bool _prevShowArtistDetail = false;
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -57,6 +60,25 @@ class _ArtistListState extends State<ArtistList> {
       final pb = getPy(b);
       return pa.compareTo(pb);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = context.read<PlaylistContentNotifier>();
+    final showArtistDetail =
+        notifier.currentDetailViewContext == DetailViewContext.artist;
+
+    if (!showArtistDetail && _prevShowArtistDetail && _savedScrollOffset > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_savedScrollOffset);
+          _savedScrollOffset = 0.0;
+        }
+      });
+    }
+    _prevShowArtistDetail = showArtistDetail;
   }
 
   @override
@@ -220,6 +242,10 @@ class _ArtistListState extends State<ArtistList> {
                                   title: Text(artistName),
                                   subtitle: Text('共 ${songs.length} 首歌曲'),
                                   onTap: () {
+                                    if (_scrollController.hasClients) {
+                                      _savedScrollOffset =
+                                          _scrollController.offset;
+                                    }
                                     notifier.setActiveArtistView(artistName);
                                   },
                                   shape: RoundedRectangleBorder(
