@@ -17,6 +17,8 @@ class AlbumList extends StatefulWidget {
 
 class _AlbumListState extends State<AlbumList> {
   late final ScrollController _scrollController = ScrollController();
+  double _savedScrollOffset = 0.0;
+  bool _prevShowAlbumDetail = false;
 
   @override
   void dispose() {
@@ -58,6 +60,25 @@ class _AlbumListState extends State<AlbumList> {
       final pb = getPy(b);
       return pa.compareTo(pb);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = context.read<PlaylistContentNotifier>();
+    final showAlbumDetail =
+        notifier.currentDetailViewContext == DetailViewContext.album;
+
+    if (!showAlbumDetail && _prevShowAlbumDetail && _savedScrollOffset > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_savedScrollOffset);
+          _savedScrollOffset = 0.0;
+        }
+      });
+    }
+    _prevShowAlbumDetail = showAlbumDetail;
   }
 
   @override
@@ -225,6 +246,10 @@ class _AlbumListState extends State<AlbumList> {
 
                                 return InkWell(
                                   onTap: () {
+                                    if (_scrollController.hasClients) {
+                                      _savedScrollOffset =
+                                          _scrollController.offset;
+                                    }
                                     notifier.setActiveAlbumView(albumName);
                                   },
                                   borderRadius: BorderRadius.circular(12.0),
