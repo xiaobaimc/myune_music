@@ -371,12 +371,16 @@ class _AlbumCoverTileState extends State<_AlbumCoverTile> {
     return Container(
       width: double.infinity,
       color: Theme.of(context).colorScheme.secondaryContainer,
-      child: widget.albumArt != null
+      // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
+      child: widget.albumArt != null && widget.albumArt!.isNotEmpty
           ? Image.memory(
               cacheWidth: 200,
               widget.albumArt!,
               fit: BoxFit.cover,
               gaplessPlayback: true,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.album, size: 50);
+              },
             )
           : const Icon(Icons.album, size: 50),
     );

@@ -1,11 +1,13 @@
 import 'package:uuid/uuid.dart';
 import 'dart:typed_data';
+import 'package:path/path.dart' as p;
 
 class Song {
   final String title;
   final String artist;
   final String album;
   final String filePath;
+  final String normalizedPath; // 缓存归一化路径，避免热路径上重复调用 p.normalize
   final Uint8List? albumArt;
   final Duration? duration;
   final int? trackNumber;
@@ -18,7 +20,7 @@ class Song {
     this.albumArt,
     this.duration,
     this.trackNumber,
-  });
+  }) : normalizedPath = p.normalize(filePath);
 
   Map<String, dynamic> toJson() {
     return {'title': title, 'artist': artist, 'filePath': filePath};

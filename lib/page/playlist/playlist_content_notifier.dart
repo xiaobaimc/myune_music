@@ -992,9 +992,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     void updateList(List<Song> songs) {
       for (int i = 0; i < songs.length; i++) {
-        if (_normalizePath(songs[i].filePath) == targetPath) {
-          songs[i] = updater(songs[i]);
-          updated = true;
+        if (songs[i].normalizedPath == targetPath) {
+          final newSong = updater(songs[i]);
+          // updater 返回同一对象表示无变更，跳过以避免冗余刷新
+          if (!identical(newSong, songs[i])) {
+            songs[i] = newSong;
+            updated = true;
+          }
         }
       }
     }
@@ -1021,9 +1025,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 单独处理当前播放歌曲
     if (_currentSong != null &&
-        _normalizePath(_currentSong!.filePath) == targetPath) {
-      _currentSong = updater(_currentSong!);
-      updated = true;
+        _currentSong!.normalizedPath == targetPath) {
+      final newSong = updater(_currentSong!);
+      // 无变更时跳过
+      if (!identical(newSong, _currentSong)) {
+        _currentSong = newSong;
+        updated = true;
+      }
     }
 
     if (updated) {
@@ -1130,14 +1138,17 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 缓存命中：直接应用，无需磁盘读取
     if (_coverCache.containsKey(cacheKey)) {
-      _applyCachedCover(cacheKey);
+      // 延迟到微任务执行，避免在 build 阶段触发 notifyListeners
+      scheduleMicrotask(() => _applyCachedCover(cacheKey));
       return;
     }
 
-    // 歌曲对象上已有封面数据
+    // 歌曲对象上已有封面数据：缓存并传播到同路径的其他歌曲
     final song = _findSongByPath(filePath);
-    if (song?.albumArt != null) {
-      _coverCache[cacheKey] = song!.albumArt;
+    final albumArt = song?.albumArt;
+    if (albumArt != null && albumArt.isNotEmpty) {
+      _coverCache[cacheKey] = albumArt;
+      scheduleMicrotask(() => _applyCachedCover(cacheKey));
       return;
     }
 
@@ -1158,7 +1169,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _removeFromCoverQueue(cacheKey);
 
     if (_currentSong != null &&
-        _normalizePath(_currentSong!.filePath) == cacheKey) {
+        _currentSong!.normalizedPath == cacheKey) {
       return;
     }
 
@@ -1172,25 +1183,25 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final target = _normalizePath(filePath);
     if (_isUsingQueue && _currentPlayingQueue != null) {
       for (final song in _currentPlayingQueue!) {
-        if (_normalizePath(song.filePath) == target) {
+        if (song.normalizedPath == target) {
           return song;
         }
       }
     }
     if (_playingPlaylist?.songs != null) {
       for (final song in _playingPlaylist!.songs!) {
-        if (_normalizePath(song.filePath) == target) {
+        if (song.normalizedPath == target) {
           return song;
         }
       }
     }
     for (final song in _currentPlaylistSongs) {
-      if (_normalizePath(song.filePath) == target) {
+      if (song.normalizedPath == target) {
         return song;
       }
     }
     for (final song in _allSongs) {
-      if (_normalizePath(song.filePath) == target) {
+      if (song.normalizedPath == target) {
         return song;
       }
     }
@@ -1214,10 +1225,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
   void _applyCachedCover(String cacheKey) {
     final cachedCover = _coverCache[cacheKey];
     if (cachedCover == null) return;
-    final song = _findSongByPath(cacheKey);
-    if (song?.albumArt == cachedCover) return;
 
     _updateSongInCollections(cacheKey, (song) {
+      if (song.albumArt == cachedCover) return song;
       return Song(
         title: song.title,
         artist: song.artist,
@@ -1301,7 +1311,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
           });
         }
       } catch (e) {
-        //
+        // 记录失败原因，排查封面加载问题
+        debugPrint('加载封面失败: ${p.basename(filePath)} - $e');
       } finally {
         _pendingCoverRequests.remove(cacheKey);
       }
@@ -2055,7 +2066,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> stop() async {
     await _audioService.player.stop();
     if (_currentSong != null) {
-      final oldPath = _normalizePath(_currentSong!.filePath);
+      final oldPath = _currentSong!.normalizedPath;
       _currentSong = null;
       if (!_visibleCoverPaths.contains(oldPath)) {
         _evictableCoverPaths.add(oldPath);
@@ -2597,10 +2608,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     // 切换播放歌曲时管理封面缓存
-    final oldSongPath = _currentSong != null
-        ? _normalizePath(_currentSong!.filePath)
-        : null;
-    final newSongPath = _normalizePath(songFilePath);
+    final oldSongPath = _currentSong?.normalizedPath;
+    final newSongPath = songToPlay.normalizedPath;
 
     _currentSong = songToPlay;
     _evictableCoverPaths.remove(newSongPath);
@@ -2854,7 +2863,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             _playingPlaylist = null;
             _playingSongIndex = -1;
             if (_currentSong != null) {
-              final oldPath = _normalizePath(_currentSong!.filePath);
+              final oldPath = _currentSong!.normalizedPath;
               _currentSong = null;
               if (!_visibleCoverPaths.contains(oldPath)) {
                 _evictableCoverPaths.add(oldPath);
@@ -2872,7 +2881,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           _playingPlaylist = null;
           _playingSongIndex = -1;
           if (_currentSong != null) {
-            final oldPath = _normalizePath(_currentSong!.filePath);
+            final oldPath = _currentSong!.normalizedPath;
             _currentSong = null;
             if (!_visibleCoverPaths.contains(oldPath)) {
               _evictableCoverPaths.add(oldPath);
