@@ -1888,7 +1888,9 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                 leading: SizedBox(
                   width: 50,
                   height: 50,
-                  child: widget.song.albumArt != null
+                  // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
+                  child: widget.song.albumArt != null &&
+                          widget.song.albumArt!.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: Image.memory(
@@ -1896,6 +1898,13 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                             widget.song.albumArt!,
                             fit: BoxFit.cover,
                             gaplessPlayback: true,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.music_note,
+                                size: 40,
+                                color: Colors.grey,
+                              );
+                            },
                           ),
                         )
                       : const Icon(

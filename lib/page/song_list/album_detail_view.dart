@@ -352,7 +352,13 @@ class _AlbumHeaderBackdrop extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.memory(cover!, fit: BoxFit.cover, gaplessPlayback: true),
+        Image.memory(
+          cover!,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          cacheWidth: 600,
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+        ),// 缓存封面
         BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: ColoredBox(color: baseColor.withValues(alpha: 0.40)),
