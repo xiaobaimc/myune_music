@@ -19,11 +19,15 @@ import 'page/playlist/playlist_content_notifier.dart';
 import 'page/setting/settings_provider.dart';
 import 'src/rust/frb_generated.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'page/statistics_page/statistics_manager.dart';
 import 'layout/navigation_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化全局快捷键管理器
+  await hotKeyManager.unregisterAll();
 
   // 先初始化window_manager
   await windowManager.ensureInitialized();

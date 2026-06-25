@@ -23,6 +23,7 @@ import '../setting/settings_provider.dart';
 import '../../theme/theme_provider.dart';
 import '../statistics_page/playback_tracker.dart';
 import '../../src/rust/api/audio_info.dart';
+import '../../services/global_hotkey_manager.dart';
 
 enum SortCriterion { title, artist, dateModified, random, trackNumber }
 
@@ -319,6 +320,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _initLogFile();
     _loadAllData(); // 使用一个统一的方法来加载所有数据
     _loadDevices(); // 加载音频设备
+    
+    // 初始化全局快捷键
+    GlobalHotkeyManager().init(this, _settingsProvider);
   }
 
   Future<void> _initLogFile() async {

@@ -122,15 +122,17 @@ class SingleLineLyricView extends StatelessWidget {
         final currentLyricLineIndex = snapshot.data ?? -1;
         final currentLyrics = playlistNotifier.currentLyrics;
 
-        return SingleLineLyricWidget(
-          lyrics: currentLyrics,
-          currentIndex: currentLyricLineIndex,
-          maxLinesPerLyric: settings.forceSingleLineLyric
-              ? 1
-              : maxLinesPerLyric,
-          fontSize: fontSize,
-          textAlign: textAlign,
-          alignment: alignment,
+        return RepaintBoundary(
+          child: SingleLineLyricWidget(
+            lyrics: currentLyrics,
+            currentIndex: currentLyricLineIndex,
+            maxLinesPerLyric: settings.forceSingleLineLyric
+                ? 1
+                : maxLinesPerLyric,
+            fontSize: fontSize,
+            textAlign: textAlign,
+            alignment: alignment,
+          ),
         );
       },
     );

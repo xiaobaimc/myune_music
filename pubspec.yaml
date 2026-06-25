@@ -53,6 +53,7 @@ dependencies:
   markdown_widget: ^2.3.2+8
   mpv_audio_kit: ^0.4.2
   show_fps: ^1.1.0
+  hotkey_manager: ^0.2.3
 
 
   rxdart: ^0.28.0
