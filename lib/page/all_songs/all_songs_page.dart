@@ -154,9 +154,6 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                 itemCount: songs.length,
                                 itemBuilder: (context, index) {
                                   final song = songs[index];
-                                  // 播放时需要找到它在原始 allSongs 列表中的索引
-                                  final originalIndex = notifier.allSongs
-                                      .indexOf(song);
                                   return SongTileWidget(
                                     key: ValueKey(song.filePath),
                                     song: song,
@@ -165,10 +162,14 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                         notifier.allSongsVirtualPlaylist,
                                     enableContextMenu: false,
                                     onTap: () {
-                                      if (originalIndex != -1) {
-                                        notifier.playSongFromAllSongs(
-                                          originalIndex,
+                                      if (notifier.isSearching) {
+                                        // 搜索模式下使用当前渲染列表快照，避免索引错位
+                                        notifier.playFromDynamicList(
+                                          List<Song>.from(songs),
+                                          index,
                                         );
+                                      } else {
+                                        notifier.playSongFromAllSongs(index);
                                       }
                                     },
                                   );
