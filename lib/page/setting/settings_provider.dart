@@ -47,6 +47,7 @@ class SettingsProvider with ChangeNotifier {
   static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
   static const _enableLoudnessKey = 'enableLoudness';
   static const _enableReplayGainKey = 'enableReplayGain';
+  static const _enableGaplessPlaybackKey = 'enableGaplessPlayback';
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 22.0; // 默认字体大小
@@ -70,6 +71,7 @@ class SettingsProvider with ChangeNotifier {
   bool _enableLyricElasticScroll = false;
   bool _enableLoudness = false;
   bool _enableReplayGain = false;
+  bool _enableGaplessPlayback = false; // 默认不启用无缝播放
 
   bool _enableGlobalHotkeys = true;
   HotKey? _playPauseHotKey;
@@ -122,6 +124,7 @@ class SettingsProvider with ChangeNotifier {
   bool get enableLyricElasticScroll => _enableLyricElasticScroll;
   bool get enableLoudness => _enableLoudness;
   bool get enableReplayGain => _enableReplayGain;
+  bool get enableGaplessPlayback => _enableGaplessPlayback;
 
   bool get enableGlobalHotkeys => _enableGlobalHotkeys;
   HotKey? get playPauseHotKey => _playPauseHotKey;
@@ -130,8 +133,10 @@ class SettingsProvider with ChangeNotifier {
   HotKey? get volumeUpHotKey => _volumeUpHotKey;
   HotKey? get volumeDownHotKey => _volumeDownHotKey;
 
+  late final Future<void> initializationFuture;
+
   SettingsProvider() {
-    _loadFromPrefs();
+    initializationFuture = _loadFromPrefs();
   }
 
   Future<void> _loadFromPrefs() async {
@@ -170,6 +175,7 @@ class SettingsProvider with ChangeNotifier {
         prefs.getBool(_enableLyricElasticScrollKey) ?? false;
     _enableLoudness = prefs.getBool(_enableLoudnessKey) ?? false;
     _enableReplayGain = prefs.getBool(_enableReplayGainKey) ?? false;
+    _enableGaplessPlayback = prefs.getBool(_enableGaplessPlaybackKey) ?? false;
     if (_enableLoudness && _enableReplayGain) {
       _enableReplayGain = false;
       await prefs.setBool(_enableReplayGainKey, false);
@@ -423,6 +429,13 @@ class SettingsProvider with ChangeNotifier {
     if (value) {
       await prefs.setBool(_enableLoudnessKey, false);
     }
+  }
+
+  void setEnableGaplessPlayback(bool value) async {
+    _enableGaplessPlayback = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableGaplessPlaybackKey, value);
   }
 
   HotKey? _parseHotKey(String? jsonStr, String type) {

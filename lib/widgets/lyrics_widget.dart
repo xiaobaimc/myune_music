@@ -1,4 +1,4 @@
-﻿/*
+/*
 FIXME: 假设以下格式
 `
 [00:08.220]First [00:08.412]things [00:08.882]first[00:09.378]
@@ -1353,31 +1353,27 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final double offsetToCenter =
         center - _elasticBaseYPositions[widget.currentIndex];
 
-    // 用两句之间的位移距离计算ratio
+    // 上一行移动的行数与时间差
     final int fromIndex = previousIndex ?? _previousIndex;
-    final double fromY =
-        (fromIndex >= 0 && fromIndex < _elasticBaseYPositions.length)
-        ? _elasticBaseYPositions[fromIndex]
-        : _elasticBaseYPositions[widget.currentIndex];
-    final double toY = _elasticBaseYPositions[widget.currentIndex];
+    final int lineDiff = (widget.currentIndex - fromIndex).abs();
 
-    final double stepDistance = (toY - fromY).abs();
+    int timeDiffMs = 1000;
+    if (fromIndex >= 0 &&
+        fromIndex < widget.lyrics.length &&
+        widget.currentIndex >= 0 &&
+        widget.currentIndex < widget.lyrics.length) {
+      timeDiffMs =
+          (widget.lyrics[widget.currentIndex].timestamp -
+                  widget.lyrics[fromIndex].timestamp)
+              .abs()
+              .inMilliseconds;
+    }
 
-    // _estimatedElasticItemHeight 就是"一步"的参考单位
-    final double ratio = (stepDistance / _estimatedElasticItemHeight).clamp(
-      0.5,
-      4.0,
-    );
+    // 小于500毫秒或大于7行，不同步延迟
+    final bool shouldTriggerWave = timeDiffMs >= 500 && lineDiff <= 7;
 
-    final int durationMs = (480 * math.pow(ratio, 0.55)).round().clamp(
-      300,
-      750,
-    );
-    final double omega = (10.5 * math.pow(ratio, 0.45)).clamp(6.5, 15.5);
-    const double zeta = 0.91;
-
-    final curve = LyricSpringCurve(omega: omega, zeta: zeta);
-    final duration = Duration(milliseconds: durationMs);
+    const curve = LyricSpringCurve(omega: 12.0, zeta: 0.91);
+    const duration = Duration(milliseconds: 550);
 
     final int generation = ++_elasticAnimationGeneration;
     final int anchorIndex = _estimateElasticAnchorIndex(vh);
@@ -1386,30 +1382,45 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (i >= _elasticControllers.length) break;
 
       final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
-      final double executionDelay = _elasticDelayFromAnchor(i, anchorIndex);
+      final double executionDelay = shouldTriggerWave
+          ? _elasticDelayFromAnchor(i, anchorIndex)
+          : 0.0;
 
-      Future.delayed(
-        Duration(milliseconds: (executionDelay * 1000).toInt()),
-        () {
-          if (!mounted ||
-              _isUserScrolling ||
-              generation != _elasticAnimationGeneration) {
-            return;
-          }
+      if (executionDelay > 0.0) {
+        Future.delayed(
+          Duration(milliseconds: (executionDelay * 1000).toInt()),
+          () {
+            if (!mounted ||
+                _isUserScrolling ||
+                generation != _elasticAnimationGeneration) {
+              return;
+            }
 
-          final controller = _elasticControllers[i];
+            final controller = _elasticControllers[i];
 
-          // 避免微小差距闪烁
-          if ((controller.value - targetY).abs() < 0.2) {
-            controller.value = targetY;
+            // 避免微小差距闪烁
+            if ((controller.value - targetY).abs() < 0.2) {
+              controller.value = targetY;
+              controller.stop();
+              return;
+            }
+
             controller.stop();
-            return;
-          }
+            controller.animateTo(targetY, duration: duration, curve: curve);
+          },
+        );
+      } else {
+        final controller = _elasticControllers[i];
 
+        // 避免微小差距闪烁
+        if ((controller.value - targetY).abs() < 0.2) {
+          controller.value = targetY;
+          controller.stop();
+        } else {
           controller.stop();
           controller.animateTo(targetY, duration: duration, curve: curve);
-        },
-      );
+        }
+      }
     }
   }
 
@@ -1428,12 +1439,19 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (index <= anchorIndex) return 0.0;
 
     double delay = 0.0;
-    double step = 0.045;
+    double step = 0.05;
 
+    final double baseHeight = _estimatedElasticItemHeight;
     final int startLoopIndex = math.max(visibleTopIndex, anchorIndex);
 
     for (int i = startLoopIndex; i < index; i++) {
-      delay += step;
+      final double itemHeight = (i < _elasticItemHeights.length)
+          ? _elasticItemHeights[i]
+          : baseHeight;
+      // 比值下限钳制为 1.0：短行保持原始步长不缩小（与修改前行为一致）
+      // 比标准行更高的行（如含翻译）才等比放大步长，保持视觉波浪一致
+      final double heightRatio = math.max(1.0, itemHeight / baseHeight);
+      delay += step * heightRatio;
       step /= 1.05;
     }
 

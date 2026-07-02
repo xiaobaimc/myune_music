@@ -301,6 +301,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   int get currentQueueIndex => _currentQueueIndex;
   bool get isUsingQueue => _isUsingQueue;
 
+  // --- 无缝播放相关 ---
+  bool _gaplessEnabled = false; // 是否启用无缝播放
+  bool _isGaplessTransitioning = false; // 防止重入的标记
+
   // --- 消息通知 ---
   final StreamController<String> _errorStreamController =
       StreamController<String>.broadcast(); // 错误信息流
@@ -320,9 +324,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _initLogFile();
     _loadAllData(); // 使用一个统一的方法来加载所有数据
     _loadDevices(); // 加载音频设备
-    
-    // 初始化全局快捷键
-    GlobalHotkeyManager().init(this, _settingsProvider);
+
+    // 初始化全局快捷键 (等待 SettingsProvider 异步加载完成后再执行，避免初始读取为 null)
+    _settingsProvider.initializationFuture.then((_) {
+      GlobalHotkeyManager().init(this, _settingsProvider);
+    });
   }
 
   Future<void> _initLogFile() async {
@@ -383,6 +389,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _updateLoudnessSubscription();
     // 恢复播放状态
     await _restorePlaybackState();
+    // 恢复无缝播放设置
+    updateGaplessMode(_settingsProvider.enableGaplessPlayback);
   }
 
   // 获取规范化的路径
@@ -670,6 +678,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
         _isAutoPlaying = true; // 标记为自动播放
         await _playNextLogic();
         _isAutoPlaying = false; // 重置标记
+      }
+    });
+
+    _audioService.player.stream.playlist.listen((playlist) {
+      if (!_gaplessEnabled) return;
+      // 检测 mpv 是否自动过渡到了 playlist 的第二首
+      // playlist.index 变为 1 说明 mpv 切了歌
+      if (playlist.index == 1 && playlist.items.length >= 2) {
+        _handleGaplessTransition();
       }
     });
 
@@ -1028,8 +1045,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     // 单独处理当前播放歌曲
-    if (_currentSong != null &&
-        _currentSong!.normalizedPath == targetPath) {
+    if (_currentSong != null && _currentSong!.normalizedPath == targetPath) {
       final newSong = updater(_currentSong!);
       // 无变更时跳过
       if (!identical(newSong, _currentSong)) {
@@ -1172,8 +1188,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _pendingCoverRequests.remove(cacheKey);
     _removeFromCoverQueue(cacheKey);
 
-    if (_currentSong != null &&
-        _currentSong!.normalizedPath == cacheKey) {
+    if (_currentSong != null && _currentSong!.normalizedPath == cacheKey) {
       return;
     }
 
@@ -2045,6 +2060,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 播放控制 ---
   Future<void> play() async {
     if (!_isPlaying) {
+      if (_gaplessEnabled &&
+          _audioService.player.state.playlist.items.length <= 1) {
+        _refreshGaplessNext();
+      }
       await _audioService.player.play(); // 开始播放
       _isPlaying = true; // 立即更新状态
 
@@ -2146,6 +2165,236 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _applyEqualizer();
     await _saveAudioControlSettings();
     notifyListeners();
+  }
+
+  // 用于无缝播放模式下，将下一首预加载到 mpv playlist 中
+  String? _peekNextPath() {
+    // 独立队列模式
+    if (_isUsingQueue &&
+        _currentPlayingQueue != null &&
+        _currentPlayingQueue!.isNotEmpty) {
+      final songCount = _currentPlayingQueue!.length;
+      final currentIndex = _currentQueueIndex;
+
+      int nextIndex;
+
+      if (_playMode == PlayMode.shuffle) {
+        if (_shuffledIndices.length != songCount) return null;
+        final int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
+        if (currentShuffledPos == -1) return null;
+        // 到达随机列表末尾
+        if (currentShuffledPos == _shuffledIndices.length - 1) {
+          if (_stopAfterQueue) return null;
+          // 循环到随机列表开头
+          return _currentPlayingQueueFilePaths![_shuffledIndices[0]];
+        }
+        nextIndex = _shuffledIndices[currentShuffledPos + 1];
+      } else if (_playMode == PlayMode.repeatOne) {
+        if (_stopAfterQueue) return null;
+        nextIndex = currentIndex;
+      } else {
+        // 顺序模式
+        if (currentIndex == songCount - 1 && _stopAfterQueue) return null;
+        nextIndex = (currentIndex + 1) % songCount;
+      }
+
+      if (nextIndex >= 0 && nextIndex < _currentPlayingQueueFilePaths!.length) {
+        return _currentPlayingQueueFilePaths![nextIndex];
+      }
+      return null;
+    }
+
+    // 歌单模式
+    if (_playingPlaylist == null || _playingPlaylist!.songFilePaths.isEmpty) {
+      return null;
+    }
+
+    final songCount = _playingPlaylist!.songFilePaths.length;
+    final currentIndex = _playingSongIndex;
+
+    int nextIndex;
+
+    if (_playMode == PlayMode.shuffle) {
+      if (_shuffledIndices.length != songCount) return null;
+      final int currentShuffledPos = _shuffledIndices.indexOf(currentIndex);
+      if (currentShuffledPos == -1) return null;
+      if (currentShuffledPos == _shuffledIndices.length - 1) {
+        if (_stopAfterQueue) return null;
+        return _playingPlaylist!.songFilePaths[_shuffledIndices[0]];
+      }
+      nextIndex = _shuffledIndices[currentShuffledPos + 1];
+    } else if (_playMode == PlayMode.repeatOne) {
+      if (_stopAfterQueue) return null;
+      nextIndex = currentIndex;
+    } else {
+      if (currentIndex == songCount - 1 && _stopAfterQueue) return null;
+      nextIndex = (currentIndex + 1) % songCount;
+    }
+
+    if (nextIndex >= 0 && nextIndex < _playingPlaylist!.songFilePaths.length) {
+      return _playingPlaylist!.songFilePaths[nextIndex];
+    }
+    return null;
+  }
+
+  /// 计算下一首的索引（不修改状态），供 _handleGaplessTransition 使用
+  int _peekNextIndex() {
+    if (_isUsingQueue &&
+        _currentPlayingQueue != null &&
+        _currentPlayingQueue!.isNotEmpty) {
+      final songCount = _currentPlayingQueue!.length;
+      final currentIndex = _currentQueueIndex;
+
+      if (_playMode == PlayMode.shuffle) {
+        if (_shuffledIndices.length != songCount) {
+          return (currentIndex + 1) % songCount;
+        }
+        final int pos = _shuffledIndices.indexOf(currentIndex);
+        if (pos == -1 || pos == _shuffledIndices.length - 1) {
+          return _shuffledIndices.isNotEmpty ? _shuffledIndices[0] : 0;
+        }
+        return _shuffledIndices[pos + 1];
+      } else if (_playMode == PlayMode.repeatOne) {
+        return currentIndex;
+      } else {
+        return (currentIndex + 1) % songCount;
+      }
+    }
+
+    // 歌单模式
+    if (_playingPlaylist == null || _playingPlaylist!.songFilePaths.isEmpty) {
+      return 0;
+    }
+    final songCount = _playingPlaylist!.songFilePaths.length;
+    final currentIndex = _playingSongIndex;
+
+    if (_playMode == PlayMode.shuffle) {
+      if (_shuffledIndices.length != songCount) {
+        return (currentIndex + 1) % songCount;
+      }
+      final int pos = _shuffledIndices.indexOf(currentIndex);
+      if (pos == -1 || pos == _shuffledIndices.length - 1) {
+        return _shuffledIndices.isNotEmpty ? _shuffledIndices[0] : 0;
+      }
+      return _shuffledIndices[pos + 1];
+    } else if (_playMode == PlayMode.repeatOne) {
+      return currentIndex;
+    } else {
+      return (currentIndex + 1) % songCount;
+    }
+  }
+
+  void updateGaplessMode(bool enabled) {
+    _gaplessEnabled = enabled;
+    if (enabled) {
+      _audioService.enableGapless();
+      _refreshGaplessNext();
+    } else {
+      _audioService.disableGapless();
+      _audioService.replaceNext(null);
+    }
+    notifyListeners();
+  }
+
+  void _refreshGaplessNext() {
+    if (!_gaplessEnabled) return;
+    final nextPath = _peekNextPath();
+    _audioService.replaceNext(nextPath);
+  }
+
+  Future<void> _handleGaplessTransition() async {
+    if (_isGaplessTransitioning) return;
+    _isGaplessTransitioning = true;
+    _isAutoPlaying = true;
+
+    try {
+      final nextIndex = _peekNextIndex();
+      if (_isUsingQueue &&
+          _currentPlayingQueue != null &&
+          _currentPlayingQueue!.isNotEmpty) {
+        if (_playMode == PlayMode.shuffle) {
+          final songCount = _currentPlayingQueue!.length;
+          final int currentShuffledPos = _shuffledIndices.indexOf(
+            _currentQueueIndex,
+          );
+          if (currentShuffledPos == _shuffledIndices.length - 1) {
+            _generateShuffledIndices(count: songCount);
+          }
+        }
+        _currentQueueIndex = nextIndex;
+      } else {
+        if (_playMode == PlayMode.shuffle && _playingPlaylist != null) {
+          final songCount = _playingPlaylist!.songFilePaths.length;
+          final int currentShuffledPos = _shuffledIndices.indexOf(
+            _playingSongIndex,
+          );
+          if (currentShuffledPos == _shuffledIndices.length - 1) {
+            _generateShuffledIndices(count: songCount);
+          }
+        }
+        _playingSongIndex = nextIndex;
+      }
+
+      String? songFilePath;
+      if (_isUsingQueue &&
+          _currentPlayingQueue != null &&
+          _currentQueueIndex >= 0 &&
+          _currentQueueIndex < _currentPlayingQueue!.length) {
+        songFilePath = _currentPlayingQueueFilePaths![_currentQueueIndex];
+      } else if (_playingPlaylist != null &&
+          _playingSongIndex >= 0 &&
+          _playingSongIndex < _playingPlaylist!.songFilePaths.length) {
+        songFilePath = _playingPlaylist!.songFilePaths[_playingSongIndex];
+      }
+
+      if (songFilePath != null) {
+        final songToPlay = await _prepareSongForPlayback(songFilePath);
+        final oldSongPath = _currentSong?.normalizedPath;
+        final newSongPath = songToPlay.normalizedPath;
+
+        _currentSong = songToPlay;
+        _evictableCoverPaths.remove(newSongPath);
+        if (oldSongPath != null &&
+            oldSongPath != newSongPath &&
+            !_visibleCoverPaths.contains(oldSongPath)) {
+          _evictableCoverPaths.add(oldSongPath);
+          _scheduleCoverEviction();
+        }
+
+        final session = MediaSession(
+          appName: 'MyuneMusic',
+          title: songToPlay.title,
+          artist: songToPlay.artist,
+          album: songToPlay.album,
+          autoApplyPlaylistNavigation: false,
+        );
+        await _audioService.player.setMediaSession(session);
+
+        _currentLyrics = [];
+        _currentLyricLineIndex = -1;
+        _loadLyricsForSong(songFilePath);
+
+        extractAndApplyDynamicColor(songToPlay.albumArt);
+
+        PlaybackTracker().startTracking(songToPlay);
+
+        savePlaybackState();
+      }
+
+      await _audioService.removeFirst();
+
+      final newNextPath = _peekNextPath();
+      if (newNextPath != null) {
+        await _audioService.player.add(Media(newNextPath));
+      }
+
+      notifyListeners();
+    } catch (e) {
+      //
+    } finally {
+      _isAutoPlaying = false;
+      _isGaplessTransitioning = false;
+    }
   }
 
   // 根据播放模式播放下一首
@@ -2381,6 +2630,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         break;
     }
     _savePlayMode(); // 保存当前模式
+    _refreshGaplessNext();
     notifyListeners();
   }
 
@@ -2470,6 +2720,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _infoStreamController.add(message);
     }
 
+    _refreshGaplessNext();
+
     notifyListeners();
   }
 
@@ -2554,6 +2806,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _infoStreamController.add('已将歌曲设置为下一首：${song.title}');
 
+    _refreshGaplessNext();
+
     notifyListeners();
   }
 
@@ -2634,14 +2888,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
       );
       await _audioService.player.setMediaSession(session);
 
-      await _audioService.playSong(
-        songFilePath,
-        pitch: _currentPitch,
-        rate: _currentPlaybackRate,
-        eqGains: _equalizerGains,
-        eqFrequencies: equalizerFrequencies,
-        exclusiveMode: _isExclusiveModeEnabled,
-      );
+      if (_gaplessEnabled) {
+        await _audioService.playSongGapless(
+          songFilePath,
+          nextPath: _peekNextPath(),
+          pitch: _currentPitch,
+          rate: _currentPlaybackRate,
+          eqGains: _equalizerGains,
+          eqFrequencies: equalizerFrequencies,
+          exclusiveMode: _isExclusiveModeEnabled,
+        );
+      } else {
+        await _audioService.playSong(
+          songFilePath,
+          pitch: _currentPitch,
+          rate: _currentPlaybackRate,
+          eqGains: _equalizerGains,
+          eqFrequencies: equalizerFrequencies,
+          exclusiveMode: _isExclusiveModeEnabled,
+        );
+      }
 
       _currentLyrics = [];
       _currentLyricLineIndex = -1;

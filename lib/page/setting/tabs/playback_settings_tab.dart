@@ -18,17 +18,11 @@ class PlaybackSettingsTab extends StatelessWidget {
       children: [
         // 音频设备选择
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '更改音频输出设备',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('更改音频输出设备', style: Theme.of(context).textTheme.titleMedium),
               ElevatedButton.icon(
                 onPressed: () {
                   showDialog(
@@ -52,9 +46,7 @@ class PlaybackSettingsTab extends StatelessWidget {
                 children: [
                   Text('启用独占模式'),
                   SizedBox(width: 4),
-                  InfoIcon(
-                    '启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这会导致其他应用无法播放音频',
-                  ),
+                  InfoIcon('启用后将使用独占模式播放音频，提供更低的延迟以及更好的音质\n这会导致其他应用无法播放音频'),
                 ],
               ),
               value: playlistNotifier.isExclusiveModeEnabled,
@@ -100,6 +92,21 @@ class PlaybackSettingsTab extends StatelessWidget {
             }
             context.read<SettingsProvider>().setEnableReplayGain(value);
             playlistNotifier.updateReplayGainSettings();
+          },
+        ),
+        // 无缝播放设置
+        SwitchListTile(
+          title: const Row(
+            children: [
+              Text('无缝队列'),
+              SizedBox(width: 4),
+              InfoIcon('实验性功能。启用后将会消除切歌时的短暂间隔'),
+            ],
+          ),
+          value: settings.enableGaplessPlayback,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setEnableGaplessPlayback(value);
+            context.read<PlaylistContentNotifier>().updateGaplessMode(value);
           },
         ),
       ],
