@@ -43,6 +43,7 @@ class SettingsProvider with ChangeNotifier {
   static const _audioDeviceIsAutoKey = 'audio_device_is_auto';
   static const _ignorePlaybackErrorsKey = 'ignorePlaybackErrors';
   static const _preferExternalLyricsKey = 'preferExternalLyrics';
+  static const _autoAdjustLyricLayoutKey = 'autoAdjustLyricLayout'; // 自动调节歌词字体与间距设置的 key
 
   static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
   static const _enableLoudnessKey = 'enableLoudness';
@@ -68,6 +69,7 @@ class SettingsProvider with ChangeNotifier {
   String? _audioDeviceDesc; // 音频设备描述
   bool _ignorePlaybackErrors = false; // 默认不忽略播放错误
   bool _preferExternalLyrics = false; // 默认不优先读取外置LRC歌词
+  bool _autoAdjustLyricLayout = false; // 默认不自动调节歌词布局
   bool _enableLyricElasticScroll = false;
   bool _enableLoudness = false;
   bool _enableReplayGain = false;
@@ -121,6 +123,7 @@ class SettingsProvider with ChangeNotifier {
   bool get ignorePlaybackErrors => _ignorePlaybackErrors;
 
   bool get preferExternalLyrics => _preferExternalLyrics; // 获取优先读取外置LRC歌词设置
+  bool get autoAdjustLyricLayout => _autoAdjustLyricLayout; // 获取是否自动调节歌词布局
   bool get enableLyricElasticScroll => _enableLyricElasticScroll;
   bool get enableLoudness => _enableLoudness;
   bool get enableReplayGain => _enableReplayGain;
@@ -171,6 +174,7 @@ class SettingsProvider with ChangeNotifier {
     _audioDeviceDesc = prefs.getString(_audioDeviceDescKey);
     _ignorePlaybackErrors = prefs.getBool(_ignorePlaybackErrorsKey) ?? false;
     _preferExternalLyrics = prefs.getBool(_preferExternalLyricsKey) ?? false;
+    _autoAdjustLyricLayout = prefs.getBool(_autoAdjustLyricLayoutKey) ?? false;
     _enableLyricElasticScroll =
         prefs.getBool(_enableLyricElasticScrollKey) ?? false;
     _enableLoudness = prefs.getBool(_enableLoudnessKey) ?? false;
@@ -295,6 +299,13 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_addLyricPaddingKey, value);
+  }
+
+  void setAutoAdjustLyricLayout(bool value) async {
+    _autoAdjustLyricLayout = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoAdjustLyricLayoutKey, value);
   }
 
   void setArtistSeparators(List<String> separators) async {

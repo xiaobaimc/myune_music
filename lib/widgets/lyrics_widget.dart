@@ -721,15 +721,27 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final lyricAlignment = context.select<SettingsProvider, TextAlign>(
       (s) => s.lyricAlignment,
     );
-    final fontSize = context.select<SettingsProvider, double>(
+    final autoAdjustLyricLayout = context.select<SettingsProvider, bool>(
+      (s) => s.autoAdjustLyricLayout,
+    );
+    double fontSize = context.select<SettingsProvider, double>(
       (s) => s.fontSize,
     );
-    final lyricVerticalSpacing = context.select<SettingsProvider, double>(
+    double lyricVerticalSpacing = context.select<SettingsProvider, double>(
       (s) => s.lyricVerticalSpacing,
     );
     final addLyricPadding = context.select<SettingsProvider, bool>(
       (s) => s.addLyricPadding,
     );
+
+    if (autoAdjustLyricLayout) {
+      final size = MediaQuery.of(context).size;
+      final double width = size.width > 0 ? size.width : 1150.0;
+      final double height = size.height > 0 ? size.height : 620.0;
+      final double scale = (math.sqrt((width * height) / (1150.0 * 620.0))).clamp(0.5, 2.0);
+      fontSize = 22.0 * scale;
+      lyricVerticalSpacing = 6.0 * scale;
+    }
     final enableLyricBlur = context.select<SettingsProvider, bool>(
       (s) => s.enableLyricBlur,
     );

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../layout/navigation_notifier.dart';
 import 'package:provider/provider.dart';
 import 'dart:typed_data';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/single_line_lyrics.dart';
 import 'album_detail_view.dart';
@@ -221,11 +222,14 @@ class _AlbumListState extends State<AlbumList> {
                             );
                           }
 
-                          return SmoothScrollWeb(
+                          return SilkyScroll(
                             controller: _scrollController,
-                            config: SmoothScrollConfig.lenis(),
-                            child: GridView.builder(
-                              controller: _scrollController,
+                            silkyScrollDuration: ScrollConfig.duration,
+                            scrollSpeed: ScrollConfig.speed,
+                            animationCurve: ScrollConfig.curve,
+                            builder: (context, controller, physics, _) => GridView.builder(
+                              controller: controller,
+                              physics: physics,
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                               gridDelegate:
                                   const SliverGridDelegateWithMaxCrossAxisExtent(

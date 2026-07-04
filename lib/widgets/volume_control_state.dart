@@ -8,10 +8,12 @@ import 'hover_overlay_control.dart';
 class VolumeControl extends StatefulWidget {
   final Player player;
   final Color iconColor;
+  final double size;
 
   const VolumeControl({
     required this.player,
     required this.iconColor,
+    this.size = 24.0,
     super.key,
   });
 
@@ -57,6 +59,7 @@ class VolumeControlState extends State<VolumeControl> {
         return HoverOverlayControl(
           icon: _getVolumeIcon(playlistNotifier.volume),
           iconColor: widget.iconColor,
+          size: widget.size,
           onIconPressed: playlistNotifier.toggleMute,
           onPointerSignal: (event) => _handleScroll(event, playlistNotifier),
           overlayOffset: const Offset(0, -170),

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../layout/navigation_notifier.dart';
 import 'package:pinyin/pinyin.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 import 'dart:typed_data';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/single_line_lyrics.dart';
@@ -218,11 +219,14 @@ class _ArtistListState extends State<ArtistList> {
                             );
                           }
 
-                          return SmoothScrollWeb(
+                          return SilkyScroll(
                             controller: _scrollController,
-                            config: SmoothScrollConfig.lenis(),
-                            child: ListView.builder(
-                              controller: _scrollController,
+                            silkyScrollDuration: ScrollConfig.duration,
+                            scrollSpeed: ScrollConfig.speed,
+                            animationCurve: ScrollConfig.curve,
+                            builder: (context, controller, physics, _) => ListView.builder(
+                              controller: controller,
+                              physics: physics,
                               itemCount: artistNames.length,
                               itemBuilder: (context, index) {
                                 final artistName = artistNames[index];

@@ -9,10 +9,12 @@ import '../page/playlist/playlist_content_notifier.dart';
 class BalanceRateControl extends StatelessWidget {
   final Player player;
   final Color iconColor;
+  final double size;
 
   const BalanceRateControl({
     required this.player,
     required this.iconColor,
+    this.size = 24.0,
     super.key,
   });
 
@@ -20,7 +22,8 @@ class BalanceRateControl extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: '音效设置',
-      icon: Icon(Icons.tune, color: iconColor.withAlpha(179), size: 24),
+      iconSize: size,
+      icon: Icon(Icons.tune, color: iconColor.withAlpha(179), size: size),
       onPressed: () => _showAudioControlDialog(context),
     );
   }

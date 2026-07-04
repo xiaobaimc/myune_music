@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/sort_dialog.dart';
@@ -137,11 +138,14 @@ class _AllSongsPageState extends State<AllSongsPage> {
                           );
                         }
 
-                        return SmoothScrollWeb(
+                        return SilkyScroll(
                           controller: _scrollController,
-                          config: SmoothScrollConfig.lenis(),
-                          child: CustomScrollView(
-                            controller: _scrollController,
+                          silkyScrollDuration: ScrollConfig.duration,
+                          scrollSpeed: ScrollConfig.speed,
+                          animationCurve: ScrollConfig.curve,
+                          builder: (context, controller, physics, _) => CustomScrollView(
+                            controller: controller,
+                            physics: physics,
                             slivers: [
                               SliverReorderableList(
                                 proxyDecorator: (child, index, animation) =>

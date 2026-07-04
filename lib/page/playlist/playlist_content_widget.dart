@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 
 import 'playlist_content_notifier.dart';
 import 'playlist_models.dart';
@@ -210,34 +211,38 @@ class _PlaylistListWidgetState extends State<PlaylistListWidget> {
               final playlists = notifier.playlists;
               final selectedIndex = notifier.selectedIndex;
 
-              return SmoothScrollWeb(
+              return SilkyScroll(
                 controller: _scrollController,
-                config: SmoothScrollConfig.lenis(),
-                child: ReorderableListView(
-                  onReorderItem: (oldIndex, newIndex) {
-                    notifier.reorderPlaylist(oldIndex, newIndex);
-                  },
-                  buildDefaultDragHandles: false,
-                  scrollController: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    for (int index = 0; index < playlists.length; index++)
-                      ReorderableDragStartListener(
-                        key: ValueKey(playlists[index].id),
-                        index: index,
-                        child: PlaylistTileWidget(
-                          index: index,
-                          name: playlists[index].name,
-                          isDefault: playlists[index].isDefault,
-                          isSelected: selectedIndex == index,
-                          isFolderBased: playlists[index].isFolderBased,
-                          onSecondaryTap: (position) {
-                            _showContextMenu(position, index, context);
-                          },
-                        ),
-                      ),
-                  ],
-                ),
+                silkyScrollDuration: ScrollConfig.duration,
+                scrollSpeed: ScrollConfig.speed,
+                animationCurve: ScrollConfig.curve,
+                physics: const AlwaysScrollableScrollPhysics(),
+                builder: (context, controller, physics, _) =>
+                    ReorderableListView(
+                      onReorderItem: (oldIndex, newIndex) {
+                        notifier.reorderPlaylist(oldIndex, newIndex);
+                      },
+                      buildDefaultDragHandles: false,
+                      scrollController: controller,
+                      physics: physics,
+                      children: [
+                        for (int index = 0; index < playlists.length; index++)
+                          ReorderableDragStartListener(
+                            key: ValueKey(playlists[index].id),
+                            index: index,
+                            child: PlaylistTileWidget(
+                              index: index,
+                              name: playlists[index].name,
+                              isDefault: playlists[index].isDefault,
+                              isSelected: selectedIndex == index,
+                              isFolderBased: playlists[index].isFolderBased,
+                              onSecondaryTap: (position) {
+                                _showContextMenu(position, index, context);
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
               );
             },
           ),
@@ -685,6 +690,7 @@ class HeadSongListWidget extends StatefulWidget {
 
 class _HeadSongListWidgetState extends State<HeadSongListWidget> {
   late final ScrollController _scrollController = ScrollController();
+  bool _isTitleHovered = false;
 
   @override
   void dispose() {
@@ -713,10 +719,42 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
     }
   }
 
+  void _showManagePlaylistsDialog(
+    BuildContext context,
+    PlaylistContentNotifier notifier,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return AlertDialog(
+          title: const Text('管理歌单'),
+          content: Container(
+            width: 320,
+            height: 450,
+            decoration: BoxDecoration(
+              border: Border.all(color: colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const PlaylistListWidget(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
     final isSearching = notifier.isSearching;
+    final aspectRatio = MediaQuery.of(context).size.aspectRatio;
+    final isPortrait = aspectRatio <= 1.0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
@@ -839,10 +877,136 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                               onPressed: notifier.exitMultiSelectMode,
                             ),
                           ] else ...[
-                            Text(
-                              playlistName,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
+                            if (isPortrait)
+                              PopupMenuButton<int>(
+                                tooltip: '切换歌单',
+                                offset: const Offset(0, 40),
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  onEnter: (_) =>
+                                      setState(() => _isTitleHovered = true),
+                                  onExit: (_) =>
+                                      setState(() => _isTitleHovered = false),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: _isTitleHovered
+                                          ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withValues(alpha: 0.08)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          playlistName,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleLarge,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.arrow_drop_down,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                itemBuilder: (context) {
+                                  final List<PopupMenuEntry<int>> items = [];
+                                  items.addAll(
+                                    notifier.playlists.asMap().entries.map((
+                                      entry,
+                                    ) {
+                                      final idx = entry.key;
+                                      final playlist = entry.value;
+                                      final isSelected =
+                                          notifier.selectedIndex == idx;
+                                      return PopupMenuItem<int>(
+                                        value: idx,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              playlist.isFolderBased
+                                                  ? Icons.folder_outlined
+                                                  : Icons.playlist_play,
+                                              size: 18,
+                                              color: isSelected
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary
+                                                  : Colors.grey,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                playlist.name,
+                                                style: TextStyle(
+                                                  color: isSelected
+                                                      ? Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary
+                                                      : null,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.bold
+                                                      : null,
+                                                  fontSize: 14,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  );
+                                  items.add(const PopupMenuDivider());
+                                  items.add(
+                                    const PopupMenuItem<int>(
+                                      value: -99,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.settings,
+                                            size: 18,
+                                            color: Colors.grey,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            '管理歌单...',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                  return items;
+                                },
+                                onSelected: (value) {
+                                  if (value == -99) {
+                                    _showManagePlaylistsDialog(
+                                      context,
+                                      notifier,
+                                    );
+                                  } else {
+                                    notifier.setSelectedIndex(value);
+                                  }
+                                },
+                              )
+                            else
+                              Text(
+                                playlistName,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
                             const SizedBox(width: 16),
                             // 显示当前歌单歌曲总数
                             if (isPlaylistSelected &&
@@ -951,77 +1115,84 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                     }
 
                     // 列表本身
-                    return SmoothScrollWeb(
+                    return SilkyScroll(
                       controller: _scrollController,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        slivers: [
-                          SliverReorderableList(
-                            proxyDecorator: (child, index, animation) =>
-                                Material(
-                                  elevation: 4,
-                                  borderRadius: BorderRadius.circular(12),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: child,
-                                ),
-                            itemCount: songs.length,
-                            itemBuilder: (context, index) {
-                              final song = songs[index];
-                              final currentPlaylist =
-                                  notifier.playlists[notifier.selectedIndex];
+                      silkyScrollDuration: ScrollConfig.duration,
+                      scrollSpeed: ScrollConfig.speed,
+                      animationCurve: ScrollConfig.curve,
+                      builder: (context, controller, physics, _) =>
+                          CustomScrollView(
+                            controller: controller,
+                            physics: physics,
+                            slivers: [
+                              SliverReorderableList(
+                                proxyDecorator: (child, index, animation) =>
+                                    Material(
+                                      elevation: 4,
+                                      borderRadius: BorderRadius.circular(12),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: child,
+                                    ),
+                                itemCount: songs.length,
+                                itemBuilder: (context, index) {
+                                  final song = songs[index];
+                                  final currentPlaylist = notifier
+                                      .playlists[notifier.selectedIndex];
 
-                              return SongTileWidget(
-                                key: ValueKey(song.filePath),
-                                song: song,
-                                index: index,
-                                contextPlaylist: currentPlaylist,
-                                onTap: () {
-                                  if (isMultiSelectMode) {
-                                    notifier.toggleSongSelection(song);
-                                  } else {
-                                    if (notifier.isSearching) {
-                                      final playlistIndex = notifier
-                                          .currentPlaylistSongs
-                                          .indexWhere(
-                                            (playlistSong) =>
-                                                playlistSong.filePath ==
-                                                song.filePath,
-                                          );
-                                      if (playlistIndex != -1) {
-                                        notifier.playSongAtIndex(playlistIndex);
+                                  return SongTileWidget(
+                                    key: ValueKey(song.filePath),
+                                    song: song,
+                                    index: index,
+                                    contextPlaylist: currentPlaylist,
+                                    onTap: () {
+                                      if (isMultiSelectMode) {
+                                        notifier.toggleSongSelection(song);
+                                      } else {
+                                        if (notifier.isSearching) {
+                                          final playlistIndex = notifier
+                                              .currentPlaylistSongs
+                                              .indexWhere(
+                                                (playlistSong) =>
+                                                    playlistSong.filePath ==
+                                                    song.filePath,
+                                              );
+                                          if (playlistIndex != -1) {
+                                            notifier.playSongAtIndex(
+                                              playlistIndex,
+                                            );
+                                          }
+                                        } else {
+                                          notifier.playSongAtIndex(index);
+                                        }
                                       }
-                                    } else {
-                                      notifier.playSongAtIndex(index);
-                                    }
-                                  }
+                                    },
+                                    enableContextMenu:
+                                        !isMultiSelectMode, // 多选模式下禁用右键菜单
+                                  );
                                 },
-                                enableContextMenu:
-                                    !isMultiSelectMode, // 多选模式下禁用右键菜单
-                              );
-                            },
-                            // 在搜索时禁用拖拽排序功能
-                            onReorderItem: (oldIndex, newIndex) {
-                              final isSearching = context
-                                  .read<PlaylistContentNotifier>()
-                                  .isSearching;
-                              final isMultiSelectMode = context
-                                  .read<PlaylistContentNotifier>()
-                                  .isMultiSelectMode;
+                                // 在搜索时禁用拖拽排序功能
+                                onReorderItem: (oldIndex, newIndex) {
+                                  final isSearching = context
+                                      .read<PlaylistContentNotifier>()
+                                      .isSearching;
+                                  final isMultiSelectMode = context
+                                      .read<PlaylistContentNotifier>()
+                                      .isMultiSelectMode;
 
-                              // 如果正在搜索或多选模式，则不做任何事，直接返回
-                              if (isSearching || isMultiSelectMode) {
-                                return;
-                              }
+                                  // 如果正在搜索或多选模式，则不做任何事，直接返回
+                                  if (isSearching || isMultiSelectMode) {
+                                    return;
+                                  }
 
-                              // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
-                              // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
-                              context
-                                  .read<PlaylistContentNotifier>()
-                                  .reorderSong(oldIndex, newIndex);
-                            },
+                                  // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
+                                  // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
+                                  context
+                                      .read<PlaylistContentNotifier>()
+                                      .reorderSong(oldIndex, newIndex);
+                                },
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
                     );
                   },
                 ),
@@ -1088,34 +1259,29 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                         dialogSetState(() => selectedTarget = value);
                       }
                     },
-                    child: Column(
+                    child: const Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('选择期望的响度基准线：'),
-                        const SizedBox(height: 12),
-                        const RadioListTile<double>(
+                        Text('选择期望的响度基准线：'),
+                        SizedBox(height: 12),
+                        RadioListTile<double>(
                           value: -14.0,
                           title: Text('-14.0 LUFS'),
                           subtitle: Text('现代流行/电音'),
                         ),
-                        const RadioListTile<double>(
+                        RadioListTile<double>(
                           value: -16.0,
                           title: Text('-16.0 LUFS'),
                           subtitle: Text('大多流媒体标准'),
                         ),
-                        const RadioListTile<double>(
+                        RadioListTile<double>(
                           value: -18.0,
                           title: Text('-18.0 LUFS'),
                           subtitle: Text('ReplayGain 规范'),
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '这将会物理修改选中的音频文件标签',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
+                        SizedBox(height: 12),
+                        Text('这将会物理修改选中的音频文件标签'),
                       ],
                     ),
                   );
@@ -1126,7 +1292,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('取消'),
                 ),
-                ElevatedButton(
+                TextButton(
                   onPressed: () => Navigator.of(context).pop(selectedTarget),
                   child: Text('开始扫描($selectedCount首)'),
                 ),
@@ -1889,7 +2055,8 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                   width: 50,
                   height: 50,
                   // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
-                  child: widget.song.albumArt != null &&
+                  child:
+                      widget.song.albumArt != null &&
                           widget.song.albumArt!.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(6),

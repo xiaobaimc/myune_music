@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 
 import '../playlist/playlist_content_notifier.dart';
 import '../setting/settings_provider.dart';
@@ -93,11 +94,14 @@ class _StatisticsState extends State<Statistics> {
       _syncTrackedCovers(requiredCoverPaths);
     });
 
-    return SmoothScrollWeb(
+    return SilkyScroll(
       controller: scrollController,
-      config: SmoothScrollConfig.lenis(),
-      child: SingleChildScrollView(
-        controller: scrollController,
+      silkyScrollDuration: ScrollConfig.duration,
+      scrollSpeed: ScrollConfig.speed,
+      animationCurve: ScrollConfig.curve,
+      builder: (context, controller, physics, _) => SingleChildScrollView(
+        controller: controller,
+        physics: physics,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 12, 16),
           child: Column(

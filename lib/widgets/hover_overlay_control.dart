@@ -10,6 +10,8 @@ class HoverOverlayControl extends StatefulWidget {
   final BoxConstraints overlayConstraints;
   final Offset overlayOffset;
 
+  final double size;
+
   const HoverOverlayControl({
     required this.icon,
     required this.iconColor,
@@ -18,6 +20,7 @@ class HoverOverlayControl extends StatefulWidget {
     this.onIconPressed,
     this.onPointerSignal,
     this.overlayConstraints = const BoxConstraints(maxWidth: 240),
+    this.size = 24.0,
     super.key,
   });
 
@@ -101,10 +104,11 @@ class HoverOverlayControlState extends State<HoverOverlayControl> {
           },
           onExit: (_) => _setHovering(false),
           child: IconButton(
+            iconSize: widget.size,
             icon: Icon(
               widget.icon,
               color: widget.iconColor.withAlpha(179),
-              size: 24,
+              size: widget.size,
             ),
             onPressed: () {
               // 如果外部传入了点击事件的处理函数

@@ -54,14 +54,15 @@ dependencies:
   mpv_audio_kit: ^0.4.2
   show_fps: ^1.1.0
   hotkey_manager: ^0.2.3
+  silky_scroll: ^2.6.4
 
 
   rxdart: ^0.28.0
 
-  flutter_web_scroll:
-    git:
-      url: https://github.com/xiaobaimc/flutter_web_scroll.git
-      ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
+  # flutter_web_scroll:
+  #   git:
+  #     url: https://github.com/xiaobaimc/flutter_web_scroll.git
+  #     ref: e05d32de9fd9c5c3eb95fb4bf738451d4216bda3
 
   # mpv_audio_kit:
   #   git:

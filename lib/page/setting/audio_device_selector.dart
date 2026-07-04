@@ -7,7 +7,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_notifier.dart';
 
 class DeviceSelector extends StatefulWidget {
@@ -37,11 +38,14 @@ class _DeviceSelectorState extends State<DeviceSelector> {
           title: const Text('选择音频设备'),
           content: SizedBox(
             width: double.maxFinite,
-            child: SmoothScrollWeb(
+            child: SilkyScroll(
               controller: scrollController,
-              config: SmoothScrollConfig.lenis(),
-              child: ListView(
-                controller: scrollController,
+              silkyScrollDuration: ScrollConfig.duration,
+              scrollSpeed: ScrollConfig.speed,
+              animationCurve: ScrollConfig.curve,
+              builder: (context, controller, physics, _) => ListView(
+                controller: controller,
+                physics: physics,
                 shrinkWrap: true,
                 children: [
                   if (devices.isEmpty)

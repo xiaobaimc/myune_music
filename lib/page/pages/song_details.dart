@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 import '../song_details/song_details_page.dart';
 import '../../widgets/single_line_lyrics.dart';
 
@@ -41,11 +42,14 @@ class _SongDetailsState extends State<SongDetails> {
         children: [
           const Divider(height: 1, thickness: 1),
           Expanded(
-            child: SmoothScrollWeb(
+            child: SilkyScroll(
               controller: scrollController,
-              config: SmoothScrollConfig.lenis(),
-              child: SingleChildScrollView(
-                controller: scrollController,
+              silkyScrollDuration: ScrollConfig.duration,
+              scrollSpeed: ScrollConfig.speed,
+              animationCurve: ScrollConfig.curve,
+              builder: (context, controller, physics, _) => SingleChildScrollView(
+                controller: controller,
+                physics: physics,
                 child: const SongDetailsPage(),
               ),
             ),

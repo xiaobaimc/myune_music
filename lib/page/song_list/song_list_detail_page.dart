@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/sort_dialog.dart';
@@ -137,12 +138,14 @@ class SongListDetailWidget extends StatelessWidget {
 
               return Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                child: SmoothScrollWeb(
+                child: SilkyScroll(
                   controller: scrollController,
-                  config: SmoothScrollConfig.lenis(),
-
-                  child: CustomScrollView(
-                    controller: scrollController,
+                  silkyScrollDuration: ScrollConfig.duration,
+                  scrollSpeed: ScrollConfig.speed,
+                  animationCurve: ScrollConfig.curve,
+                  builder: (context, controller, physics, _) => CustomScrollView(
+                    controller: controller,
+                    physics: physics,
                     slivers: [
                       SliverReorderableList(
                         itemCount: songs.length,

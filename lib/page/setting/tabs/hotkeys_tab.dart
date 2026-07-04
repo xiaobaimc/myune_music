@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../../../theme/scroll_config.dart';
 
 import '../settings_provider.dart';
 import '../../playlist/playlist_content_notifier.dart';
@@ -28,11 +29,14 @@ class _HotkeysTabState extends State<HotkeysTab> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
 
-    return SmoothScrollWeb(
+    return SilkyScroll(
       controller: _scrollController,
-      config: SmoothScrollConfig.lenis(),
-      child: ListView(
-        controller: _scrollController,
+      silkyScrollDuration: ScrollConfig.duration,
+      scrollSpeed: ScrollConfig.speed,
+      animationCurve: ScrollConfig.curve,
+      builder: (context, controller, physics, _) => ListView(
+        controller: controller,
+        physics: physics,
         key: const ValueKey('hotkeys'),
         children: [
           // Master switch

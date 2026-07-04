@@ -6,6 +6,7 @@ class PlayModeButton extends StatefulWidget {
   final VoidCallback onPressed;
   final Color color;
   final Color activeColor;
+  final double size;
 
   const PlayModeButton({
     super.key,
@@ -13,6 +14,7 @@ class PlayModeButton extends StatefulWidget {
     required this.onPressed,
     required this.color,
     required this.activeColor,
+    this.size = 24.0,
   });
 
   @override
@@ -41,7 +43,7 @@ class _PlayModeButtonState extends State<PlayModeButton> {
 
     return IconButton(
       tooltip: tooltip,
-      iconSize: 24,
+      iconSize: widget.size,
       icon: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         switchInCurve: Curves.easeOutBack,

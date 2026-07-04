@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 import 'package:provider/provider.dart';
@@ -50,6 +51,13 @@ class _PlaybarState extends State<Playbar> {
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
 
+    final size = MediaQuery.of(context).size;
+    final double width = size.width > 0 ? size.width : 1150.0;
+    final double height = size.height > 0 ? size.height : 620.0;
+    final double scale = (math.sqrt(
+      (width * height) / (1150.0 * 620.0),
+    )).clamp(0.5, 2.0);
+
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
@@ -79,7 +87,7 @@ class _PlaybarState extends State<Playbar> {
                         '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
                         style: TextStyle(
                           color: onBarColor.withValues(alpha: 0.7),
-                          fontSize: 12,
+                          fontSize: 12 * scale,
                         ),
                       ),
                     );
@@ -87,13 +95,13 @@ class _PlaybarState extends State<Playbar> {
                 );
               },
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8 * scale),
             // 进度条
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                trackHeight: 2.0,
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 6.0,
+                trackHeight: 2.0 * scale,
+                thumbShape: RoundSliderThumbShape(
+                  enabledThumbRadius: 6.0 * scale,
                 ),
                 overlayShape: SliderComponentShape.noOverlay,
                 activeTrackColor: accentColor,
@@ -168,7 +176,7 @@ class _PlaybarState extends State<Playbar> {
                 },
               ),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 4 * scale),
             // 播放控制按钮
             Row(
               mainAxisAlignment:
@@ -183,7 +191,7 @@ class _PlaybarState extends State<Playbar> {
                       icon: Icon(
                         Icons.skip_previous,
                         color: onBarColor,
-                        size: 28,
+                        size: 28 * scale,
                       ),
                       onPressed: () => playlistNotifier.playPrevious(),
                     ),
@@ -196,6 +204,7 @@ class _PlaybarState extends State<Playbar> {
                         return PlayPauseButton(
                           isPlaying: isPlaying,
                           color: accentColor,
+                          size: 36.0 * scale,
                           onPressed: isPlaying
                               ? playlistNotifier.pause
                               : playlistNotifier.play,
@@ -204,7 +213,11 @@ class _PlaybarState extends State<Playbar> {
                     ),
                     // 下一首
                     IconButton(
-                      icon: Icon(Icons.skip_next, color: onBarColor, size: 28),
+                      icon: Icon(
+                        Icons.skip_next,
+                        color: onBarColor,
+                        size: 28 * scale,
+                      ),
                       onPressed: () => playlistNotifier.playNext(),
                     ),
                   ],
@@ -220,6 +233,7 @@ class _PlaybarState extends State<Playbar> {
                           playMode: notifier.playMode,
                           color: onBarColor.withValues(alpha: 0.7),
                           activeColor: accentColor,
+                          size: 24.0 * scale,
                           onPressed: () {
                             notifier.togglePlayMode();
                           },
@@ -227,15 +241,22 @@ class _PlaybarState extends State<Playbar> {
                       },
                     ),
                     // 音量控制
-                    VolumeControl(player: player, iconColor: onBarColor),
+                    VolumeControl(
+                      player: player,
+                      iconColor: onBarColor,
+                      size: 24.0 * scale,
+                    ),
                     // // 声道平衡、倍速控制
-                    BalanceRateControl(player: player, iconColor: onBarColor),
+                    BalanceRateControl(
+                      player: player,
+                      iconColor: onBarColor,
+                      size: 24.0 * scale,
+                    ),
                     // 播放列表
                     IconButton(
                       icon: const Icon(Icons.lyrics_outlined),
-                      iconSize: 23,
+                      iconSize: 23 * scale,
                       tooltip: '播放列表',
-                      padding: const EdgeInsets.only(top: 1.5),
                       onPressed: () {
                         // 打开右侧抽屉
                         Scaffold.of(context).openEndDrawer();
@@ -286,13 +307,20 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
 
+    final size = MediaQuery.of(context).size;
+    final double width = size.width > 0 ? size.width : 1150.0;
+    final double height = size.height > 0 ? size.height : 620.0;
+    final double scale = (math.sqrt(
+      (width * height) / (1150.0 * 620.0),
+    )).clamp(0.5, 2.0);
+
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
         final Player player = playlistNotifier.mediaPlayer;
 
         return Padding(
-          padding: const EdgeInsetsGeometry.fromLTRB(24, 0, 24, 12),
+          padding: EdgeInsets.fromLTRB(24 * scale, 0, 24 * scale, 12 * scale),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -318,7 +346,7 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                           '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
                           style: TextStyle(
                             color: onBarColor.withValues(alpha: 0.7),
-                            fontSize: 12,
+                            fontSize: 12 * scale,
                           ),
                         ),
                       );
@@ -326,13 +354,13 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                   );
                 },
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8 * scale),
               // 进度条
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2.0,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6.0,
+                  trackHeight: 2.0 * scale,
+                  thumbShape: RoundSliderThumbShape(
+                    enabledThumbRadius: 6.0 * scale,
                   ),
                   overlayShape: SliderComponentShape.noOverlay,
                   activeTrackColor: accentColor,
@@ -407,7 +435,7 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                   },
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4 * scale),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -416,11 +444,11 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                     icon: Icon(
                       Icons.skip_previous,
                       color: onBarColor,
-                      size: 28,
+                      size: 28 * scale,
                     ),
                     onPressed: () => playlistNotifier.playPrevious(),
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16 * scale),
                   // 播放/暂停
                   StreamBuilder<bool>(
                     stream: player.stream.playing,
@@ -430,16 +458,21 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                       return PlayPauseButton(
                         isPlaying: isPlaying,
                         color: accentColor,
+                        size: 36.0 * scale,
                         onPressed: isPlaying
                             ? playlistNotifier.pause
                             : playlistNotifier.play,
                       );
                     },
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16 * scale),
                   // 下一首
                   IconButton(
-                    icon: Icon(Icons.skip_next, color: onBarColor, size: 28),
+                    icon: Icon(
+                      Icons.skip_next,
+                      color: onBarColor,
+                      size: 28 * scale,
+                    ),
                     onPressed: () => playlistNotifier.playNext(),
                   ),
                 ],

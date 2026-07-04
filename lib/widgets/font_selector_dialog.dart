@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_web_scroll/flutter_web_scroll.dart';
+import 'package:silky_scroll/silky_scroll.dart';
+import '../theme/scroll_config.dart';
 import 'dart:async';
 import '../services/font_service.dart';
 
@@ -300,11 +301,14 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
       );
     }
 
-    return SmoothScrollWeb(
+    return SilkyScroll(
       controller: _scrollController,
-      config: SmoothScrollConfig.lenis(),
-      child: ListView.builder(
-        controller: _scrollController,
+      silkyScrollDuration: ScrollConfig.duration,
+      scrollSpeed: ScrollConfig.speed,
+      animationCurve: ScrollConfig.curve,
+      builder: (context, controller, physics, _) => ListView.builder(
+        controller: controller,
+        physics: physics,
         itemCount: _filteredFonts.length,
         itemBuilder: (context, index) {
           final meta = _filteredFonts[index];

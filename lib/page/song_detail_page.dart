@@ -155,7 +155,7 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
   void _manageAnimation(bool shouldAnimate) {
     if (shouldAnimate) {
       if (!_animationController.isAnimating) {
-        _animationController.repeat(reverse: true);// 重复播放，反向播放
+        _animationController.repeat(reverse: true); // 重复播放，反向播放
       }
     } else {
       if (_animationController.isAnimating) {
@@ -303,8 +303,16 @@ class SongDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 获取窗口宽高比
-    final aspectRatio = MediaQuery.of(context).size.aspectRatio;
+    final size = MediaQuery.of(context).size;
+    final aspectRatio = size.aspectRatio;
     final isPortrait = aspectRatio <= 1.0; // 竖屏判断
+
+    // 计算窗口分辨率缩放系数
+    final double width = size.width > 0 ? size.width : 1150.0;
+    final double height = size.height > 0 ? size.height : 620.0;
+    final double scale = (math.sqrt(
+      (width * height) / (1150.0 * 620.0),
+    )).clamp(0.5, 2.0);
 
     return Scaffold(
       endDrawer: const PlayingQueueDrawer(),
@@ -330,7 +338,7 @@ class SongDetailPage extends StatelessWidget {
                         // 歌词区域
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.all(20),
+                            padding: EdgeInsets.all(20 * scale),
                             child: Center(
                               child: Builder(
                                 builder: (context) {
@@ -381,12 +389,15 @@ class SongDetailPage extends StatelessWidget {
                   : // 横屏：保留原有布局
                     Row(
                       children: [
-                        const SizedBox(width: 80),
+                        SizedBox(width: 80 * scale),
                         // 左侧歌曲信息和播放控制区域
                         Expanded(
                           flex: 2,
                           child: Padding(
-                            padding: const EdgeInsets.only(top: 10, bottom: 55),
+                            padding: EdgeInsets.only(
+                              top: 10 * scale,
+                              bottom: 55 * scale,
+                            ),
                             child: Center(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -400,22 +411,24 @@ class SongDetailPage extends StatelessWidget {
                                       return LayoutBuilder(
                                         builder: (context, constraints) {
                                           final w = constraints.maxWidth;
-                                          // 按父容器宽度的60%计算封面大小，再限制在310~480像素之间，最后不超过父容器宽度
+                                          // 基于窗口分辨率缩放系数计算封面大小，同时不超过父容器宽度
+                                          final double baseImageSize =
+                                              310.0 * scale;
                                           final double imageSize = math.min(
                                             w,
-                                            ((w * 0.6)).clamp(310.0, 480.0),
+                                            baseImageSize,
                                           );
 
                                           // 根据图片大小计算字体大小
                                           final double titleFontSize =
                                               (imageSize * 0.05).clamp(
                                                 20.0,
-                                                26.0,
+                                                32.0,
                                               );
                                           final double artistFontSize =
                                               (imageSize * 0.03).clamp(
                                                 14.0,
-                                                18.0,
+                                                28.0,
                                               );
 
                                           final borderRadius =
@@ -430,7 +443,7 @@ class SongDetailPage extends StatelessWidget {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.center,
                                             children: [
-                                              const SizedBox(height: 45),
+                                              SizedBox(height: 45 * scale),
                                               // 歌曲标题
                                               Text(
                                                 currentSong?.title ?? '未知歌曲',
@@ -466,7 +479,7 @@ class SongDetailPage extends StatelessWidget {
                                                 overflow: TextOverflow.clip,
                                                 softWrap: false,
                                               ),
-                                              const SizedBox(height: 6),
+                                              SizedBox(height: 6 * scale),
                                               // 专辑封面
                                               SizedBox.square(
                                                 dimension: imageSize,
@@ -519,7 +532,7 @@ class SongDetailPage extends StatelessWidget {
                                                   ),
                                                 ),
                                               ),
-                                              const SizedBox(height: 8),
+                                              SizedBox(height: 8 * scale),
                                               // 播放控制区域
                                               const Playbar(),
                                             ],
@@ -537,11 +550,11 @@ class SongDetailPage extends StatelessWidget {
                         Expanded(
                           flex: 3,
                           child: Padding(
-                            padding: const EdgeInsets.only(
-                              left: 80,
-                              right: 80,
-                              top: 20,
-                              bottom: 40,
+                            padding: EdgeInsets.only(
+                              left: 80 * scale,
+                              right: 80 * scale,
+                              top: 20 * scale,
+                              bottom: 40 * scale,
                             ),
                             child: Center(
                               child: Builder(

@@ -4,12 +4,14 @@ class PlayPauseButton extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onPressed;
   final Color color;
+  final double size;
 
   const PlayPauseButton({
     super.key,
     required this.isPlaying,
     required this.onPressed,
     required this.color,
+    this.size = 36.0,
   });
 
   @override
@@ -57,7 +59,7 @@ class _PlayPauseButtonState extends State<PlayPauseButton>
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      iconSize: 36,
+      iconSize: widget.size,
       icon: AnimatedIcon(
         icon: AnimatedIcons.play_pause,
         progress: _controller,
