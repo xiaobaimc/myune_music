@@ -21,16 +21,26 @@
 * 🖥️ 集成 **SMTC（系统媒体传输控制）** 与 **MPRIS（Linux）**
 * 🧩 支持 **音频独占模式**（仅 Windows）
 * 🔌 支持 **手动选择音频输出设备**
+* ⚙️ **全局快捷键**支持
+* 🎵 读取使用和写入 **ReplayGain** 标签
 
 
 ## 🔧关于 Linux
 
-需要安装 `libmpv`
+对于0.9.1及以下的版本，需要安装 `libmpv`
 
 例如 **Ubuntu/Debian**
 
 ``` bash
 sudo apt install libmpv-dev mpv 
+```
+
+对于0.9.2及以上版本，需要安装 `keybinder-3.0` 以使用全局快捷键
+
+例如 **Ubuntu/Debian**
+
+``` bash
+sudo apt install keybinder-3.0
 ```
 
 ## 🎶 桌面歌词
