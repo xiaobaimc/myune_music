@@ -35,7 +35,8 @@ jobs:
             pkg-config \
             libgtk-3-dev \
             liblzma-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev
 
       # 拉依赖
       - name: Install dependencies
