@@ -8,7 +8,7 @@ import 'tabs/hotkeys_tab.dart';
 import 'tabs/advanced_tab.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.9.1';
+const String appVersion = '0.9.2';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -93,11 +93,15 @@ class _SettingPageState extends State<SettingPage> {
                 case 0:
                   return const GeneralTab(key: ValueKey('general'));
                 case 1:
-                  return const PersonalizationTab(key: ValueKey('personalization'));
+                  return const PersonalizationTab(
+                    key: ValueKey('personalization'),
+                  );
                 case 2:
                   return const PlaybackPageTab(key: ValueKey('playback'));
                 case 3:
-                  return const PlaybackSettingsTab(key: ValueKey('playback_settings'));
+                  return const PlaybackSettingsTab(
+                    key: ValueKey('playback_settings'),
+                  );
                 case 4:
                   return const HotkeysTab(key: ValueKey('hotkeys'));
                 case 5:
