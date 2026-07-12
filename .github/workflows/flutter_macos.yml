@@ -1,0 +1,65 @@
+name: Flutter macOS Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      # 拉取代码
+      - uses: actions/checkout@v3
+
+      # 安装 Flutter
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.1'
+
+      # 安装 Rust
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # 拉依赖
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 构建 macOS 桌面版
+      - name: Build macOS
+        run: flutter build macos --release
+
+      # 打包成 .dmg
+      - name: Package as DMG
+        run: |
+          APP_NAME="myune_music"
+          APP_PATH="build/macos/Build/Products/Release/${APP_NAME}.app"
+          DMG_NAME="${APP_NAME}.dmg"
+          DMG_PATH="build/macos/Build/Products/Release/${DMG_NAME}"
+
+          # 创建临时目录用于存放 .app
+          TMP_DIR=$(mktemp -d)
+          cp -R "${APP_PATH}" "${TMP_DIR}/"
+
+          # 创建 DMG
+          hdiutil create \
+            -volname "${APP_NAME}" \
+            -srcfolder "${TMP_DIR}" \
+            -ov \
+            -format UDZO \
+            "${DMG_PATH}"
+
+          # 清理临时目录
+          rm -rf "${TMP_DIR}"
+
+          echo "DMG created at: ${DMG_PATH}"
+
+      # 上传打包产物
+      - name: Upload macOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-macos-build
+          path: build/macos/Build/Products/Release/myune_music.dmg
