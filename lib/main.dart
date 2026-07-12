@@ -43,10 +43,13 @@ void main() async {
           as FutureOr<void> Function(Map<String, dynamic>)?;
 
   // 单实例检测
-  final singleInstance = FlutterSingleInstance();
-  if (!await singleInstance.isFirstInstance()) {
-    await singleInstance.focus();
-    exit(0); // 退出第二个实例
+  // macos下会导致原生崩溃
+  if (!Platform.isMacOS) {
+    final singleInstance = FlutterSingleInstance();
+    if (!await singleInstance.isFirstInstance()) {
+      await singleInstance.focus();
+      exit(0); // 退出第二个实例
+    }
   }
 
   PaintingBinding.instance.imageCache.maximumSize = 200;

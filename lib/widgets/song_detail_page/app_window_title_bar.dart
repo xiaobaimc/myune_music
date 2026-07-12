@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import '../../page/setting/settings_provider.dart';
+import 'dart:io';
 
 class AppWindowTitleBar extends StatelessWidget {
   final VoidCallback onSettingsPressed;
@@ -18,7 +19,10 @@ class AppWindowTitleBar extends StatelessWidget {
       child: Row(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: EdgeInsets.only(
+              left: Platform.isMacOS ? 80.0 : 10.0,
+              right: 10.0
+            ),
             child: Row(
               children: [
                 IconButton(
@@ -67,45 +71,46 @@ class AppWindowTitleBar extends StatelessWidget {
               child: Container(),
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _WindowButton(
-                  icon: Icons.remove,
-                  onPressed: () {
-                    final settings = Provider.of<SettingsProvider>(
-                      context,
-                      listen: false,
-                    );
-                    if (settings.minimizeToTray) {
-                      windowManager.hide();
-                    } else {
-                      windowManager.minimize();
-                    }
-                  },
-                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                ),
-                const SizedBox(width: 2),
-                _WindowButton(
-                  icon: Icons.fullscreen_rounded,
-                  onPressed: () async {
-                    final bool isFullScreen = await windowManager
-                        .isFullScreen();
-                    await windowManager.setFullScreen(!isFullScreen);
-                  },
-                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                ),
-                const SizedBox(width: 2),
-                _WindowButton(
-                  icon: Icons.close,
-                  onPressed: () => windowManager.close(),
-                  hoverColor: const Color.fromRGBO(239, 154, 154, 1),
-                ),
-              ],
+          if (!Platform.isMacOS)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _WindowButton(
+                    icon: Icons.remove,
+                    onPressed: () {
+                      final settings = Provider.of<SettingsProvider>(
+                        context,
+                        listen: false,
+                      );
+                      if (settings.minimizeToTray) {
+                        windowManager.hide();
+                      } else {
+                        windowManager.minimize();
+                      }
+                    },
+                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                  ),
+                  const SizedBox(width: 2),
+                  _WindowButton(
+                    icon: Icons.fullscreen_rounded,
+                    onPressed: () async {
+                      final bool isFullScreen = await windowManager
+                          .isFullScreen();
+                      await windowManager.setFullScreen(!isFullScreen);
+                    },
+                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                  ),
+                  const SizedBox(width: 2),
+                  _WindowButton(
+                    icon: Icons.close,
+                    onPressed: () => windowManager.close(),
+                    hoverColor: const Color.fromRGBO(239, 154, 154, 1),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

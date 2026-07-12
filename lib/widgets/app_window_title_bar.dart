@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +19,10 @@ class AppWindowTitleBar extends StatelessWidget {
       child: Row(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: EdgeInsets.only(
+              left: Platform.isMacOS ? 80.0 : 10.0, // macOS 下留出红绿灯按钮空间
+              right: 10.0,
+            ),
             child: Row(
               children: [
                 ColorFiltered(
@@ -47,35 +52,37 @@ class AppWindowTitleBar extends StatelessWidget {
               child: Container(),
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _WindowButton(
-                  icon: Icons.remove,
-                  onPressed: () {
-                    final settings = Provider.of<SettingsProvider>(
-                      context,
-                      listen: false,
-                    );
-                    if (settings.minimizeToTray) {
-                      windowManager.hide();
-                    } else {
-                      windowManager.minimize();
-                    }
-                  },
-                  hoverColor: const Color.fromRGBO(144, 202, 249, 1),
-                ),
-                const SizedBox(width: 2),
-                _WindowButton(
-                  icon: Icons.close,
-                  onPressed: () => windowManager.close(),
-                  hoverColor: const Color.fromRGBO(239, 154, 154, 1),
-                ),
-              ],
+          // macOS 使用原生红绿灯按钮，不需要自定义窗口按钮
+          if (!Platform.isMacOS)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _WindowButton(
+                    icon: Icons.remove,
+                    onPressed: () {
+                      final settings = Provider.of<SettingsProvider>(
+                        context,
+                        listen: false,
+                      );
+                      if (settings.minimizeToTray) {
+                        windowManager.hide();
+                      } else {
+                        windowManager.minimize();
+                      }
+                    },
+                    hoverColor: const Color.fromRGBO(144, 202, 249, 1),
+                  ),
+                  const SizedBox(width: 2),
+                  _WindowButton(
+                    icon: Icons.close,
+                    onPressed: () => windowManager.close(),
+                    hoverColor: const Color.fromRGBO(239, 154, 154, 1),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
