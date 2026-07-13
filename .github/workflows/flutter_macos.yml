@@ -7,13 +7,11 @@ jobs:
   build:
     strategy:
       matrix:
-        include:
-          - arch: arm64
-            runner: macos-latest
-          - arch: x86_64
-            runner: macos-13
+        arch:
+          - arm64
+          - x86_64
 
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
 
     steps:
       # 拉取代码
