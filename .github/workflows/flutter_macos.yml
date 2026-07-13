@@ -5,7 +5,15 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+          - arch: x86_64
+            runner: macos-13
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       # 拉取代码
@@ -28,38 +36,42 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 构建 macOS 桌面版
-      - name: Build macOS
-        run: flutter build macos --release
+      # 构建 macOS（指定架构）
+      - name: Build macOS (${{ matrix.arch }})
+        run: |
+          flutter build macos --release -- \
+            ARCHS=${{ matrix.arch }} \
+            ONLY_ACTIVE_ARCH=YES
+
+      # 安装 create-dmg
+      - name: Install create-dmg
+        run: brew install create-dmg
 
       # 打包成 .dmg
-      - name: Package as DMG
+      - name: Package as DMG (${{ matrix.arch }})
         run: |
           APP_NAME="myune_music"
-          APP_PATH="build/macos/Build/Products/Release/${APP_NAME}.app"
-          DMG_NAME="${APP_NAME}.dmg"
-          DMG_PATH="build/macos/Build/Products/Release/${DMG_NAME}"
+          RELEASE_DIR="build/macos/Build/Products/Release"
+          APP_PATH="${RELEASE_DIR}/${APP_NAME}.app"
+          DMG_NAME="${APP_NAME}-${{ matrix.arch }}.dmg"
+          DMG_PATH="${RELEASE_DIR}/${DMG_NAME}"
 
-          # 创建临时目录用于存放 .app
-          TMP_DIR=$(mktemp -d)
-          cp -R "${APP_PATH}" "${TMP_DIR}/"
-
-          # 创建 DMG
-          hdiutil create \
-            -volname "${APP_NAME}" \
-            -srcfolder "${TMP_DIR}" \
-            -ov \
-            -format UDZO \
-            "${DMG_PATH}"
-
-          # 清理临时目录
-          rm -rf "${TMP_DIR}"
+          create-dmg \
+            --volname "${APP_NAME}" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "${APP_NAME}.app" 150 190 \
+            --hide-extension "${APP_NAME}.app" \
+            --app-drop-link 450 190 \
+            "${DMG_PATH}" \
+            "${APP_PATH}"
 
           echo "DMG created at: ${DMG_PATH}"
 
       # 上传打包产物
-      - name: Upload macOS Build
+      - name: Upload macOS Build (${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         with:
-          name: flutter-macos-build
-          path: build/macos/Build/Products/Release/myune_music.dmg
+          name: flutter-macos-build-${{ matrix.arch }}
+          path: build/macos/Build/Products/Release/myune_music-${{ matrix.arch }}.dmg
