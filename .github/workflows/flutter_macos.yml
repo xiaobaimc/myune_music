@@ -39,9 +39,9 @@ jobs:
       # 构建 macOS（指定架构）
       - name: Build macOS (${{ matrix.arch }})
         run: |
-          flutter build macos --release -- \
-            ARCHS=${{ matrix.arch }} \
-            ONLY_ACTIVE_ARCH=YES
+          export ARCHS=${{ matrix.arch }}
+          export ONLY_ACTIVE_ARCH=YES
+          flutter build macos --release
 
       # 安装 create-dmg
       - name: Install create-dmg
