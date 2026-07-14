@@ -50,9 +50,9 @@ class PlaybackPageTab extends StatelessWidget {
         SwitchListTile(
           title: const Row(
             children: [
-              Text('自动调节歌词字体与间距'),
+              Text('自动调节歌词字体大小与间距'),
               SizedBox(width: 4),
-              InfoIcon('启用后将根据窗口大小自动缩调节歌词字体与间距\n这会忽略手动设置的字体大小和间距'),
+              InfoIcon('启用后将根据窗口大小自动缩调节歌词字体大小与间距\n这会忽略手动设置的字体大小和间距'),
             ],
           ),
           value: settings.autoAdjustLyricLayout,
