@@ -154,7 +154,7 @@ flutter build windows --release # 或对应平台名
 | 插件                                                                      | 功能             |
 | ----------------------------------------------------------------------- | -------------- |
 | [lofty-rs](https://github.com/serial-ata/lofty-rs) | 读取音频元信息        |
-| [media_kit](https://pub.dev/packages/media_kit)                         | 音频播放支持         |
+| [mpv_audio_kit](https://github.com/ales-drnz/mpv_audio_kit)                         | 音频播放支持         |
 | [anni_mpris_service](https://pub.dev/packages/anni_mpris_service)       | D-Bus MPRIS 控件 |
 
 更多依赖请查看 [pubspec.yaml](pubspec.yaml)。

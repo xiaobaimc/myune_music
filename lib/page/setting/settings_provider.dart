@@ -43,7 +43,8 @@ class SettingsProvider with ChangeNotifier {
   static const _audioDeviceIsAutoKey = 'audio_device_is_auto';
   static const _ignorePlaybackErrorsKey = 'ignorePlaybackErrors';
   static const _preferExternalLyricsKey = 'preferExternalLyrics';
-  static const _autoAdjustLyricLayoutKey = 'autoAdjustLyricLayout'; // 自动调节歌词字体与间距设置的 key
+  static const _autoAdjustLyricLayoutKey =
+      'autoAdjustLyricLayout'; // 自动调节歌词字体与间距设置的 key
 
   static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
   static const _enableLoudnessKey = 'enableLoudness';
@@ -87,8 +88,8 @@ class SettingsProvider with ChangeNotifier {
   String _primaryLyricSource = 'qq'; // 默认主要歌词源为qq音乐
   String _secondaryLyricSource = 'netease'; // 默认备用歌词源为网易云音乐
 
-  // 隐藏页面列表，默认为空（都不隐藏）
-  List<String> _hiddenPages = [];
+  // 默认隐藏音频分析
+  List<String> _hiddenPages = ['音频分析'];
 
   // 默认艺术家分隔符
   List<String> _artistSeparators = [';', '、', '；', '，', ','];
@@ -206,11 +207,26 @@ class SettingsProvider with ChangeNotifier {
         : TextAlign.center;
 
     _enableGlobalHotkeys = prefs.getBool(_enableGlobalHotkeysKey) ?? true;
-    _playPauseHotKey = _parseHotKey(prefs.getString(_playPauseHotKeyKey), 'play_pause');
-    _nextTrackHotKey = _parseHotKey(prefs.getString(_nextTrackHotKeyKey), 'next_track');
-    _prevTrackHotKey = _parseHotKey(prefs.getString(_prevTrackHotKeyKey), 'prev_track');
-    _volumeUpHotKey = _parseHotKey(prefs.getString(_volumeUpHotKeyKey), 'volume_up');
-    _volumeDownHotKey = _parseHotKey(prefs.getString(_volumeDownHotKeyKey), 'volume_down');
+    _playPauseHotKey = _parseHotKey(
+      prefs.getString(_playPauseHotKeyKey),
+      'play_pause',
+    );
+    _nextTrackHotKey = _parseHotKey(
+      prefs.getString(_nextTrackHotKeyKey),
+      'next_track',
+    );
+    _prevTrackHotKey = _parseHotKey(
+      prefs.getString(_prevTrackHotKeyKey),
+      'prev_track',
+    );
+    _volumeUpHotKey = _parseHotKey(
+      prefs.getString(_volumeUpHotKeyKey),
+      'volume_up',
+    );
+    _volumeDownHotKey = _parseHotKey(
+      prefs.getString(_volumeDownHotKeyKey),
+      'volume_down',
+    );
 
     notifyListeners(); // 读取完毕后刷新界面
   }
@@ -553,10 +569,25 @@ class SettingsProvider with ChangeNotifier {
     _volumeUpHotKey = _getDefaultHotKey('volume_up');
     _volumeDownHotKey = _getDefaultHotKey('volume_down');
     notifyListeners();
-    await prefs.setString(_playPauseHotKeyKey, jsonEncode(_playPauseHotKey!.toJson()));
-    await prefs.setString(_nextTrackHotKeyKey, jsonEncode(_nextTrackHotKey!.toJson()));
-    await prefs.setString(_prevTrackHotKeyKey, jsonEncode(_prevTrackHotKey!.toJson()));
-    await prefs.setString(_volumeUpHotKeyKey, jsonEncode(_volumeUpHotKey!.toJson()));
-    await prefs.setString(_volumeDownHotKeyKey, jsonEncode(_volumeDownHotKey!.toJson()));
+    await prefs.setString(
+      _playPauseHotKeyKey,
+      jsonEncode(_playPauseHotKey!.toJson()),
+    );
+    await prefs.setString(
+      _nextTrackHotKeyKey,
+      jsonEncode(_nextTrackHotKey!.toJson()),
+    );
+    await prefs.setString(
+      _prevTrackHotKeyKey,
+      jsonEncode(_prevTrackHotKey!.toJson()),
+    );
+    await prefs.setString(
+      _volumeUpHotKeyKey,
+      jsonEncode(_volumeUpHotKey!.toJson()),
+    );
+    await prefs.setString(
+      _volumeDownHotKeyKey,
+      jsonEncode(_volumeDownHotKey!.toJson()),
+    );
   }
 }

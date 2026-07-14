@@ -11,7 +11,7 @@ class PageVisibilitySettings extends StatefulWidget {
 
 class PageVisibilitySettingsState extends State<PageVisibilitySettings> {
   // 页面列表
-  final List<String> _pages = ['全部歌曲', '歌手', '专辑', '统计', '歌曲详情信息'];
+  final List<String> _pages = ['全部歌曲', '歌手', '专辑', '统计', '歌曲详情信息', '音频分析'];
 
   Future<void> _showPageVisibilityDialog(BuildContext context) async {
     final settings = context.read<SettingsProvider>();

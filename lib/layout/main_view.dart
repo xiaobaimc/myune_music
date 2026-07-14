@@ -8,6 +8,7 @@ import '../page/pages/all_songs.dart';
 import '../page/pages/album_list_page.dart';
 import '../page/pages/artist_list_page.dart';
 import '../page/pages/statistics_page.dart';
+import '../page/pages/audio_analysis_page.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
 import '../page/setting/settings_provider.dart';
@@ -100,6 +101,14 @@ class _MainViewState extends State<MainView> {
         icon: Icons.library_music_outlined,
         selectedIcon: Icons.library_music,
         page: const SongDetails(),
+      ),
+      PageEntry(
+        visible: (label, hiddenPages) => !hiddenPages.contains(label),
+        label: '音频分析',
+        routeName: '/audio_analysis',
+        icon: Icons.graphic_eq_outlined,
+        selectedIcon: Icons.graphic_eq,
+        page: const AudioAnalysisPage(),
       ),
       PageEntry(
         visible: (label, hiddenPages) => true, // 设置始终显示
