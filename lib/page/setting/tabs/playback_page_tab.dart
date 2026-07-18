@@ -39,6 +39,22 @@ class PlaybackPageTab extends StatelessWidget {
             context.read<SettingsProvider>().setEnableDynamicBackground(value);
           },
         ),
+        // 自动隐藏部分组件
+        SwitchListTile(
+          title: const Row(
+            children: [
+              Text('自动隐藏部分组件'),
+              SizedBox(width: 4),
+              InfoIcon('超过5秒无操作时隐藏部分组件及鼠标指针'),
+            ],
+          ),
+          value: settings.autoHidePlayPageComponents,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setAutoHidePlayPageComponents(
+              value,
+            );
+          },
+        ),
         // 启用歌词模糊效果
         SwitchListTile(
           title: Text('歌词模糊效果', style: Theme.of(context).textTheme.titleMedium),

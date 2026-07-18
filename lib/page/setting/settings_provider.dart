@@ -50,6 +50,7 @@ class SettingsProvider with ChangeNotifier {
   static const _enableLoudnessKey = 'enableLoudness';
   static const _enableReplayGainKey = 'enableReplayGain';
   static const _enableGaplessPlaybackKey = 'enableGaplessPlayback';
+  static const _autoHidePlayPageComponentsKey = 'autoHidePlayPageComponents';
 
   int _maxLinesPerLyric = 2;
   double _fontSize = 22.0; // 默认字体大小
@@ -75,6 +76,7 @@ class SettingsProvider with ChangeNotifier {
   bool _enableLoudness = false;
   bool _enableReplayGain = false;
   bool _enableGaplessPlayback = false; // 默认不启用无缝播放
+  bool _autoHidePlayPageComponents = false; // 默认不自动隐藏部分组件
 
   bool _enableGlobalHotkeys = true;
   HotKey? _playPauseHotKey;
@@ -129,6 +131,7 @@ class SettingsProvider with ChangeNotifier {
   bool get enableLoudness => _enableLoudness;
   bool get enableReplayGain => _enableReplayGain;
   bool get enableGaplessPlayback => _enableGaplessPlayback;
+  bool get autoHidePlayPageComponents => _autoHidePlayPageComponents;
 
   bool get enableGlobalHotkeys => _enableGlobalHotkeys;
   HotKey? get playPauseHotKey => _playPauseHotKey;
@@ -181,6 +184,7 @@ class SettingsProvider with ChangeNotifier {
     _enableLoudness = prefs.getBool(_enableLoudnessKey) ?? false;
     _enableReplayGain = prefs.getBool(_enableReplayGainKey) ?? false;
     _enableGaplessPlayback = prefs.getBool(_enableGaplessPlaybackKey) ?? false;
+    _autoHidePlayPageComponents = prefs.getBool(_autoHidePlayPageComponentsKey) ?? false;
     if (_enableLoudness && _enableReplayGain) {
       _enableReplayGain = false;
       await prefs.setBool(_enableReplayGainKey, false);
@@ -416,6 +420,13 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_ignorePlaybackErrorsKey, value);
+  }
+
+  void setAutoHidePlayPageComponents(bool value) async {
+    _autoHidePlayPageComponents = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoHidePlayPageComponentsKey, value);
   }
 
   void setPreferExternalLyrics(bool value) async {
