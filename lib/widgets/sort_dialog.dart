@@ -42,6 +42,10 @@ class _SortDialogState extends State<SortDialog> {
                   value: SortCriterion.dateModified,
                 ),
                 const RadioListTile<SortCriterion>(
+                  title: Text('按文件名'),
+                  value: SortCriterion.file,
+                ),
+                const RadioListTile<SortCriterion>(
                   title: Text('随机排序'),
                   value: SortCriterion.random,
                 ),
