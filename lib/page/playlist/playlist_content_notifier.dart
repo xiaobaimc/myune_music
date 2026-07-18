@@ -25,7 +25,7 @@ import '../statistics_page/playback_tracker.dart';
 import '../../src/rust/api/audio_info.dart';
 import '../../services/global_hotkey_manager.dart';
 
-enum SortCriterion { title, artist, dateModified, random, trackNumber }
+enum SortCriterion { title, artist, dateModified, file, random, trackNumber }
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
@@ -3267,6 +3267,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
     required SortCriterion criterion,
     required bool descending,
   }) async {
+    if (criterion == SortCriterion.file) {
+      final sortedPaths = List<String>.from(paths)..sort((a, b) {
+        final nameA = p.basename(a).toLowerCase();
+        final nameB = p.basename(b).toLowerCase();
+        return nameA.compareTo(nameB);
+      });
+      return descending ? sortedPaths.reversed.toList() : sortedPaths;
+    }
+
     // 如果是按标题或歌手，需要歌曲的元数据
     if (criterion == SortCriterion.title || criterion == SortCriterion.artist) {
       // 创建一个包含路径和元数据的临时列表
