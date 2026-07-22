@@ -477,15 +477,18 @@ class SettingsProvider with ChangeNotifier {
   }
 
   HotKey? _parseHotKey(String? jsonStr, String type) {
-    if (jsonStr != null && jsonStr.isNotEmpty) {
-      try {
-        final Map<String, dynamic> json = jsonDecode(jsonStr);
-        return HotKey.fromJson(json);
-      } catch (e) {
-        // Fallback to default
-      }
+    if (jsonStr == null) {
+      return _getDefaultHotKey(type);
     }
-    return _getDefaultHotKey(type);
+    if (jsonStr.isEmpty || jsonStr == 'none') {
+      return null;
+    }
+    try {
+      final Map<String, dynamic> json = jsonDecode(jsonStr);
+      return HotKey.fromJson(json);
+    } catch (e) {
+      return _getDefaultHotKey(type);
+    }
   }
 
   HotKey _getDefaultHotKey(String type) {
@@ -568,7 +571,7 @@ class SettingsProvider with ChangeNotifier {
     if (hotKey != null) {
       await prefs.setString(key, jsonEncode(hotKey.toJson()));
     } else {
-      await prefs.remove(key);
+      await prefs.setString(key, 'none');
     }
   }
 
