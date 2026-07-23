@@ -32,7 +32,10 @@ class _AllSongsPageState extends State<AllSongsPage> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => const SortDialog(),
+      builder: (context) => SortDialog(
+        initialCriterion: notifier.allSongsSortCriterion,
+        initialDescending: notifier.allSongsSortDescending,
+      ),
     );
 
     if (result != null && context.mounted) {

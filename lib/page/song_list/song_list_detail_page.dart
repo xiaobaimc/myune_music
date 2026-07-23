@@ -22,7 +22,10 @@ class SongListDetailPage extends StatelessWidget {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => const SortDialog(),
+      builder: (context) => SortDialog(
+        initialCriterion: notifier.activeSongListSortCriterion,
+        initialDescending: notifier.activeSongListSortDescending,
+      ),
     );
 
     if (result != null && context.mounted) {

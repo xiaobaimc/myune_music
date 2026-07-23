@@ -29,7 +29,7 @@ class _AlbumListState extends State<AlbumList> {
 
   bool _isSearching = false;
   String _searchKeyword = '';
-  bool _hideSingleSongAlbums = false;
+  // _hideSingleSongAlbums 已提升到 PlaylistContentNotifier 中以跨页面保持
 
   void _closeAlbumDetail() {
     final notifier = context.read<PlaylistContentNotifier>();
@@ -159,20 +159,17 @@ class _AlbumListState extends State<AlbumList> {
                               const Spacer(),
                               IconButton(
                                 icon: Icon(
-                                  _hideSingleSongAlbums
+                                  notifier.hideSingleSongAlbums
                                       ? Icons.filter_alt_off_outlined
                                       : Icons.filter_alt_outlined,
-                                  color: _hideSingleSongAlbums
+                                  color: notifier.hideSingleSongAlbums
                                       ? Theme.of(context).colorScheme.primary
                                       : null,
                                 ),
-                                tooltip: _hideSingleSongAlbums
+                                tooltip: notifier.hideSingleSongAlbums
                                     ? '显示所有专辑'
                                     : '隐藏只有单首歌曲的专辑',
-                                onPressed: () => setState(() {
-                                  _hideSingleSongAlbums =
-                                      !_hideSingleSongAlbums;
-                                }),
+                                onPressed: notifier.toggleHideSingleSongAlbums,
                               ),
                               IconButton(
                                 icon: const Icon(Icons.search),
@@ -205,7 +202,7 @@ class _AlbumListState extends State<AlbumList> {
                           }
 
                           // 应用单曲专辑过滤逻辑
-                          if (_hideSingleSongAlbums) {
+                          if (notifier.hideSingleSongAlbums) {
                             albumNames = albumNames.where((name) {
                               return albums[name]!.length > 1;
                             }).toList();

@@ -708,7 +708,10 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => const SortDialog(),
+      builder: (context) => SortDialog(
+        initialCriterion: notifier.currentPlaylistSortCriterion,
+        initialDescending: notifier.currentPlaylistSortDescending,
+      ),
     );
 
     if (result != null && context.mounted) {

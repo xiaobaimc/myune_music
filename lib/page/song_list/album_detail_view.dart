@@ -23,7 +23,11 @@ class AlbumDetailView extends StatelessWidget {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => const SortDialog(isAlbumView: true),
+      builder: (context) => SortDialog(
+        isAlbumView: true,
+        initialCriterion: notifier.activeSongListSortCriterion,
+        initialDescending: notifier.activeSongListSortDescending,
+      ),
     );
 
     if (result != null && context.mounted) {

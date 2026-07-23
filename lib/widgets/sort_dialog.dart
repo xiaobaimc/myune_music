@@ -2,17 +2,31 @@ import 'package:flutter/material.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 
 class SortDialog extends StatefulWidget {
-  final bool isAlbumView; // 新增参数，标识是否在专辑视图中
+  final bool isAlbumView; // 标识是否在专辑视图中
+  final SortCriterion initialCriterion; // 当前已生效的排序条件，用于对话框回显
+  final bool initialDescending; // 当前已生效的排序方向，用于对话框回显
 
-  const SortDialog({super.key, this.isAlbumView = false});
+  const SortDialog({
+    super.key,
+    this.isAlbumView = false,
+    this.initialCriterion = SortCriterion.title,
+    this.initialDescending = false,
+  });
 
   @override
   State<SortDialog> createState() => _SortDialogState();
 }
 
 class _SortDialogState extends State<SortDialog> {
-  SortCriterion _selectedCriterion = SortCriterion.title;
-  bool _isDescending = false;
+  late SortCriterion _selectedCriterion;
+  late bool _isDescending;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCriterion = widget.initialCriterion;
+    _isDescending = widget.initialDescending;
+  }
 
   @override
   Widget build(BuildContext context) {

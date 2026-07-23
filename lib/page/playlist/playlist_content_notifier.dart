@@ -87,6 +87,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
   List<Song> _allSongs = []; // 所有不重复歌曲的集合
   List<Song> get allSongs => _allSongs;
 
+  // 排序状态
+  SortCriterion _allSongsSortCriterion = SortCriterion.title;
+  bool _allSongsSortDescending = false;
+  SortCriterion get allSongsSortCriterion => _allSongsSortCriterion;
+  bool get allSongsSortDescending => _allSongsSortDescending;
+
+  SortCriterion _currentPlaylistSortCriterion = SortCriterion.title;
+  bool _currentPlaylistSortDescending = false;
+  SortCriterion get currentPlaylistSortCriterion => _currentPlaylistSortCriterion;
+  bool get currentPlaylistSortDescending => _currentPlaylistSortDescending;
+
+  SortCriterion _activeSongListSortCriterion = SortCriterion.title;
+  bool _activeSongListSortDescending = false;
+  SortCriterion get activeSongListSortCriterion => _activeSongListSortCriterion;
+  bool get activeSongListSortDescending => _activeSongListSortDescending;
+
   // --- 元数据缓存 ---
   final Map<String, SongMetadataCacheEntry> _songMetadataCache = {};
   Timer? _metadataCacheSaveTimer;
@@ -3415,6 +3431,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     await _loadCurrentPlaylistSongs();
 
+    // 保存排序条件，供对话框下次打开时回显
+    _currentPlaylistSortCriterion = criterion;
+    _currentPlaylistSortDescending = descending;
+
     notifyListeners();
   }
 
@@ -5276,6 +5296,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _playlistManager.saveAlbumSortOrders(_albumSortOrders);
     }
 
+    // 保存排序条件，供对话框下次打开时回显
+    _activeSongListSortCriterion = criterion;
+    _activeSongListSortDescending = descending;
+
     notifyListeners();
   }
 
@@ -5372,6 +5396,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     return individualArtists;
+  }
+
+  // 筛选状态（提升到 Notifier 以跨页面保持，避免路由切换时被销毁）
+  bool _hideSingleSongAlbums = false;
+  bool _hideSingleSongArtists = false;
+  bool get hideSingleSongAlbums => _hideSingleSongAlbums;
+  bool get hideSingleSongArtists => _hideSingleSongArtists;
+
+  void toggleHideSingleSongAlbums() {
+    _hideSingleSongAlbums = !_hideSingleSongAlbums;
+    notifyListeners();
+  }
+
+  void toggleHideSingleSongArtists() {
+    _hideSingleSongArtists = !_hideSingleSongArtists;
+    notifyListeners();
   }
 
   // 多歌手识别与分组
@@ -5557,6 +5597,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
     _allSongs = sortedSongList;
     _allSongsVirtualPlaylist.songFilePaths = sortedPaths;
+
+    // 保存排序条件，供对话框下次打开时回显
+    _allSongsSortCriterion = criterion;
+    _allSongsSortDescending = descending;
 
     notifyListeners();
   }
