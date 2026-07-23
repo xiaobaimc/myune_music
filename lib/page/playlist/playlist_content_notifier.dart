@@ -286,6 +286,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
   String get activeDetailTitle => _activeDetailTitle;
   List<Song> get activeSongList => _activeSongList;
 
+  // --- 专辑/歌手筛选状态（保存在 Notifier 中）---
+  bool _hideSingleSongAlbums = false;
+  bool _hideSingleSongArtists = false;
+  bool get hideSingleSongAlbums => _hideSingleSongAlbums;
+  bool get hideSingleSongArtists => _hideSingleSongArtists;
+
+  void toggleHideSingleSongAlbums() {
+    _hideSingleSongAlbums = !_hideSingleSongAlbums;
+    notifyListeners();
+  }
+
+  void toggleHideSingleSongArtists() {
+    _hideSingleSongArtists = !_hideSingleSongArtists;
+    notifyListeners();
+  }
+
   // --- 存储从JSON加载的排序信息 ---
   Map<String, List<String>> _artistSortOrders = {};
   Map<String, List<String>> _albumSortOrders = {};
