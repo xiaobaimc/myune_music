@@ -750,12 +750,24 @@ class PlaylistContentNotifier extends ChangeNotifier {
         return;
       }
 
-      // 检测音频设备错误：当用户选择了特定设备且该设备不可用时，自动回退到自动选择
-      if (errorString.contains('Could not open/initialize audio device') &&
+      // AO 子系统报错且选中设备已从设备列表消失时，回退到自动选择
+      // 处理 mpv 找不到指定设备后回退到默认设备的情况：
+      // 此时 audioOutputState 仍为 active，不会触发 _loadDevices 里的 failed 监听，
+      // 但 audio-device 仍指向失效设备，每次播放都会报错，需要主动切回 auto
+      // 用 MpvLogError.prefix 结构化字段判断 AO 子系统，不依赖 text 字符串匹配
+      if (error is MpvLogError &&
+          error.prefix.startsWith('ao') &&
           !_settingsProvider.audioDeviceIsAuto) {
-        useAutoDevice();
-        _infoStreamController.add('所选音频设备不可用，已自动切换到默认设备');
-        return;
+        final selected = _selectedDevice;
+        if (selected != null && selected.name != 'auto') {
+          final stillExists = _audioService.player.state.audioDevices
+              .any((d) => d.name == selected.name);
+          if (!stillExists) {
+            useAutoDevice();
+            _infoStreamController.add('所选音频设备已移除，已自动切换到默认设备');
+            return;
+          }
+        }
       }
 
       final shouldNotifyUI =
@@ -3000,6 +3012,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _audioService.player.stream.audioDevice.listen((device) {
         _selectedDevice = device;
         notifyListeners();
+      });
+
+      // 监听音频输出状态：AO 初始化失败且选中设备已从设备列表消失时，回退到自动选择
+      _audioService.player.stream.audioOutputState
+          .where((state) => state == AudioOutputState.failed)
+          .listen((_) {
+        if (_settingsProvider.audioDeviceIsAuto) return;
+        final selected = _selectedDevice;
+        if (selected == null || selected.name == 'auto') return;
+        // 结合设备列表判断选中设备是否真的消失
+        final stillExists = _audioService.player.state.audioDevices
+            .any((d) => d.name == selected.name);
+        if (!stillExists) {
+          useAutoDevice();
+          _infoStreamController.add('所选音频设备已移除，已自动切换到默认设备');
+        }
       });
     } catch (e) {
       _errorStreamController.add('加载音频设备时出错: $e');
