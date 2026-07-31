@@ -5516,9 +5516,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       final artist = song.artist.trim().toLowerCase();
       final title = song.title.trim().toLowerCase();
-      final key = '$artist|$title';
+      final album = song.album.trim().toLowerCase();
 
-      if (seen.add(key)) {
+      // 有专辑信息时，用 artist+title+album 三元组去重，避免同一首歌在不同路径下重复添加
+      if (album.isNotEmpty && album != '未知专辑') {
+        final key = '$artist|$title|$album';
+        if (seen.add(key)) {
+          dedupedSongs.add(song);
+        }
+      } else {
+        // 无专辑信息时保守处理，保留所有歌曲，避免误删不同歌曲
         dedupedSongs.add(song);
       }
     }
