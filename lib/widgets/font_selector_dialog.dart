@@ -41,9 +41,6 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   /// 当前选中的字体元数据
   FontMeta? _selectedMeta;
 
-  /// 预览用字体文件名
-  String? _previewFont;
-
   /// 是否正在扫描字体
   bool _isScanning = true;
 
@@ -133,7 +130,6 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
     setState(() {
       _selectedFont = meta.fileName;
       _selectedMeta = meta;
-      _previewFont = meta.fileName;
     });
 
     if (meta.fileName != 'Misans' && !meta.isLoaded) {
@@ -146,19 +142,6 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   /// 重置为默认字体
   void _resetToDefault() {
     _selectFont(_fontService.defaultFontMeta);
-  }
-
-  /// 获取当前预览使用的字体家族名称
-  ///
-  /// 优先级：预览字体 > 选中字体 > 默认字体
-  String _previewFontFamily() {
-    if (_previewFont != null && _previewFont != 'Misans') {
-      return _previewFont!;
-    }
-    if (_selectedFont != null && _selectedFont != 'Misans') {
-      return _selectedFont!;
-    }
-    return _selectedFont ?? 'Misans';
   }
 
   @override
@@ -250,7 +233,7 @@ class _FontSelectorDialogState extends State<FontSelectorDialog> {
   ///
   /// 显示当前选中的字体名称和预览示例文字
   Widget _buildPreviewArea(BuildContext context) {
-    final previewFamily = _previewFontFamily();
+    final previewFamily = _selectedFont ?? 'Misans';
     final displayName =
         _selectedMeta?.displayName ??
         _fontService.resolveDisplayName(_selectedFont ?? 'Misans');
