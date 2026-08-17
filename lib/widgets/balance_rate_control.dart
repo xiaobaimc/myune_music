@@ -72,6 +72,7 @@ class BalanceRateControl extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 _buildSliderRow(
+                                  context,
                                   icon: Icons.music_note,
                                   label: '音高',
                                   valueText: notifier.currentPitch
@@ -80,12 +81,21 @@ class BalanceRateControl extends StatelessWidget {
                                   min: 0.5,
                                   max: 1.5,
                                   divisions: 20,
+                                  defaultValue:
+                                      PlaylistContentNotifier.defaultPitch,
                                   onChanged: (value) {
                                     notifier.setPitch(value);
                                   },
+                                  onReset: () {
+                                    notifier.setPitch(
+                                      PlaylistContentNotifier.defaultPitch,
+                                    );
+                                  },
+                                  resetTooltip: '恢复默认音高',
                                 ),
                                 const SizedBox(height: 10),
                                 _buildSliderRow(
+                                  context,
                                   icon: Icons.speed,
                                   label: '倍速',
                                   valueText:
@@ -94,9 +104,18 @@ class BalanceRateControl extends StatelessWidget {
                                   min: 0.5,
                                   max: 2.0,
                                   divisions: 30,
+                                  defaultValue: PlaylistContentNotifier
+                                      .defaultPlaybackRate,
                                   onChanged: (value) {
                                     notifier.setPlaybackRate(value);
                                   },
+                                  onReset: () {
+                                    notifier.setPlaybackRate(
+                                      PlaylistContentNotifier
+                                          .defaultPlaybackRate,
+                                    );
+                                  },
+                                  resetTooltip: '恢复默认倍速',
                                 ),
                                 if (Platform.isWindows) ...[
                                   const SizedBox(height: 10),
@@ -241,7 +260,8 @@ class BalanceRateControl extends StatelessWidget {
     );
   }
 
-  Widget _buildSliderRow({
+  Widget _buildSliderRow(
+    BuildContext context, {
     required IconData icon,
     required String label,
     required String valueText,
@@ -250,8 +270,15 @@ class BalanceRateControl extends StatelessWidget {
     required double max,
     required int divisions,
     required ValueChanged<double> onChanged,
+    required double defaultValue,
+    required VoidCallback onReset,
+    required String resetTooltip,
     ValueChanged<double>? onChangeEnd,
   }) {
+    // 判断当前值是否偏离默认值，以决定是否启用"重置"按钮
+    // 使用浮点数差值绝对值与 (1e-9) 比较，而非直接使用 !=
+    final canReset = (value - defaultValue).abs() > 1e-9;
+
     return Row(
       children: [
         SizedBox(
@@ -284,11 +311,41 @@ class BalanceRateControl extends StatelessWidget {
           ),
         ),
         SizedBox(
-          width: 64,
-          child: Text(
-            valueText,
-            textAlign: TextAlign.end,
-            style: const TextStyle(fontSize: 12),
+          width: 88,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: IconButton(
+                  tooltip: canReset ? resetTooltip : null,
+                  icon: Icon(
+                    Icons.restart_alt,
+                    size: 18,
+                    color: canReset ? null : Theme.of(context).disabledColor,
+                  ),
+                  iconSize: 18,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  onPressed: canReset ? onReset : null,
+                ),
+              ),
+              SizedBox(
+                width: 62,
+                child: Text(
+                  valueText,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

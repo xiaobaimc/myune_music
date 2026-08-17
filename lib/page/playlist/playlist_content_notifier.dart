@@ -144,8 +144,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Duration get totalDuration => _totalDuration;
 
   // --- 音调与倍速 ---
-  double _currentPitch = 1.0; // 音调大小
-  double _currentPlaybackRate = 1.0; // 播放速度
+  static const double defaultPitch = 1.0;
+  static const double defaultPlaybackRate = 1.0;
+
+  double _currentPitch = defaultPitch; // 音调大小
+  double _currentPlaybackRate = defaultPlaybackRate; // 播放速度
   Timer? _equalizerApplyTimer;
   Timer? _audioControlSaveTimer;
   static const List<int> equalizerFrequencies = [
@@ -537,14 +540,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   double _sanitizePitch(double? value) {
     if (value == null || value.isNaN || value.isInfinite) {
-      return 1.0;
+      return defaultPitch;
     }
     return value.clamp(0.5, 1.5).toDouble();
   }
 
   double _sanitizePlaybackRate(double? value) {
     if (value == null || value.isNaN || value.isInfinite) {
-      return 1.0;
+      return defaultPlaybackRate;
     }
     return value.clamp(0.5, 2.0).toDouble();
   }
@@ -2225,8 +2228,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> resetAudioControls() async {
-    _currentPitch = 1.0;
-    _currentPlaybackRate = 1.0;
+    _currentPitch = defaultPitch;
+    _currentPlaybackRate = defaultPlaybackRate;
     _equalizerPresetName = '默认';
     _equalizerGains = List<double>.filled(equalizerFrequencies.length, 0.0);
     await _audioService.player.setPitch(_currentPitch);
