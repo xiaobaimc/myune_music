@@ -199,4 +199,4 @@ flutter build windows --release # 或对应平台名
 
 ## Star History Chart
 
-[![Star History Chart](https://api.star-history.com/svg?repos=xiaobaimc/myune_music&type=Date)](https://star-history.com/#xiaobaimc/myune_music&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=xiaobaimc/myune_music&type=Date)](https://star-history.dera.page/#xiaobaimc/myune_music&Date)
