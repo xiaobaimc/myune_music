@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
@@ -23,9 +24,12 @@ import 'package:flutter_single_instance/flutter_single_instance.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'page/statistics_page/statistics_manager.dart';
 import 'layout/navigation_notifier.dart';
+import 'services/license_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  AppLicenses.register();
 
   // 初始化全局快捷键管理器
   await hotKeyManager.unregisterAll();

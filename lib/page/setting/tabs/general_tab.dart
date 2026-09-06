@@ -26,7 +26,6 @@ class _GeneralTabState extends State<GeneralTab> {
 
   // 检查更新
   Future<void> _checkForUpdates() async {
-
     setState(() {
       _isCheckingUpdate = true;
       _updateStatus = '正在检查更新...';
@@ -42,7 +41,9 @@ class _GeneralTabState extends State<GeneralTab> {
 
       switch (result.type) {
         case UpdateCheckResultType.successUpdateAvailable:
-          context.read<NotificationService>().info('发现新版本 ${result.updateInfo!.latestVersion}');
+          context.read<NotificationService>().info(
+            '发现新版本 ${result.updateInfo!.latestVersion}',
+          );
           setState(() {
             _isCheckingUpdate = false;
             _updateStatus = '发现新版本 ${result.updateInfo!.latestVersion}';
@@ -57,7 +58,9 @@ class _GeneralTabState extends State<GeneralTab> {
           });
           break;
         case UpdateCheckResultType.error:
-          context.read<NotificationService>().error('检查更新失败: ${result.errorMessage}');
+          context.read<NotificationService>().error(
+            '检查更新失败: ${result.errorMessage}',
+          );
           setState(() {
             _isCheckingUpdate = false;
             _updateStatus = '检查更新失败: ${result.errorMessage}';
@@ -256,7 +259,9 @@ class _GeneralTabState extends State<GeneralTab> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(width: 4),
-                  const InfoIcon('企鹅：匹配准、支持翻译（推荐）\n网抑：匹配一般，支持翻译\n库狗：匹配高，不支持翻译'),
+                  const InfoIcon(
+                    '企鹅：匹配准、支持翻译和部分罗马音和逐字歌词（推荐）\n网抑：匹配一般，支持翻译\n库狗：匹配高、支持翻译和逐字歌词\n当前源未匹配到歌曲时，会自动使用其他源进行匹配',
+                  ),
                 ],
               ),
               Consumer<SettingsProvider>(

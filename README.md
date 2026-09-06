@@ -64,7 +64,7 @@ sudo apt install keybinder-3.0
 
 软件内默认提供了三个歌词源可供选择
 
-实现参考 [通过歌曲名获取原文+翻译歌词](https://www.showby.top/archives/624)
+> 特别感谢 [lyricGeter](https://github.com/WisteriaZy/lyricGeter/) 的歌词获取以及处理逻辑
 
 ### 🎵 歌词解析
 

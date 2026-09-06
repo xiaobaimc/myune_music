@@ -1,21 +1,32 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-import 'package:http/http.dart' as http;
 
-import 'playlist_models.dart';
-import '../setting/settings_provider.dart';
-import '../../src/rust/api/audio_info.dart';
-import '../../services/notification_service.dart';
+import '../page/playlist/playlist_models.dart';
+import '../page/setting/settings_provider.dart';
+import '../src/rust/api/audio_info.dart';
+import '../services/notification_service.dart';
+
+import 'fetcher/netease_fetcher.dart';
+import 'fetcher/kugou_fetcher.dart';
+import 'fetcher/qqmusic_fetcher.dart';
+// import 'fetcher/amll_fetcher.dart';
+import 'parser/lyric_converter.dart';
+import 'parser/parsed_models.dart';
 
 class LyricsHandler {
   final SettingsProvider _settingsProvider;
   final NotificationService _notificationService;
   final VoidCallback _notifyListeners;
   final Song? Function() _getCurrentSong;
+
+  final NeteaseFetcher _neteaseFetcher = NeteaseFetcher();
+  final KugouFetcher _kugouFetcher = KugouFetcher();
+  final QQMusicFetcher _qqmusicFetcher = QQMusicFetcher();
+  // final AmllFetcher _amllFetcher = AmllFetcher();
 
   List<LyricLine> _currentLyrics = [];
   int _currentLyricLineIndex = -1;
@@ -161,393 +172,123 @@ class LyricsHandler {
   }
 
   // 后台异步加载网易歌词
-  Future<void> _loadOnlineLyrics(String songTitle) async {
-    try {
-      // 检查 artist 是否为默认值，如果是则设置为空字符串
-      final rawArtist = _getCurrentSong()?.artist ?? '';
-      final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
-          ? ''
-          : rawArtist;
+  String _cleanArtist(String rawArtist) {
+    return (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
+        ? ''
+        : rawArtist.trim();
+  }
 
-      // 组合搜索关键词（有歌手时：歌名 + 歌手；否则只用歌名）
-      final searchKeyword = artist.isEmpty
-          ? songTitle.trim()
-          : '${songTitle.trim()} ${artist.trim()}';
-
-      // 对搜索关键词进行 url 编码
-      final encodedSearchKeyword = Uri.encodeComponent(searchKeyword);
-
-      // 第一步：搜索歌曲获取歌曲id
-      final searchUrl =
-          'https://music.163.com/api/search/get/?s=$encodedSearchKeyword&type=1&limit=1';
-      final searchUri = Uri.parse(searchUrl);
-
-      final searchResponse = await http
-          .get(
-            searchUri,
-            headers: {
-              'Referer': 'https://music.163.com',
-              'User-Agent':
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            },
-          )
-          .timeout(const Duration(seconds: 10));
-
-      // 如果状态码不为200，清空并返回
-      if (searchResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 解析搜索结果
-      final searchResult = json.decode(searchResponse.body);
-
-      // 如果没有找到歌曲，同样清空歌词
-      if (searchResult['result'] == null ||
-          searchResult['result']['songs'] == null ||
-          searchResult['result']['songs'].isEmpty) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 取第一首匹配歌曲的id
-      final songId = searchResult['result']['songs'][0]['id'].toString();
-
-      // 第二步：分别获取原文歌词和翻译歌词
-      // 获取原文歌词
-      final lrcUrl =
-          'https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1';
-      final lrcUri = Uri.parse(lrcUrl);
-
-      final lrcResponse = await http
-          .get(
-            lrcUri,
-            headers: {
-              'Referer': 'https://music.163.com',
-              'User-Agent':
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            },
-          )
-          .timeout(const Duration(seconds: 10));
-
-      // 如果状态码不为200，清空并返回
-      if (lrcResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      final lrcResult = json.decode(lrcResponse.body);
-
-      // 获取翻译歌词
-      final tlyricUrl =
-          'https://music.163.com/api/song/lyric?os=pc&id=$songId&tv=-1';
-      final tlyricUri = Uri.parse(tlyricUrl);
-
-      final tlyricResponse = await http
-          .get(
-            tlyricUri,
-            headers: {
-              'Referer': 'https://music.163.com',
-              'User-Agent':
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            },
-          )
-          .timeout(const Duration(seconds: 10));
-
-      final tlyricResult = json.decode(tlyricResponse.body);
-
-      // 处理原文歌词数据
-      List<String> lrcLines = [];
-      if (lrcResult['lrc'] != null &&
-          lrcResult['lrc']['lyric'] != null &&
-          lrcResult['lrc']['lyric'].toString().isNotEmpty) {
-        lrcLines = lrcResult['lrc']['lyric'].toString().split('\n');
-      }
-
-      // 处理翻译歌词数据
-      List<String> tlyricLines = [];
-      if (tlyricResult['tlyric'] != null &&
-          tlyricResult['tlyric']['lyric'] != null &&
-          tlyricResult['tlyric']['lyric'].toString().isNotEmpty) {
-        tlyricLines = tlyricResult['tlyric']['lyric'].toString().split('\n');
-      }
-
-      // 合并歌词
-      final List<String> mergedLyrics = [];
-      mergedLyrics.addAll(lrcLines);
-
-      if (tlyricLines.isNotEmpty) {
-        mergedLyrics.add(''); // 空行分隔
-        mergedLyrics.addAll(tlyricLines);
-      }
-
-      // 解析歌词
-      _currentLyrics = _parseLrcContent(mergedLyrics);
-    } catch (e) {
-      _currentLyrics = [];
+  // 后台异步加载在线歌词
+  Future<void> _loadOnlineLyricsPipeline(
+    Song song, {
+    String? preferredSource,
+  }) async {
+    final currentSong = _getCurrentSong();
+    if (currentSong == null || currentSong.filePath != song.filePath) {
+      return; // 已经切歌，直接废弃
     }
-    _notifyListeners();
+
+    final title = song.title.trim();
+    final artist = _cleanArtist(song.artist);
+
+    final primary = preferredSource ?? _settingsProvider.primaryLyricSource;
+    final secondary = _settingsProvider.secondaryLyricSource;
+
+    // 按主选源、备选源顺序尝试
+    final sourcesToTry = <String>[primary];
+    if (secondary.isNotEmpty && secondary != primary) {
+      sourcesToTry.add(secondary);
+    }
+    // 如果三大平台有未包含在主/备选项中的，加入作为兜底备选
+    for (final s in ['qq', 'netease', 'kugou']) {
+      if (!sourcesToTry.contains(s)) {
+        sourcesToTry.add(s);
+      }
+    }
+
+    for (final src in sourcesToTry) {
+      // 检查播放中是否已切换歌曲
+      if (_getCurrentSong()?.filePath != song.filePath) return;
+
+      ParsedLyrics? result;
+      // int? foundSongId;
+      // String? platformForAmll;
+
+      try {
+        if (src == 'qq') {
+          final res = await _qqmusicFetcher.search(title, artist);
+          result = res.lyrics;
+          // foundSongId = res.songId;
+          // platformForAmll = 'qqmusic';
+        } else if (src == 'netease') {
+          final res = await _neteaseFetcher.search(title, artist);
+          result = res.lyrics;
+          // foundSongId = res.songId;
+          // platformForAmll = 'netease';
+        } else if (src == 'kugou') {
+          result = await _kugouFetcher.search(title, artist);
+        }
+
+        // TODO: 在使用 AMLL 补充原文逐字歌词之前需要完善匹配翻译逻辑,通常与平台的翻译时间戳差距较大
+
+        // 如果获取到歌曲 ID，尝试查询 AMLL 数据库是否有更高精度的校准逐字歌词
+        // if (foundSongId != null && platformForAmll != null) {
+        //   try {
+        //     final amllLyrics = await _amllFetcher.fetchById(
+        //       platformForAmll,
+        //       foundSongId.toString(),
+        //     );
+        //     if (amllLyrics != null && amllLyrics.lines.isNotEmpty) {
+        //       // 保留原平台获取的翻译（AMLL 库主要是纯逐字原文）
+        //       result = ParsedLyrics(
+        //         tags: amllLyrics.tags,
+        //         lines: amllLyrics.lines,
+        //         translationLines: result?.translationLines ?? amllLyrics.translationLines,
+        //       );
+        //     }
+        //   } catch (_) {}
+        // }
+
+        if (result != null && result.lines.isNotEmpty) {
+          if (_getCurrentSong()?.filePath == song.filePath) {
+            final converted = LyricConverter.convert(result);
+            final withInterludes = _processInterludes(converted);
+            _currentLyrics = withInterludes;
+            _notifyListeners();
+            return;
+          }
+        }
+      } catch (e) {
+        // 当前源失败，继续尝试下一个备选源
+      }
+    }
+
+    // 所有在线源均未获取到歌词
+    if (_getCurrentSong()?.filePath == song.filePath) {
+      _currentLyrics = [];
+      _notifyListeners();
+    }
+  }
+
+  // 后台异步加载网易歌词
+  Future<void> _loadOnlineLyrics(String songTitle) async {
+    final song = _getCurrentSong();
+    if (song == null) return;
+    await _loadOnlineLyricsPipeline(song, preferredSource: 'netease');
   }
 
   // 酷狗歌词获取方法
   Future<void> _loadKugouLyrics(String songTitle) async {
-    try {
-      // 检查 artist 是否为默认值，如果是则设置为空字符串
-      final rawArtist = _getCurrentSong()?.artist ?? '';
-      final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
-          ? ''
-          : rawArtist;
-
-      // 组合搜索关键词（有歌手时：歌名 + 歌手；否则只用歌名）
-      final searchKeyword = artist.isEmpty
-          ? songTitle.trim()
-          : '${songTitle.trim()} ${artist.trim()}';
-
-      // 对搜索关键词进行 url 编码
-      final encodedSearchKeyword = Uri.encodeComponent(searchKeyword);
-
-      // 第一步：搜索歌曲获取歌曲hash
-      final searchUrl =
-          'http://mobilecdnbj.kugou.com/api/v3/search/song?keyword=$encodedSearchKeyword&page=1&pagesize=1';
-      final searchUri = Uri.parse(searchUrl);
-
-      final searchResponse = await http
-          .get(searchUri)
-          .timeout(const Duration(seconds: 10));
-
-      // 如果状态码不为200，清空并返回
-      if (searchResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 解析搜索结果
-      final searchResult = json.decode(searchResponse.body);
-
-      // 如果没有找到歌曲，同样清空歌词
-      if (searchResult['data'] == null ||
-          searchResult['data']['info'] == null ||
-          searchResult['data']['info'].isEmpty) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 取第一首匹配歌曲的hash
-      final songHash = searchResult['data']['info'][0]['hash'].toString();
-
-      // 第二步：获取歌词候选列表
-      final candidatesUrl =
-          'https://krcs.kugou.com/search?man=yes&hash=$songHash';
-      final candidatesUri = Uri.parse(candidatesUrl);
-
-      final candidatesResponse = await http
-          .get(candidatesUri)
-          .timeout(const Duration(seconds: 10));
-
-      // 如果状态码不为200，清空并返回
-      if (candidatesResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      final candidatesResult = json.decode(candidatesResponse.body);
-
-      // 检查是否有候选歌词
-      if (candidatesResult['candidates'] == null ||
-          candidatesResult['candidates'].isEmpty) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 获取第一个候选歌词的id和accesskey
-      final lyricId = candidatesResult['candidates'][0]['id'].toString();
-      final accessKey = candidatesResult['candidates'][0]['accesskey']
-          .toString();
-
-      // 第三步：获取加密的歌词内容
-      final lyricUrl =
-          'https://lyrics.kugou.com/download?ver=1&id=$lyricId&accesskey=$accessKey&fmt=lrc';
-      final lyricUri = Uri.parse(lyricUrl);
-
-      final lyricResponse = await http
-          .get(lyricUri)
-          .timeout(const Duration(seconds: 10));
-
-      // 如果状态码不为200，清空并返回
-      if (lyricResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      final lyricResult = json.decode(lyricResponse.body);
-
-      // 检查是否有歌词内容
-      if (lyricResult['content'] == null) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 第四步：解码base64歌词
-      final base64Lyric = lyricResult['content'].toString();
-      final decodedLyric = utf8.decode(base64Decode(base64Lyric));
-
-      // 解析歌词
-      _currentLyrics = _parseLrcContent([decodedLyric]);
-    } catch (e) {
-      _currentLyrics = [];
-    }
-    _notifyListeners();
+    final song = _getCurrentSong();
+    if (song == null) return;
+    await _loadOnlineLyricsPipeline(song, preferredSource: 'kugou');
   }
 
   // 企鹅音乐歌词获取方法
   Future<void> _loadQQLyrics(String songTitle) async {
-    try {
-      // 检查 artist 是否为默认值，如果是则设置为空字符串
-      final rawArtist = _getCurrentSong()?.artist ?? '';
-      final artist = (rawArtist == '未知歌手' || rawArtist == '未知歌手 (解析失败)')
-          ? ''
-          : rawArtist;
-
-      // 组合搜索关键词（有歌手时：歌手 - 歌名；否则只用歌名）
-      final searchKeyword = artist.isEmpty
-          ? songTitle.trim()
-          : '${artist.trim()} - ${songTitle.trim()}';
-
-      // 第一步：搜索歌曲
-      const searchUrl = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
-      final searchBody = jsonEncode({
-        "comm": {"ct": "19", "cv": "1873", "uin": "0"},
-        "music.search.SearchCgiService": {
-          "method": "DoSearchForQQMusicDesktop",
-          "module": "music.search.SearchCgiService",
-          "param": {
-            "grp": 1,
-            "num_per_page": 40,
-            "page_num": 1,
-            "query": searchKeyword,
-            "search_type": 0,
-          },
-        },
-      });
-
-      final searchRequest = http.Request('POST', Uri.parse(searchUrl))
-        ..headers['User-Agent'] =
-            'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)'
-        ..body = searchBody;
-
-      final searchStreamedResponse = await http.Client().send(searchRequest);
-      final searchResponse = await http.Response.fromStream(
-        searchStreamedResponse,
-      );
-
-      if (searchResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 直接使用bodyBytes避免Content-Type解析问题
-      final searchResult = json.decode(utf8.decode(searchResponse.bodyBytes));
-
-      // 检查搜索结果
-      if (searchResult['music.search.SearchCgiService'] == null ||
-          searchResult['music.search.SearchCgiService']['data'] == null ||
-          searchResult['music.search.SearchCgiService']['data']['body'] ==
-              null ||
-          searchResult['music.search.SearchCgiService']['data']['body']['song'] ==
-              null ||
-          searchResult['music.search.SearchCgiService']['data']['body']['song']['list'] ==
-              null ||
-          searchResult['music.search.SearchCgiService']['data']['body']['song']['list']
-              .isEmpty) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 获取第一首歌曲的信息
-      final songList =
-          searchResult['music.search.SearchCgiService']['data']['body']['song']['list'];
-      final firstSong = songList[0];
-      final songMid = firstSong['mid'].toString();
-      final musicId = firstSong['id'].toString();
-
-      // 第二步：获取歌词
-      final lyricUrl = Uri.parse(
-        'https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg'
-        '?songmid=$songMid'
-        '&musicid=$musicId'
-        '&format=json'
-        '&g_tk=5381',
-      );
-
-      final lyricRequest = http.Request('GET', lyricUrl)
-        ..headers['Referer'] = 'https://y.qq.com/n/ryqq/player'
-        ..headers['User-Agent'] =
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36';
-
-      final lyricStreamedResponse = await http.Client().send(lyricRequest);
-      final lyricResponse = await http.Response.fromStream(
-        lyricStreamedResponse,
-      );
-
-      if (lyricResponse.statusCode != 200) {
-        _currentLyrics = [];
-        _notifyListeners();
-        return;
-      }
-
-      // 手动处理响应体，避免因Content-Type导致的解析问题
-      final lyricResult = json.decode(utf8.decode(lyricResponse.bodyBytes));
-
-      // 处理歌词内容
-      List<String> lrcLines = [];
-      if (lyricResult['lyric'] != null) {
-        try {
-          final lyricBase64 = lyricResult['lyric'];
-          final lyricData = utf8.decode(base64Decode(lyricBase64));
-          lrcLines = lyricData.split('\n');
-        } catch (e) {
-          //
-        }
-      }
-
-      // 处理翻译歌词内容
-      List<String> tlyricLines = [];
-      if (lyricResult['trans'] != null && lyricResult['trans'].isNotEmpty) {
-        try {
-          final transBase64 = lyricResult['trans'];
-          final transData = utf8.decode(base64Decode(transBase64));
-          tlyricLines = transData.split('\n');
-        } catch (e) {
-          //
-        }
-      }
-
-      // 合并歌词
-      final List<String> mergedLyrics = [];
-      mergedLyrics.addAll(lrcLines);
-
-      if (tlyricLines.isNotEmpty) {
-        mergedLyrics.add(''); // 空行分隔
-        mergedLyrics.addAll(tlyricLines);
-      }
-
-      // 解析歌词
-      _currentLyrics = _parseLrcContent(mergedLyrics);
-    } catch (e) {
-      _currentLyrics = [];
-    }
-    _notifyListeners();
+    final song = _getCurrentSong();
+    if (song == null) return;
+    await _loadOnlineLyricsPipeline(song, preferredSource: 'qq');
   }
 
   // 解析歌词

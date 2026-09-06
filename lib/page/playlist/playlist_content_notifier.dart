@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'lyrics_handler.dart';
 import 'dart:typed_data';
 import 'dart:math';
 import 'dart:async';
@@ -29,6 +28,7 @@ import '../../services/search_service.dart';
 import '../../services/search_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../utils/search_debouncer.dart';
+import '../../lyrics/lyrics_handler.dart';
 
 enum SortCriterion { title, artist, dateModified, file, random, trackNumber }
 
@@ -1817,7 +1817,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   // 更新播放列表的文件夹路径
-  Future<void> updatePlaylistFolders(int index, List<String> folderPaths) async {
+  Future<void> updatePlaylistFolders(
+    int index,
+    List<String> folderPaths,
+  ) async {
     if (index < 0 || index >= _playlists.length) return;
 
     final playlist = _playlists[index];
@@ -3693,7 +3696,6 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     notifyListeners();
   }
-
 
   // --- 对选中歌曲的一些操作 ---
 
