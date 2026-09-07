@@ -155,14 +155,13 @@ class KrcParser {
         );
       }
 
-      // TODO: 先不附加罗马音，lyrics_widget.dart 顶部的 FIXME 还没解决
-      // romajiLines.add(
-      //   ParsedLine(
-      //     startMs: origLine.startMs,
-      //     endMs: origLine.endMs,
-      //     words: romaWords,
-      //   ),
-      // );
+      romajiLines.add(
+        ParsedLine(
+          startMs: origLine.startMs,
+          endMs: origLine.endMs,
+          words: romaWords,
+        ),
+      );
     }
   }
 

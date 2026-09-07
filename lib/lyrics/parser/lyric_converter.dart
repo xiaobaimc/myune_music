@@ -21,11 +21,25 @@ class LyricConverter {
     for (var i = 0; i < parsed.lines.length; i++) {
       final parsedLine = parsed.lines[i];
       final texts = <String>[];
+      final tokensList = <List<LyricToken>>[];
+      final karaokeTextIndices = <int>[];
 
       // 原文纯文本
       final origText = parsedLine.text.trim();
       if (origText.isNotEmpty) {
-        texts.add(origText);
+        if (parsedLine.hasWordTimestamps) {
+          // 有逐字时间戳：加入 tokens，记录在 texts 中的下标
+          final tokens = _buildTokensWithPauses(parsedLine.words);
+          if (tokens.isNotEmpty) {
+            karaokeTextIndices.add(texts.length); // 记录原文将在 texts 中的位置
+            texts.add(origText);
+            tokensList.add(tokens);
+          } else {
+            texts.add(origText);
+          }
+        } else {
+          texts.add(origText);
+        }
       }
 
       // 翻译文本严格按时间戳匹配（误差不超过 20 毫秒）
@@ -48,7 +62,7 @@ class LyricConverter {
       // 2. 否则在有效翻译列表中寻找时间戳误差 <= 20ms 的最近行（网易云、QQ音乐等独立 LRC）
       if (matchedTransText == null && validTranslations.isNotEmpty) {
         var bestIdx = -1;
-        var minDiff = 21; // 误差不超过 20 毫秒
+        var minDiff = 21;
 
         for (var j = 0; j < validTranslations.length; j++) {
           if (usedTranslationIndices.contains(j)) continue;
@@ -67,26 +81,21 @@ class LyricConverter {
       }
 
       if (matchedTransText != null && matchedTransText.isNotEmpty) {
+        // 翻译行不加入 tokensList，也不加入 karaokeTextIndices
         texts.add(matchedTransText);
       }
 
-      // 构建 karaoke tokens
-      List<List<LyricToken>>? tokensList;
-      if (parsedLine.hasWordTimestamps) {
-        final tokens = _buildTokensWithPauses(parsedLine.words);
-        if (tokens.isNotEmpty) {
-          tokensList = [tokens];
+      //  3.罗马音（卡拉OK行，排在翻译之后）
+      if (i < parsed.romajiLines.length &&
+          parsed.romajiLines[i].hasWordTimestamps) {
+        final romajiLine = parsed.romajiLines[i];
+        final romajiText = romajiLine.text.trim();
+        final romaTokens = _buildTokensWithPauses(romajiLine.words);
 
-          // 如果有罗马音，添加为第二行 tokens
-          if (i < parsed.romajiLines.length &&
-              parsed.romajiLines[i].hasWordTimestamps) {
-            final romaTokens = _buildTokensWithPauses(
-              parsed.romajiLines[i].words,
-            );
-            if (romaTokens.isNotEmpty) {
-              tokensList.add(romaTokens);
-            }
-          }
+        if (romaTokens.isNotEmpty && romajiText.isNotEmpty) {
+          karaokeTextIndices.add(texts.length); // 记录罗马音将在 texts 中的位置
+          texts.add(romajiText);
+          tokensList.add(romaTokens);
         }
       }
 
@@ -94,7 +103,10 @@ class LyricConverter {
         LyricLine(
           timestamp: Duration(milliseconds: parsedLine.startMs),
           texts: texts,
-          tokens: tokensList,
+          tokens: tokensList.isNotEmpty ? tokensList : null,
+          karaokeTextIndices: karaokeTextIndices.isNotEmpty
+              ? karaokeTextIndices
+              : null,
         ),
       );
     }

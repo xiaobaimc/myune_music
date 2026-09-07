@@ -301,6 +301,7 @@ class LyricsHandler {
 
     final Map<Duration, List<String>> groupedLyrics = {};
     final Map<Duration, List<List<LyricToken>>> karaokeTokenMap = {};
+    final Map<Duration, List<int>> karaokeTextIndexMap = {};
 
     // 兼容不带毫秒的时间戳格式（到底是谁在用这种）
     final RegExp timeStampRegExp = RegExp(
@@ -346,13 +347,24 @@ class LyricsHandler {
           final displayText = _extractDisplayText(rawText);
 
           if (displayText.isNotEmpty) {
-            // 添加到对应时间戳的文本列表中
-            groupedLyrics.putIfAbsent(timestamp, () => []).add(displayText);
-          }
+            // 记录本行将插入 texts 的下标，再执行插入
+            final int textIndex = groupedLyrics
+                .putIfAbsent(timestamp, () => [])
+                .length;
+            groupedLyrics[timestamp]!.add(displayText);
 
-          // 将当前行的tokens添加到列表中，而不是覆盖
-          // 这样可以支持多行共享同一时间戳的逐字歌词
-          if (tokens.isNotEmpty) {
+            // 将当前行的tokens添加到列表中，而不是覆盖
+            // 这样可以支持多行共享同一时间戳的逐字歌词
+            if (tokens.isNotEmpty) {
+              karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
+              // 同步记录该 token 组对应的 textIndex
+              karaokeTextIndexMap
+                  .putIfAbsent(timestamp, () => [])
+                  .add(textIndex);
+            }
+          } else if (tokens.isNotEmpty) {
+            // displayText 为空但 tokens 非空（极少数格式），仍需记录 tokens
+            // 但没有对应的 text 行，不记录 textIndex
             karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
           }
         } else {
@@ -383,6 +395,7 @@ class LyricsHandler {
                 timestamp: entry.key,
                 texts: entry.value,
                 tokens: karaokeTokenMap[entry.key],
+                karaokeTextIndices: karaokeTextIndexMap[entry.key],
               ),
             )
             .toList()
@@ -418,6 +431,8 @@ class LyricsHandler {
   List<LyricLine> _parseAwlrcContent(List<String> lines) {
     final Map<Duration, List<String>> groupedLyrics = {};
     final Map<Duration, List<List<LyricToken>>> karaokeTokenMap = {};
+    // 记录每个卡拉OK tokens 条目对应的 texts 下标，与 karaokeTokenMap 对应
+    final Map<Duration, List<int>> karaokeTextIndexMap = {};
 
     final List<String> processedLines = _preprocessLrcLines(lines);
 
@@ -465,13 +480,24 @@ class LyricsHandler {
           final displayText = _extractDisplayText(rawText);
 
           if (displayText.isNotEmpty) {
-            // 添加到对应时间戳的文本列表中
-            groupedLyrics.putIfAbsent(timestamp, () => []).add(displayText);
-          }
+            // 记录本行将插入 texts 的下标，再执行插入
+            final int textIndex = groupedLyrics
+                .putIfAbsent(timestamp, () => [])
+                .length;
+            groupedLyrics[timestamp]!.add(displayText);
 
-          // 将当前行的tokens添加到列表中，而不是覆盖
-          // 这样可以支持多行共享同一时间戳的逐字歌词
-          if (tokens.isNotEmpty) {
+            // 将当前行的tokens添加到列表中，而不是覆盖
+            // 这样可以支持多行共享同一时间戳的逐字歌词
+            if (tokens.isNotEmpty) {
+              karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
+              // 同步记录该 token 组对应的 textIndex
+              karaokeTextIndexMap
+                  .putIfAbsent(timestamp, () => [])
+                  .add(textIndex);
+            }
+          } else if (tokens.isNotEmpty) {
+            // displayText 为空但 tokens 非空（极少数格式），仍需记录 tokens
+            // 但没有对应的 text 行，不记录 textIndex
             karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
           }
         } else {
@@ -502,6 +528,7 @@ class LyricsHandler {
                 timestamp: entry.key,
                 texts: entry.value,
                 tokens: karaokeTokenMap[entry.key],
+                karaokeTextIndices: karaokeTextIndexMap[entry.key],
               ),
             )
             .toList()

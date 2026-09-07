@@ -130,6 +130,10 @@ class LyricLine {
   final List<String> texts;
 
   final List<List<LyricToken>>? tokens;
+
+  // 为 null 时表示无卡拉OK行
+  final List<int>? karaokeTextIndices;
+
   final bool isInterlude;
   final Duration? interludeDuration;
 
@@ -137,6 +141,7 @@ class LyricLine {
     required this.timestamp,
     required this.texts,
     this.tokens,
+    this.karaokeTextIndices,
     this.isInterlude = false,
     this.interludeDuration,
   });

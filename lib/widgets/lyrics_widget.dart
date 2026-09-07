@@ -1,33 +1,3 @@
-/*
-FIXME: 假设以下格式
-`
-[00:08.220]First [00:08.412]things [00:08.882]first[00:09.378]
-[00:08.220]最初的最初
-`
-在 _parseLrcContent 方法中 会将第1行检测为卡拉OK格式；
-
-而对于 `[00:08.220]最初的最初` 他没有内部时间戳 解析出"最初的最初"并添加到 groupedLyrics 中
-
-在 LyricsWidget 中 当显示高亮行时，如果检测到该行是卡拉OK格式 即isKaraokeLine为true
-则只显示卡拉OK效果 而不会显示同一时间戳下的标准LRC格式译文
-
-当同一时间戳有多种格式的歌词时 会优先处理卡拉OK格式，导致标准LRC格式的译文在高亮行时无法显示
-
----
-
-2026.1.13 修复了一部分 但仍然治标不治本 但保证了上述的案例可以正常显示
-`
-[00:00.940]悲[00:01.380]し[00:01.750]み
-[00:00.940]沉入悲伤之海的我
-[00:00.940]ka na shi mi [00:02.000]no u mi ni shi zu n da wa ta shi 假设这里有时间戳
-`
-1、3行有时间戳
-第2行没有，仍然会导致显示异常
-
-texts列表里有3行，但tokens列表里只有2个元素（因为只有第 1、3 行有时间戳）
-如果简单的用循环索引去取，第2行就会错误地去抓取第3行的逐字数据
-
-*/
 import 'dart:ui' as ui;
 import 'dart:async';
 import 'dart:math' as math;
@@ -196,8 +166,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     List<List<LyricToken>> multiLineTokens,
     bool isCurrent,
     double fontSize,
-    ColorScheme colorScheme,
-  ) {
+    ColorScheme colorScheme, {
+    bool forceSecondary = false,
+  }) {
     // 获取当前播放位置和播放状态
     final playlistNotifier = Provider.of<PlaylistContentNotifier>(
       context,
@@ -225,7 +196,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
       final List<LyricToken> tokens = multiLineTokens[lineIndex];
       final List<InlineSpan> children = [];
 
-      final bool isSecondaryLine = lineIndex > 0;
+      // forceSecondary：强制使用次级样式（如罗马音行）
+      final bool isSecondaryLine = forceSecondary || lineIndex > 0;
 
       final double lineFontSize = isSecondaryLine
           ? secondaryFontSize
@@ -394,11 +366,74 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final List<Widget> columnChildren = [];
     int renderedLines = 0;
     final int maxAllowed = widget.maxLinesPerLyric;
-    final int karaokeCount = (line.tokens != null) ? line.tokens!.length : 0;
 
     if (line.isInterlude) {
       // 间奏逻辑延后到最后处理，因为它需要直接包裹整个 Padding
+    } else if (line.isKaraoke && line.karaokeTextIndices != null) {
+      // 有精确索引映射时按 texts 顺序遍历，逐行判断类型
+      final Map<int, int> textIndexToTokenGroup = {
+        for (int k = 0; k < line.karaokeTextIndices!.length; k++)
+          line.karaokeTextIndices![k]: k,
+      };
+
+      bool firstChild = true;
+
+      for (
+        int i = 0;
+        i < line.texts.length && renderedLines < maxAllowed;
+        i++
+      ) {
+        final int? tokenGroupIndex = textIndexToTokenGroup[i];
+
+        Widget lineWidget;
+
+        if (tokenGroupIndex != null && isCurrent) {
+          // 当前高亮行：卡拉OK行渲染为逐字动画效果
+          final bool isSecondaryKaraoke = tokenGroupIndex > 0;
+          final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
+          lineWidget = _buildMultiLineKaraokeRichText(
+            [tokens],
+            isCurrent,
+            fontSize,
+            colorScheme,
+            forceSecondary: isSecondaryKaraoke,
+          );
+        } else {
+          // 非高亮行，或该行是翻译行：渲染为静态文本
+          final bool isSecondaryLine =
+              tokenGroupIndex == null || tokenGroupIndex > 0;
+          lineWidget = _buildStaticLyricText(
+            text: line.texts[i],
+            lyricAlignment: lyricAlignment,
+            style: _lyricTextStyle(
+              isCurrent: isCurrent,
+              isSecondaryLine: isSecondaryLine,
+              fontSize: fontSize,
+              colorScheme: colorScheme,
+            ),
+          );
+        }
+
+        if (!firstChild) {
+          columnChildren.add(const SizedBox(height: 6));
+        }
+        firstChild = false;
+        renderedLines++;
+
+        columnChildren.add(
+          _withLyricEffects(
+            lyricAlignment: lyricAlignment,
+            isCurrent: isCurrent,
+            shouldBlur: shouldBlur,
+            distance: distance,
+            blurStrength: blurStrength,
+            child: lineWidget,
+          ),
+        );
+      }
     } else if (isCurrent && line.isKaraoke) {
+      // 没有 karaokeTextIndices 时，沿用原有的批量渲染逻辑
+      final int karaokeCount = line.tokens!.length;
       final int linesToTake = (karaokeCount > maxAllowed)
           ? maxAllowed
           : karaokeCount;
@@ -424,6 +459,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         ),
       );
     } else {
+      final int karaokeCount = (line.tokens != null) ? line.tokens!.length : 0;
       final int mainLinesLimit = (karaokeCount > 0 ? karaokeCount : 1);
       final int linesToTake = (mainLinesLimit > maxAllowed)
           ? maxAllowed
@@ -461,43 +497,47 @@ class _LyricsWidgetState extends State<LyricsWidget>
       }
     }
 
-    final int translationStartIndex = (karaokeCount > 0 ? karaokeCount : 1);
+    // 追加翻译行仅适用于旧格式兼容路径
+    if (line.karaokeTextIndices == null) {
+      final int karaokeCount = (line.tokens != null) ? line.tokens!.length : 0;
+      final int translationStartIndex = (karaokeCount > 0 ? karaokeCount : 1);
 
-    if (renderedLines < maxAllowed &&
-        line.texts.length > translationStartIndex) {
-      columnChildren.add(const SizedBox(height: 6));
+      if (renderedLines < maxAllowed &&
+          line.texts.length > translationStartIndex) {
+        columnChildren.add(const SizedBox(height: 6));
 
-      for (
-        int i = translationStartIndex;
-        i < line.texts.length && renderedLines < maxAllowed;
-        i++
-      ) {
-        renderedLines++;
+        for (
+          int i = translationStartIndex;
+          i < line.texts.length && renderedLines < maxAllowed;
+          i++
+        ) {
+          renderedLines++;
 
-        final Widget translationWidget = _buildStaticLyricText(
-          text: line.texts[i],
-          lyricAlignment: lyricAlignment,
-          style: _lyricTextStyle(
-            isCurrent: isCurrent,
-            isSecondaryLine: true,
-            fontSize: fontSize,
-            colorScheme: colorScheme,
-          ),
-        );
-
-        columnChildren.add(
-          _withLyricEffects(
+          final Widget translationWidget = _buildStaticLyricText(
+            text: line.texts[i],
             lyricAlignment: lyricAlignment,
-            isCurrent: isCurrent,
-            shouldBlur: shouldBlur,
-            distance: distance,
-            blurStrength: blurStrength,
-            child: translationWidget,
-          ),
-        );
+            style: _lyricTextStyle(
+              isCurrent: isCurrent,
+              isSecondaryLine: true,
+              fontSize: fontSize,
+              colorScheme: colorScheme,
+            ),
+          );
 
-        if (i < line.texts.length - 1 && renderedLines < maxAllowed) {
-          columnChildren.add(const SizedBox(height: 6));
+          columnChildren.add(
+            _withLyricEffects(
+              lyricAlignment: lyricAlignment,
+              isCurrent: isCurrent,
+              shouldBlur: shouldBlur,
+              distance: distance,
+              blurStrength: blurStrength,
+              child: translationWidget,
+            ),
+          );
+
+          if (i < line.texts.length - 1 && renderedLines < maxAllowed) {
+            columnChildren.add(const SizedBox(height: 6));
+          }
         }
       }
     }
@@ -738,7 +778,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
       final size = MediaQuery.of(context).size;
       final double width = size.width > 0 ? size.width : 1150.0;
       final double height = size.height > 0 ? size.height : 620.0;
-      final double scale = (math.sqrt((width * height) / (1150.0 * 620.0))).clamp(0.5, 2.0);
+      final double scale = (math.sqrt(
+        (width * height) / (1150.0 * 620.0),
+      )).clamp(0.5, 2.0);
       fontSize = 22.0 * scale;
       lyricVerticalSpacing = 6.0 * scale;
     }
