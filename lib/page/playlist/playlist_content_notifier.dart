@@ -805,10 +805,23 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
       }
 
+      final isIgnoredPlaybackError = error is MpvLogError
+          ? (error.prefix == 'ad' ||
+                error.prefix == 'ffmpeg/audio' ||
+                error.prefix.startsWith('ffmpeg/audio') ||
+                error.text.contains('Error decoding audio') ||
+                error.text.contains('decode_frame') ||
+                error.text.contains('invalid frame') ||
+                error.text.contains('invalid sync'))
+          : (errorString.contains('ffmpeg/audio') ||
+                errorString.contains('Error decoding audio') ||
+                errorString.contains('Failed to recognize file format') ||
+                errorString.contains('decode_frame') ||
+                errorString.contains('invalid frame') ||
+                errorString.contains('invalid sync'));
+
       final shouldNotifyUI =
-          !(_settingsProvider.ignorePlaybackErrors &&
-              (errorString.contains('Error decoding audio') ||
-                  errorString.contains('Failed to recognize file format')));
+          !(_settingsProvider.ignorePlaybackErrors && isIgnoredPlaybackError);
 
       if (_currentSong != null) {
         final errorMessage =
@@ -821,7 +834,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
         debugPrint('播放${p.basename(_currentSong!.filePath)}出错: $error');
       } else {
         final errorMessage = '播放出错: $error';
-        _notificationService.error(errorMessage);
+        if (shouldNotifyUI) {
+          _notificationService.error(errorMessage);
+        }
         // 记录详细错误信息到日志文件
         _writeErrorToLog(errorMessage, error);
       }
