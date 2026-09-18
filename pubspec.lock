@@ -455,11 +455,12 @@ packages:
   mpv_audio_kit:
     dependency: "direct main"
     description:
-      name: mpv_audio_kit
-      sha256: "4cca4e285abd0e4b2284f7edd70ced5894c99757a5999a33b3c41b7f458fa488"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.4.2"
+      path: "."
+      ref: e87688132c2fc1b0960877a59a7b5a535b64917a
+      resolved-ref: e87688132c2fc1b0960877a59a7b5a535b64917a
+      url: "https://github.com/xiaobaimc/mpv_audio_kit.git"
+    source: git
+    version: "0.4.5"
   nested:
     dependency: transitive
     description:
