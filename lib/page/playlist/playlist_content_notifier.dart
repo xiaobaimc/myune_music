@@ -1093,6 +1093,41 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return basicSong;
   }
 
+  // 为系统媒体会话构建封面
+  MediaSessionArtwork _sessionArtwork(Uint8List? albumArt) {
+    if (albumArt == null || albumArt.isEmpty) {
+      return MediaSessionArtwork.embedded;
+    }
+    return MediaSessionArtwork.custom(
+      CoverArt(bytes: albumArt, mimeType: _imageMimeOf(albumArt)),
+    );
+  }
+
+  // 嗅探图片类型（lofty 会连空 MIME 的 APIC 一起读出来，但媒体会话需要可靠的 MIME）
+  static String _imageMimeOf(Uint8List bytes) {
+    bool startsWith(List<int> signature) {
+      if (bytes.length < signature.length) return false;
+      for (var i = 0; i < signature.length; i++) {
+        if (bytes[i] != signature[i]) return false;
+      }
+      return true;
+    }
+
+    if (startsWith(const [0x89, 0x50, 0x4E, 0x47])) return 'image/png';
+    if (startsWith(const [0xFF, 0xD8, 0xFF])) return 'image/jpeg';
+    if (startsWith(const [0x47, 0x49, 0x46])) return 'image/gif';
+    if (startsWith(const [0x42, 0x4D])) return 'image/bmp';
+    if (bytes.length >= 12 &&
+        startsWith(const [0x52, 0x49, 0x46, 0x46]) &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'image/webp';
+    }
+    return 'application/octet-stream';
+  }
+
   void _updateSongInCollections(
     String filePath,
     Song Function(Song song) updater,
@@ -2644,6 +2679,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           title: songToPlay.title,
           artist: songToPlay.artist,
           album: songToPlay.album,
+          artwork: _sessionArtwork(songToPlay.albumArt),
           autoApplyPlaylistNavigation: false,
         );
         await _audioService.player.setMediaSession(session);
@@ -3161,6 +3197,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         title: songToPlay.title,
         artist: songToPlay.artist,
         album: songToPlay.album,
+        artwork: _sessionArtwork(songToPlay.albumArt),
         autoApplyPlaylistNavigation: false,
       );
       await _audioService.player.setMediaSession(session);
@@ -3401,6 +3438,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           title: _currentSong!.title,
           artist: _currentSong!.artist,
           album: _currentSong!.album,
+          artwork: _sessionArtwork(_currentSong!.albumArt),
           autoApplyPlaylistNavigation: false,
         );
         await _audioService.player.setMediaSession(session);
