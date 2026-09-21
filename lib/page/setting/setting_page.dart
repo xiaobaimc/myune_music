@@ -8,7 +8,7 @@ import 'tabs/hotkeys_tab.dart';
 import 'tabs/advanced_tab.dart';
 
 // 定义应用版本号常量
-const String appVersion = '0.9.3';
+const String appVersion = '0.9.4';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
