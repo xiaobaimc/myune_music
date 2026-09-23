@@ -4560,6 +4560,38 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return grouped;
   }
 
+  // 用于歌手列表外部的缩略图显示，确保与歌手详情页内部的头图一致
+  Song? getArtistCoverSong(String artistName, List<Song> songs) {
+    final savedOrder = _artistSortOrders[artistName];
+    List<Song> orderedSongs;
+
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      // 按保存的顺序重排歌曲
+      final songMap = {for (final song in songs) song.filePath: song};
+      orderedSongs = savedOrder
+          .map((path) => songMap[path])
+          .where((song) => song != null)
+          .cast<Song>()
+          .toList();
+      // 添加不在保存顺序中的新歌曲
+      for (final song in songs) {
+        if (!orderedSongs.contains(song)) {
+          orderedSongs.add(song);
+        }
+      }
+    } else {
+      orderedSongs = songs;
+    }
+
+    // 返回第一首有封面的歌曲
+    for (final song in orderedSongs) {
+      if (song.albumArt != null) {
+        return song;
+      }
+    }
+    return orderedSongs.isNotEmpty ? orderedSongs.first : null;
+  }
+
   // 处理在歌手/专辑详情页中的拖动排序
   Future<void> reorderActiveSongList(int oldIndex, int newIndex) async {
     // 安全检查，确保当前视图是歌手或专辑

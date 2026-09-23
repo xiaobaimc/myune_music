@@ -37,12 +37,12 @@ class _ArtistListState extends State<ArtistList> {
   void _closeArtistDetail() {
     final notifier = context.read<PlaylistContentNotifier>();
     final navNotifier = context.read<NavigationNotifier>();
-    
+
     if (notifier.isSearching) {
       notifier.stopSearch();
     }
     notifier.clearActiveDetailView();
-    
+
     if (navNotifier.canPop) {
       navNotifier.popRoute();
     }
@@ -53,7 +53,9 @@ class _ArtistListState extends State<ArtistList> {
       _lastArtistData = artists;
       final names = artists.keys.toList();
       final cache = PinyinCache.instance;
-      names.sort((a, b) => cache.getFullPinyin(a).compareTo(cache.getFullPinyin(b)));
+      names.sort(
+        (a, b) => cache.getFullPinyin(a).compareTo(cache.getFullPinyin(b)),
+      );
       _cachedSortedArtists = names;
     }
     return _cachedSortedArtists!;
@@ -192,16 +194,24 @@ class _ArtistListState extends State<ArtistList> {
                           // 应用搜索过滤逻辑（支持拼音搜索）
                           if (_searchKeyword.isNotEmpty) {
                             final lowerKeyword = _searchKeyword.toLowerCase();
-                            final isLatin = RegExp(r'^[a-z0-9]+$').hasMatch(lowerKeyword);
+                            final isLatin = RegExp(
+                              r'^[a-z0-9]+$',
+                            ).hasMatch(lowerKeyword);
                             artistNames = artistNames.where((name) {
                               // 直接字符串匹配
-                              if (name.toLowerCase().contains(lowerKeyword)) return true;
+                              if (name.toLowerCase().contains(lowerKeyword)) {
+                                return true;
+                              }
                               // 拼音匹配（仅拉丁字符输入时）
                               if (isLatin) {
-                                final pinyin = PinyinCache.instance.getFullPinyin(name);
+                                final pinyin = PinyinCache.instance
+                                    .getFullPinyin(name);
                                 if (pinyin.contains(lowerKeyword)) return true;
-                                final initials = PinyinCache.instance.getInitials(name);
-                                if (initials.contains(lowerKeyword)) return true;
+                                final initials = PinyinCache.instance
+                                    .getInitials(name);
+                                if (initials.contains(lowerKeyword)) {
+                                  return true;
+                                }
                               }
                               return false;
                             }).toList();
@@ -225,40 +235,47 @@ class _ArtistListState extends State<ArtistList> {
                             silkyScrollDuration: ScrollConfig.duration,
                             scrollSpeed: ScrollConfig.speed,
                             animationCurve: ScrollConfig.curve,
-                            builder: (context, controller, physics, _) => ListView.builder(
-                              controller: controller,
-                              physics: physics,
-                              itemCount: artistNames.length,
-                              itemBuilder: (context, index) {
-                                final artistName = artistNames[index];
-                                final songs = artists[artistName]!;
-                                final representativeSong = songs.firstWhere(
-                                  (s) => s.albumArt != null,
-                                  orElse: () => songs.first,
-                                );
-                                final representativeArt =
-                                    representativeSong.albumArt;
+                            builder: (context, controller, physics, _) =>
+                                ListView.builder(
+                                  controller: controller,
+                                  physics: physics,
+                                  itemCount: artistNames.length,
+                                  itemBuilder: (context, index) {
+                                    final artistName = artistNames[index];
+                                    final songs = artists[artistName]!;
+                                    final representativeSong =
+                                        notifier.getArtistCoverSong(
+                                          artistName,
+                                          songs,
+                                        ) ??
+                                        songs.first;
+                                    final representativeArt =
+                                        representativeSong.albumArt;
 
-                                return ListTile(
-                                  leading: _ArtistCoverAvatar(
-                                    filePath: representativeSong.filePath,
-                                    representativeArt: representativeArt,
-                                  ),
-                                  title: Text(artistName),
-                                  subtitle: Text('共 ${songs.length} 首歌曲'),
-                                  onTap: () {
-                                    if (_scrollController.hasClients) {
-                                      _savedScrollOffset =
-                                          _scrollController.offset;
-                                    }
-                                    notifier.setActiveArtistView(artistName);
+                                    return ListTile(
+                                      leading: _ArtistCoverAvatar(
+                                        filePath: representativeSong.filePath,
+                                        representativeArt: representativeArt,
+                                      ),
+                                      title: Text(artistName),
+                                      subtitle: Text('共 ${songs.length} 首歌曲'),
+                                      onTap: () {
+                                        if (_scrollController.hasClients) {
+                                          _savedScrollOffset =
+                                              _scrollController.offset;
+                                        }
+                                        notifier.setActiveArtistView(
+                                          artistName,
+                                        );
+                                      },
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          12.0,
+                                        ),
+                                      ),
+                                    );
                                   },
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                );
-                              },
-                            ),
+                                ),
                           );
                         },
                       ),
