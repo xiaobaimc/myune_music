@@ -10,6 +10,8 @@ import '../../widgets/app_window_title_bar.dart';
 import '../../widgets/playbar.dart';
 import '../../widgets/playing_queue_drawer.dart';
 import '../../services/notification_service.dart';
+import '../setting/settings_provider.dart';
+import '../../widgets/custom_background_layer.dart';
 
 class SongListDetailPage extends StatelessWidget {
   const SongListDetailPage({super.key});
@@ -37,9 +39,14 @@ class SongListDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
+    final settings = context.watch<SettingsProvider>();
     final title = notifier.activeDetailTitle;
 
     return Scaffold(
+      backgroundColor: CustomBackgroundSurfaces.transparentWhenEnabled(
+        settings,
+        Theme.of(context).colorScheme.surface,
+      ),
       endDrawer: const PlayingQueueDrawer(),
       body: Column(
         children: [
@@ -144,48 +151,51 @@ class SongListDetailWidget extends StatelessWidget {
                   silkyScrollDuration: ScrollConfig.duration,
                   scrollSpeed: ScrollConfig.speed,
                   animationCurve: ScrollConfig.curve,
-                  builder: (context, controller, physics, _) => CustomScrollView(
-                    controller: controller,
-                    physics: physics,
-                    slivers: [
-                      SliverReorderableList(
-                        itemCount: songs.length,
-                        onReorderItem: (oldIndex, newIndex) {
-                          // 在搜索时，禁用拖拽排序功能
-                          if (isSearching) return;
+                  builder: (context, controller, physics, _) =>
+                      CustomScrollView(
+                        controller: controller,
+                        physics: physics,
+                        slivers: [
+                          SliverReorderableList(
+                            itemCount: songs.length,
+                            onReorderItem: (oldIndex, newIndex) {
+                              // 在搜索时，禁用拖拽排序功能
+                              if (isSearching) return;
 
-                          notifier.reorderActiveSongList(oldIndex, newIndex);
-                        },
-                        itemBuilder: (context, index) {
-                          final song = songs[index];
-                          return SongTileWidget(
-                            key: ValueKey(song.filePath),
-                            song: song,
-                            index: index,
-                            enableContextMenu: false, // 禁用右键菜单
-                            contextPlaylist:
-                                notifier.playingPlaylist ??
-                                Playlist(id: 'dummy', name: 'dummy'),
-                            onTap: () {
-                              final listToPlay = isSearching
-                                  ? notifier.filteredSongs
-                                  : notifier.activeSongList;
-                              final originalIndexInList = listToPlay.indexOf(
-                                song,
+                              notifier.reorderActiveSongList(
+                                oldIndex,
+                                newIndex,
                               );
-
-                              if (originalIndexInList != -1) {
-                                notifier.playFromDynamicList(
-                                  listToPlay,
-                                  originalIndexInList,
-                                );
-                              }
                             },
-                          );
-                        },
+                            itemBuilder: (context, index) {
+                              final song = songs[index];
+                              return SongTileWidget(
+                                key: ValueKey(song.filePath),
+                                song: song,
+                                index: index,
+                                enableContextMenu: false, // 禁用右键菜单
+                                contextPlaylist:
+                                    notifier.playingPlaylist ??
+                                    Playlist(id: 'dummy', name: 'dummy'),
+                                onTap: () {
+                                  final listToPlay = isSearching
+                                      ? notifier.filteredSongs
+                                      : notifier.activeSongList;
+                                  final originalIndexInList = listToPlay
+                                      .indexOf(song);
+
+                                  if (originalIndexInList != -1) {
+                                    notifier.playFromDynamicList(
+                                      listToPlay,
+                                      originalIndexInList,
+                                    );
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
                 ),
               );
             },

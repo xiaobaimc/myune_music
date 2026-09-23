@@ -12,6 +12,7 @@ import '../../widgets/sort_dialog.dart';
 import '../setting/settings_provider.dart';
 import '../../layout/navigation_notifier.dart';
 import '../../services/notification_service.dart';
+import '../../widgets/custom_background_layer.dart';
 
 enum ManagementMode { manual, folder }
 
@@ -21,12 +22,16 @@ class PlaylistContentWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
     // 获取窗口宽高比
     final aspectRatio = MediaQuery.of(context).size.aspectRatio;
     final isPortrait = aspectRatio <= 1.0; // 竖屏判断
 
     return Container(
-      color: colorScheme.surface,
+      color: CustomBackgroundSurfaces.transparentWhenEnabled(
+        settings,
+        colorScheme.surface,
+      ),
       child: Row(
         children: [
           // 竖屏时隐藏歌单列表
@@ -517,11 +522,11 @@ class _AddPlaylistDialogState extends State<_AddPlaylistDialog> {
             RadioGroup<ManagementMode>(
               groupValue: _selectedMode,
               onChanged: (value) {
-                  if (_isCreating || value == null) return;
-                  setState(() {
-                    _selectedMode = value;
-                  });
-                },
+                if (_isCreating || value == null) return;
+                setState(() {
+                  _selectedMode = value;
+                });
+              },
               child: const Column(
                 children: [
                   RadioListTile<ManagementMode>(

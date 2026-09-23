@@ -12,6 +12,7 @@ import '../page/pages/audio_analysis_page.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
 import '../page/setting/settings_provider.dart';
+import '../widgets/custom_background_layer.dart';
 import 'navigation_notifier.dart';
 
 class PageEntry {
@@ -182,9 +183,10 @@ class _MainViewState extends State<MainView> {
           children: [
             SafeArea(
               child: NavigationRail(
-                backgroundColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest,
+                backgroundColor: CustomBackgroundSurfaces.railColor(
+                  settings,
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                ),
                 extended: false,
                 selectedIndex: currentIndex,
                 onDestinationSelected: (int index) {

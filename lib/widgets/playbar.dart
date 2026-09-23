@@ -9,6 +9,7 @@ import 'balance_rate_control.dart';
 import 'play_pause_button.dart';
 import 'play_mode_button.dart';
 import '../page/setting/settings_provider.dart';
+import 'custom_background_layer.dart';
 
 // 格式化时间函数
 String _formatDuration(Duration duration) {
@@ -54,6 +55,7 @@ class _PlaybarState extends State<Playbar> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
 
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
@@ -69,7 +71,10 @@ class _PlaybarState extends State<Playbar> {
 
         return Container(
           height: 70,
-          color: colorScheme.surface,
+          color: CustomBackgroundSurfaces.transparentWhenEnabled(
+            settings,
+            colorScheme.surface,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

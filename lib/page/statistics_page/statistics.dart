@@ -7,6 +7,7 @@ import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../setting/settings_provider.dart';
 import '../playlist/playlist_models.dart';
+import '../../widgets/custom_background_layer.dart';
 import 'statistics_manager.dart';
 
 class Statistics extends StatefulWidget {
@@ -268,12 +269,27 @@ class _StatisticsState extends State<Statistics> {
     );
   }
 
+  Color _cardColor(BuildContext context) {
+    return CustomBackgroundSurfaces.panelColor(
+      context.watch<SettingsProvider>(),
+      Theme.of(context).colorScheme.surfaceContainerLow,
+    );
+  }
+
+  double _cardElevation(BuildContext context) {
+    return CustomBackgroundSurfaces.cardElevationOverBackground(
+      context.watch<SettingsProvider>(),
+    );
+  }
+
   Widget _buildStatCard({
     required IconData icon,
     required String label,
     required String value,
   }) {
     return Card(
+      color: _cardColor(context),
+      elevation: _cardElevation(context),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
@@ -304,6 +320,8 @@ class _StatisticsState extends State<Statistics> {
 
     if (topSongs.isEmpty) {
       return Card(
+        color: _cardColor(context),
+        elevation: _cardElevation(context),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text('暂无播放记录', style: Theme.of(context).textTheme.bodyMedium),
@@ -322,6 +340,8 @@ class _StatisticsState extends State<Statistics> {
     }
 
     return Card(
+      color: _cardColor(context),
+      elevation: _cardElevation(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2.0),
         child: ListView.separated(
@@ -385,6 +405,8 @@ class _StatisticsState extends State<Statistics> {
 
     if (topArtists.isEmpty) {
       return Card(
+        color: _cardColor(context),
+        elevation: _cardElevation(context),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text('暂无播放记录', style: Theme.of(context).textTheme.bodyMedium),
@@ -423,6 +445,8 @@ class _StatisticsState extends State<Statistics> {
     }
 
     return Card(
+      color: _cardColor(context),
+      elevation: _cardElevation(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: ListView.separated(
@@ -468,6 +492,8 @@ class _StatisticsState extends State<Statistics> {
 
     if (topAlbums.isEmpty) {
       return Card(
+        color: _cardColor(context),
+        elevation: _cardElevation(context),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text('暂无播放记录', style: Theme.of(context).textTheme.bodyMedium),
@@ -502,6 +528,8 @@ class _StatisticsState extends State<Statistics> {
     }
 
     return Card(
+      color: _cardColor(context),
+      elevation: _cardElevation(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: ListView.separated(

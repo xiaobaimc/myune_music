@@ -6,6 +6,8 @@ import '../playlist/playlist_content_notifier.dart';
 import '../playlist/playlist_models.dart';
 import '../statistics_page/statistics_manager.dart';
 import '../../services/notification_service.dart';
+import '../setting/settings_provider.dart';
+import '../../widgets/custom_background_layer.dart';
 
 class SongDetailsPage extends StatelessWidget {
   const SongDetailsPage({super.key});
@@ -213,10 +215,7 @@ class SongDetailsPage extends StatelessWidget {
     return '$y-$m-$d $h:$min:$s';
   }
 
-  void _openFileLocation(
-    BuildContext context,
-    String filePath,
-  ) async {
+  void _openFileLocation(BuildContext context, String filePath) async {
     try {
       final directory = File(filePath).parent.path;
 
@@ -248,7 +247,10 @@ class SongDetailsPage extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
+          color: CustomBackgroundSurfaces.panelColor(
+            context.watch<SettingsProvider>(),
+            Theme.of(context).colorScheme.surfaceContainer,
+          ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(

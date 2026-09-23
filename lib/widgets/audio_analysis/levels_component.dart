@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 import 'package:provider/provider.dart';
 import '../../page/playlist/playlist_content_notifier.dart';
+import '../../page/setting/settings_provider.dart';
+import '../custom_background_layer.dart';
 
 class LevelsComponent extends StatefulWidget {
   const LevelsComponent({super.key});
@@ -28,7 +30,10 @@ class _LevelsComponentState extends State<LevelsComponent> {
 
     return Card(
       elevation: 0,
-      color: colorScheme.surfaceContainer,
+      color: CustomBackgroundSurfaces.panelColor(
+        context.watch<SettingsProvider>(),
+        colorScheme.surfaceContainer,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),

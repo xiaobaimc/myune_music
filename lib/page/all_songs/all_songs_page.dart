@@ -7,6 +7,8 @@ import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/sort_dialog.dart';
 import '../playlist/playlist_models.dart';
 import '../../services/notification_service.dart';
+import '../setting/settings_provider.dart';
+import '../../widgets/custom_background_layer.dart';
 
 class AllSongsPage extends StatefulWidget {
   const AllSongsPage({super.key});
@@ -56,6 +58,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
 
     final isSearching = notifier.isSearching;
     final colorScheme = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
     return Column(
       children: [
         Expanded(
@@ -115,6 +118,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
                 const SizedBox(height: 6),
                 Expanded(
                   child: Material(
+                    color: CustomBackgroundSurfaces.materialColor(settings),
                     child: Selector<PlaylistContentNotifier, List<Song>>(
                       selector: (_, notifier) {
                         // 根据是否在搜索，决定使用哪个列表
@@ -144,49 +148,57 @@ class _AllSongsPageState extends State<AllSongsPage> {
                           silkyScrollDuration: ScrollConfig.duration,
                           scrollSpeed: ScrollConfig.speed,
                           animationCurve: ScrollConfig.curve,
-                          builder: (context, controller, physics, _) => CustomScrollView(
-                            controller: controller,
-                            physics: physics,
-                            slivers: [
-                              SliverReorderableList(
-                                proxyDecorator: (child, index, animation) =>
-                                    Material(
-                                      elevation: 4,
-                                      color: colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: child,
-                                    ),
-                                itemCount: songs.length,
-                                itemBuilder: (context, index) {
-                                  final song = songs[index];
-                                  return SongTileWidget(
-                                    key: ValueKey(song.filePath),
-                                    song: song,
-                                    index: index,
-                                    contextPlaylist:
-                                        notifier.allSongsVirtualPlaylist,
-                                    enableContextMenu: false,
-                                    onTap: () {
-                                      if (notifier.isSearching) {
-                                        // 搜索模式下使用当前渲染列表快照，避免索引错位
-                                        notifier.playFromDynamicList(
-                                          List<Song>.from(songs),
-                                          index,
-                                        );
-                                      } else {
-                                        notifier.playSongFromAllSongs(index);
-                                      }
+                          builder: (context, controller, physics, _) =>
+                              CustomScrollView(
+                                controller: controller,
+                                physics: physics,
+                                slivers: [
+                                  SliverReorderableList(
+                                    proxyDecorator: (child, index, animation) =>
+                                        Material(
+                                          elevation: 4,
+                                          color: colorScheme.surface,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: child,
+                                        ),
+                                    itemCount: songs.length,
+                                    itemBuilder: (context, index) {
+                                      final song = songs[index];
+                                      return SongTileWidget(
+                                        key: ValueKey(song.filePath),
+                                        song: song,
+                                        index: index,
+                                        contextPlaylist:
+                                            notifier.allSongsVirtualPlaylist,
+                                        enableContextMenu: false,
+                                        onTap: () {
+                                          if (notifier.isSearching) {
+                                            // 搜索模式下使用当前渲染列表快照，避免索引错位
+                                            notifier.playFromDynamicList(
+                                              List<Song>.from(songs),
+                                              index,
+                                            );
+                                          } else {
+                                            notifier.playSongFromAllSongs(
+                                              index,
+                                            );
+                                          }
+                                        },
+                                      );
                                     },
-                                  );
-                                },
-                                onReorderItem: (oldIndex, newIndex) {
-                                  // 在搜索时，不执行排序操作
-                                  if (isSearching) return;
-                                  notifier.reorderAllSongs(oldIndex, newIndex);
-                                },
+                                    onReorderItem: (oldIndex, newIndex) {
+                                      // 在搜索时，不执行排序操作
+                                      if (isSearching) return;
+                                      notifier.reorderAllSongs(
+                                        oldIndex,
+                                        newIndex,
+                                      );
+                                    },
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
                         );
                       },
                     ),

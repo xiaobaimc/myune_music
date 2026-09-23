@@ -1,20 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../statistics_page/statistics.dart';
 import '../../widgets/single_line_lyrics.dart';
+import '../setting/settings_provider.dart';
+import '../../widgets/custom_background_layer.dart';
 
 class StatisticsPage extends StatelessWidget {
   const StatisticsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: CustomBackgroundSurfaces.transparentWhenEnabled(
+        settings,
+        colorScheme.surface,
+      ),
       appBar: AppBar(
         title: const SingleLineLyricView(
           maxLinesPerLyric: 2,
           textAlign: TextAlign.left,
           alignment: Alignment.topLeft,
         ),
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: CustomBackgroundSurfaces.transparentWhenEnabled(
+          settings,
+          colorScheme.surface,
+        ),
         surfaceTintColor: Colors.transparent,
       ),
       body: const Column(

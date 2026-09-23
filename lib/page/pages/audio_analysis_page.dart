@@ -9,6 +9,8 @@ import '../../widgets/audio_analysis/sound_field_component.dart';
 import '../../widgets/audio_analysis/spectrum_component.dart';
 import '../../widgets/audio_analysis/spectrogram_component.dart';
 import '../../widgets/single_line_lyrics.dart';
+import '../setting/settings_provider.dart';
+import '../../widgets/custom_background_layer.dart';
 
 class AudioAnalysisPage extends StatefulWidget {
   const AudioAnalysisPage({super.key});
@@ -86,14 +88,24 @@ class _AudioAnalysisPageState extends State<AudioAnalysisPage> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: CustomBackgroundSurfaces.transparentWhenEnabled(
+        settings,
+        colorScheme.surface,
+      ),
       appBar: AppBar(
         title: const SingleLineLyricView(
           maxLinesPerLyric: 2,
           textAlign: TextAlign.left,
           alignment: Alignment.topLeft,
         ),
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: CustomBackgroundSurfaces.transparentWhenEnabled(
+          settings,
+          colorScheme.surface,
+        ),
         surfaceTintColor: Colors.transparent,
       ),
       body: Column(

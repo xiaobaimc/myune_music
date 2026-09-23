@@ -9,6 +9,8 @@ import 'dart:typed_data';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/single_line_lyrics.dart';
 import 'artist_detail_view.dart';
+import '../setting/settings_provider.dart';
+import '../../widgets/custom_background_layer.dart';
 
 class ArtistList extends StatefulWidget {
   const ArtistList({super.key});
@@ -83,6 +85,7 @@ class _ArtistListState extends State<ArtistList> {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
+    final settings = context.watch<SettingsProvider>();
     final showArtistDetail =
         notifier.currentDetailViewContext == DetailViewContext.artist;
 
@@ -114,7 +117,11 @@ class _ArtistListState extends State<ArtistList> {
                     textAlign: TextAlign.left,
                     alignment: Alignment.topLeft,
                   ),
-                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  backgroundColor:
+                      CustomBackgroundSurfaces.transparentWhenEnabled(
+                        settings,
+                        Theme.of(context).colorScheme.surface,
+                      ),
                   surfaceTintColor: Colors.transparent,
                 ),
                 const Divider(height: 1, thickness: 1),
@@ -183,6 +190,7 @@ class _ArtistListState extends State<ArtistList> {
                 // 列表部分
                 Expanded(
                   child: Material(
+                    color: CustomBackgroundSurfaces.materialColor(settings),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                       child: Builder(
