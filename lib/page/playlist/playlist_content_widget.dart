@@ -13,6 +13,8 @@ import '../setting/settings_provider.dart';
 import '../../layout/navigation_notifier.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/custom_background_layer.dart';
+import '../../widgets/locate_playing_song_button.dart';
+import '../../utils/scroll_to_index.dart';
 
 enum ManagementMode { manual, folder }
 
@@ -725,11 +727,52 @@ class HeadSongListWidget extends StatefulWidget {
 class _HeadSongListWidgetState extends State<HeadSongListWidget> {
   late final ScrollController _scrollController = ScrollController();
   bool _isTitleHovered = false;
+  // 定位到当前播放歌曲后，用于让目标条目闪烁一下
+  final LocatePulseNotifier _locatePulse = LocatePulseNotifier();
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _locatePulse.dispose();
     super.dispose();
+  }
+
+  // 当前歌单中正在播放歌曲的索引，不存在时返回 -1
+  int _playingSongIndexInCurrentList(PlaylistContentNotifier notifier) {
+    final song = notifier.currentSong;
+    if (song == null) return -1;
+
+    if (notifier.isSearching) {
+      return notifier.filteredSongs.indexWhere(
+        (listSong) => listSong.filePath == song.filePath,
+      );
+    }
+    return notifier.currentPlaylistSongs.indexWhere(
+      (listSong) => listSong.filePath == song.filePath,
+    );
+  }
+
+  // 把正在播放的歌曲滚动到可视区域中部，并触发一次高亮闪烁
+  Future<void> _locatePlayingSong() async {
+    final notifier = context.read<PlaylistContentNotifier>();
+    final index = _playingSongIndexInCurrentList(notifier);
+    if (index < 0) return;
+
+    final songs = notifier.isSearching
+        ? notifier.filteredSongs
+        : notifier.currentPlaylistSongs;
+
+    await scrollToIndexInList(
+      controller: _scrollController,
+      index: index,
+      itemCount: songs.length,
+    );
+
+    if (!mounted) return;
+    final filePath = notifier.currentSong?.filePath;
+    if (filePath != null) {
+      _locatePulse.pulse(filePath);
+    }
   }
 
   void _showSortDialog(BuildContext context) async {
@@ -789,6 +832,8 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
     final isSearching = notifier.isSearching;
     final aspectRatio = MediaQuery.of(context).size.aspectRatio;
     final isPortrait = aspectRatio <= 1.0;
+    // 当前列表中正在播放歌曲的位置，-1 表示当前歌单没有正在播放的歌曲
+    final playingSongIndex = _playingSongIndexInCurrentList(notifier);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
@@ -1107,129 +1152,152 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
           const SizedBox(height: 8),
           // 只在列表本身变化时才重建
           Expanded(
-            child:
-                Selector<
-                  PlaylistContentNotifier,
-                  (bool, List<Song>, bool, Set<String>)
-                >(
-                  selector: (_, notifier) {
-                    // 根据是否在搜索，决定使用哪个列表
-                    final listToShow = notifier.isSearching
-                        ? notifier.filteredSongs
-                        : notifier.currentPlaylistSongs;
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child:
+                      Selector<
+                        PlaylistContentNotifier,
+                        (bool, List<Song>, bool, Set<String>)
+                      >(
+                        selector: (_, notifier) {
+                          // 根据是否在搜索，决定使用哪个列表
+                          final listToShow = notifier.isSearching
+                              ? notifier.filteredSongs
+                              : notifier.currentPlaylistSongs;
 
-                    return (
-                      notifier.isLoadingSongs,
-                      listToShow,
-                      notifier.isMultiSelectMode,
-                      notifier.selectedSongPaths,
-                    );
-                  },
-                  // shouldRebuild: (previous, next) => previous != next,
-                  // Selector 默认的比较已经足够
-                  builder: (context, data, _) {
-                    final (
-                      isLoading,
-                      songs,
-                      isMultiSelectMode,
-                      selectedSongPaths,
-                    ) = data; // `selectedIndex` 不再需要
+                          return (
+                            notifier.isLoadingSongs,
+                            listToShow,
+                            notifier.isMultiSelectMode,
+                            notifier.selectedSongPaths,
+                          );
+                        },
+                        // shouldRebuild: (previous, next) => previous != next,
+                        // Selector 默认的比较已经足够
+                        builder: (context, data, _) {
+                          final (
+                            isLoading,
+                            songs,
+                            isMultiSelectMode,
+                            selectedSongPaths,
+                          ) = data; // `selectedIndex` 不再需要
 
-                    if (isLoading) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (notifier.selectedIndex == -1) {
-                      return const Center(child: Text('请选择一个歌单'));
-                    }
-                    if (songs.isEmpty) {
-                      // 根据是否在搜索显示不同的提示
-                      return Center(
-                        child: Text(isSearching ? '未找到匹配的歌曲' : '此歌单暂无歌曲'),
-                      );
-                    }
+                          if (isLoading) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          if (notifier.selectedIndex == -1) {
+                            return const Center(child: Text('请选择一个歌单'));
+                          }
+                          if (songs.isEmpty) {
+                            // 根据是否在搜索显示不同的提示
+                            return Center(
+                              child: Text(isSearching ? '未找到匹配的歌曲' : '此歌单暂无歌曲'),
+                            );
+                          }
 
-                    // 列表本身
-                    return SilkyScroll(
-                      controller: _scrollController,
-                      silkyScrollDuration: ScrollConfig.duration,
-                      scrollSpeed: ScrollConfig.speed,
-                      animationCurve: ScrollConfig.curve,
-                      builder: (context, controller, physics, _) =>
-                          CustomScrollView(
-                            controller: controller,
-                            physics: physics,
-                            slivers: [
-                              SliverReorderableList(
-                                proxyDecorator: (child, index, animation) =>
-                                    Material(
-                                      elevation: 4,
-                                      borderRadius: BorderRadius.circular(12),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: child,
-                                    ),
-                                itemCount: songs.length,
-                                itemBuilder: (context, index) {
-                                  final song = songs[index];
-                                  final currentPlaylist = notifier
-                                      .playlists[notifier.selectedIndex];
+                          // 列表本身
+                          return SilkyScroll(
+                            controller: _scrollController,
+                            silkyScrollDuration: ScrollConfig.duration,
+                            scrollSpeed: ScrollConfig.speed,
+                            animationCurve: ScrollConfig.curve,
+                            builder: (context, controller, physics, _) =>
+                                CustomScrollView(
+                                  controller: controller,
+                                  physics: physics,
+                                  slivers: [
+                                    SliverReorderableList(
+                                      proxyDecorator:
+                                          (child, index, animation) => Material(
+                                            elevation: 4,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            clipBehavior: Clip.antiAlias,
+                                            child: child,
+                                          ),
+                                      itemCount: songs.length,
+                                      itemBuilder: (context, index) {
+                                        final song = songs[index];
+                                        final currentPlaylist = notifier
+                                            .playlists[notifier.selectedIndex];
 
-                                  return SongTileWidget(
-                                    key: ValueKey(song.filePath),
-                                    song: song,
-                                    index: index,
-                                    contextPlaylist: currentPlaylist,
-                                    onTap: () {
-                                      if (isMultiSelectMode) {
-                                        notifier.toggleSongSelection(song);
-                                      } else {
-                                        if (notifier.isSearching) {
-                                          final playlistIndex = notifier
-                                              .currentPlaylistSongs
-                                              .indexWhere(
-                                                (playlistSong) =>
-                                                    playlistSong.filePath ==
-                                                    song.filePath,
+                                        return SongTileWidget(
+                                          key: ValueKey(song.filePath),
+                                          song: song,
+                                          index: index,
+                                          contextPlaylist: currentPlaylist,
+                                          locatePulse: _locatePulse,
+                                          onTap: () {
+                                            if (isMultiSelectMode) {
+                                              notifier.toggleSongSelection(
+                                                song,
                                               );
-                                          if (playlistIndex != -1) {
-                                            notifier.playSongAtIndex(
-                                              playlistIndex,
-                                            );
-                                          }
-                                        } else {
-                                          notifier.playSongAtIndex(index);
+                                            } else {
+                                              if (notifier.isSearching) {
+                                                final playlistIndex = notifier
+                                                    .currentPlaylistSongs
+                                                    .indexWhere(
+                                                      (playlistSong) =>
+                                                          playlistSong
+                                                              .filePath ==
+                                                          song.filePath,
+                                                    );
+                                                if (playlistIndex != -1) {
+                                                  notifier.playSongAtIndex(
+                                                    playlistIndex,
+                                                  );
+                                                }
+                                              } else {
+                                                notifier.playSongAtIndex(index);
+                                              }
+                                            }
+                                          },
+                                          enableContextMenu:
+                                              !isMultiSelectMode, // 多选模式下禁用右键菜单
+                                        );
+                                      },
+                                      // 在搜索时禁用拖拽排序功能
+                                      onReorderItem: (oldIndex, newIndex) {
+                                        final isSearching = context
+                                            .read<PlaylistContentNotifier>()
+                                            .isSearching;
+                                        final isMultiSelectMode = context
+                                            .read<PlaylistContentNotifier>()
+                                            .isMultiSelectMode;
+
+                                        // 如果正在搜索或多选模式，则不做任何事，直接返回
+                                        if (isSearching || isMultiSelectMode) {
+                                          return;
                                         }
-                                      }
-                                    },
-                                    enableContextMenu:
-                                        !isMultiSelectMode, // 多选模式下禁用右键菜单
-                                  );
-                                },
-                                // 在搜索时禁用拖拽排序功能
-                                onReorderItem: (oldIndex, newIndex) {
-                                  final isSearching = context
-                                      .read<PlaylistContentNotifier>()
-                                      .isSearching;
-                                  final isMultiSelectMode = context
-                                      .read<PlaylistContentNotifier>()
-                                      .isMultiSelectMode;
 
-                                  // 如果正在搜索或多选模式，则不做任何事，直接返回
-                                  if (isSearching || isMultiSelectMode) {
-                                    return;
-                                  }
-
-                                  // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
-                                  // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
-                                  context
-                                      .read<PlaylistContentNotifier>()
-                                      .reorderSong(oldIndex, newIndex);
-                                },
-                              ),
-                            ],
-                          ),
-                    );
-                  },
+                                        // 如果不在搜索状态，UI显示的列表就是完整的 currentPlaylistSongs
+                                        // 此时的 oldIndex 和 newIndex 是准确的，可以直接使用
+                                        context
+                                            .read<PlaylistContentNotifier>()
+                                            .reorderSong(oldIndex, newIndex);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                          );
+                        },
+                      ),
                 ),
+                // 当前歌单里有正在播放的歌曲时，提供一键定位
+                Positioned(
+                  right: 0,
+                  bottom: 8,
+                  child: LocatePlayingSongButton(
+                    visible: playingSongIndex >= 0,
+                    onPressed: _locatePlayingSong,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1574,6 +1642,8 @@ class SongTileWidget extends StatefulWidget {
   final Playlist contextPlaylist;
   // 控制右键菜单是否显示
   final bool enableContextMenu;
+  // 定位到当前播放歌曲时的高亮通知
+  final LocatePulseNotifier? locatePulse;
 
   const SongTileWidget({
     super.key,
@@ -1582,21 +1652,32 @@ class SongTileWidget extends StatefulWidget {
     this.onTap,
     required this.contextPlaylist,
     this.enableContextMenu = true,
+    this.locatePulse,
   });
 
   @override
   State<SongTileWidget> createState() => _SongTileWidgetState();
 }
 
-class _SongTileWidgetState extends State<SongTileWidget> {
+class _SongTileWidgetState extends State<SongTileWidget>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   String? _requestedCoverPath;
   late PlaylistContentNotifier _notifier;
+
+  // 命中“定位到当前播放歌曲”时播放一次的高亮动画
+  late final AnimationController _locateFlashController;
 
   @override
   void initState() {
     super.initState();
     _notifier = context.read<PlaylistContentNotifier>();
+    _locateFlashController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+      reverseDuration: const Duration(milliseconds: 640),
+    );
+    _syncLocatePulse(null, widget.locatePulse);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -1608,6 +1689,9 @@ class _SongTileWidgetState extends State<SongTileWidget> {
   @override
   void didUpdateWidget(covariant SongTileWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.locatePulse != widget.locatePulse) {
+      _syncLocatePulse(oldWidget.locatePulse, widget.locatePulse);
+    }
     if (oldWidget.song.filePath != widget.song.filePath) {
       _releaseCover(oldWidget.song.filePath);
       _requestCover(widget.song.filePath);
@@ -1620,10 +1704,36 @@ class _SongTileWidgetState extends State<SongTileWidget> {
 
   @override
   void dispose() {
+    widget.locatePulse?.removeListener(_handleLocatePulse);
+    _locateFlashController.dispose();
     if (_requestedCoverPath != null) {
       _releaseCover(_requestedCoverPath!);
     }
     super.dispose();
+  }
+
+  // 挂载 / 卸载高亮监听
+  void _syncLocatePulse(
+    LocatePulseNotifier? oldNotifier,
+    LocatePulseNotifier? newNotifier,
+  ) {
+    oldNotifier?.removeListener(_handleLocatePulse);
+    newNotifier?.addListener(_handleLocatePulse);
+  }
+
+  void _handleLocatePulse() {
+    if (widget.locatePulse?.songPath != widget.song.filePath) return;
+
+    // 条目被回收或用户重新定位时动画会被打断，不用管就可以
+    _locateFlashController
+        .forward(from: 0)
+        .orCancel
+        .then((_) {
+          if (mounted) {
+            _locateFlashController.reverse();
+          }
+        })
+        .catchError((Object _) {});
   }
 
   void _requestCover(String filePath) {
@@ -2090,72 +2200,90 @@ class _SongTileWidgetState extends State<SongTileWidget> {
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: ListTile(
-                leading: SizedBox(
-                  width: 50,
-                  height: 50,
-                  // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
-                  child:
-                      widget.song.albumArt != null &&
-                          widget.song.albumArt!.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Image.memory(
-                            cacheWidth: 100,
-                            widget.song.albumArt!,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.music_note,
-                                size: 40,
-                                color: Colors.grey,
-                              );
-                            },
+              child: AnimatedBuilder(
+                animation: _locateFlashController,
+                builder: (context, child) {
+                  // 定位到当前播放歌曲时闪烁一下，便于在长列表中辨认
+                  final double flash = _locateFlashController.value;
+                  return Container(
+                    foregroundDecoration: flash > 0
+                        ? BoxDecoration(
+                            color: colorScheme.primary.withValues(
+                              alpha: 0.28 * flash,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          )
+                        : null,
+                    child: child,
+                  );
+                },
+                child: ListTile(
+                  leading: SizedBox(
+                    width: 50,
+                    height: 50,
+                    // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
+                    child:
+                        widget.song.albumArt != null &&
+                            widget.song.albumArt!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.memory(
+                              cacheWidth: 100,
+                              widget.song.albumArt!,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.music_note,
+                                  size: 40,
+                                  color: Colors.grey,
+                                );
+                              },
+                            ),
+                          )
+                        : const Icon(
+                            Icons.music_note,
+                            size: 40,
+                            color: Colors.grey,
                           ),
-                        )
-                      : const Icon(
-                          Icons.music_note,
-                          size: 40,
-                          color: Colors.grey,
+                  ),
+                  title: Text(
+                    widget.song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    settings.showAlbumName
+                        ? '${widget.song.artist} - ${widget.song.album}'
+                        : widget.song.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isMultiSelectMode) ...[
+                        Theme(
+                          data: Theme.of(context).copyWith(
+                            unselectedWidgetColor: Theme.of(
+                              context,
+                            ).primaryColor.withValues(alpha: 0.5),
+                          ),
+                          child: Checkbox(
+                            value: isSelected,
+                            onChanged: null, // 由onTap统一处理
+                            activeColor: colorScheme.primary,
+                            checkColor: Theme.of(context).colorScheme.onPrimary,
+                          ),
                         ),
-                ),
-                title: Text(
-                  widget.song.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  settings.showAlbumName
-                      ? '${widget.song.artist} - ${widget.song.album}'
-                      : widget.song.artist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isMultiSelectMode) ...[
-                      Theme(
-                        data: Theme.of(context).copyWith(
-                          unselectedWidgetColor: Theme.of(
-                            context,
-                          ).primaryColor.withValues(alpha: 0.5),
-                        ),
-                        child: Checkbox(
-                          value: isSelected,
-                          onChanged: null, // 由onTap统一处理
-                          activeColor: colorScheme.primary,
-                          checkColor: Theme.of(context).colorScheme.onPrimary,
-                        ),
-                      ),
-                    ] else ...[
-                      if (widget.song.duration != null)
-                        Text(
-                          '${widget.song.duration!.inMinutes}:${(widget.song.duration!.inSeconds % 60).toString().padLeft(2, '0')}',
-                        ),
+                      ] else ...[
+                        if (widget.song.duration != null)
+                          Text(
+                            '${widget.song.duration!.inMinutes}:${(widget.song.duration!.inSeconds % 60).toString().padLeft(2, '0')}',
+                          ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

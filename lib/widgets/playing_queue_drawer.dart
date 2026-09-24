@@ -6,6 +6,8 @@ import '../theme/scroll_config.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import '../page/playlist/playlist_content_widget.dart';
 import '../page/playlist/playlist_models.dart';
+import '../utils/scroll_to_index.dart';
+import 'locate_playing_song_button.dart';
 
 class PlayingQueueDrawer extends StatefulWidget {
   const PlayingQueueDrawer({super.key});
@@ -16,11 +18,32 @@ class PlayingQueueDrawer extends StatefulWidget {
 
 class PlayingQueueDrawerState extends State<PlayingQueueDrawer> {
   late final ScrollController scrollController = ScrollController();
+  // 定位到当前播放歌曲后，用于让目标条目闪烁一下
+  final LocatePulseNotifier _locatePulse = LocatePulseNotifier();
 
   @override
   void dispose() {
     scrollController.dispose();
+    _locatePulse.dispose();
     super.dispose();
+  }
+
+  // 把正在播放的歌曲滚动到队列可视区域中部，并触发一次高亮闪烁
+  Future<void> _locatePlayingSong(PlaylistContentNotifier notifier) async {
+    final index = notifier.currentPlayingQueueIndex;
+    if (index < 0) return;
+
+    final song = notifier.currentSong;
+    if (song == null) return;
+
+    await scrollToIndexInList(
+      controller: scrollController,
+      index: index,
+      itemCount: notifier.playingQueueSongs.length,
+    );
+
+    if (!mounted) return;
+    _locatePulse.pulse(song.filePath);
   }
 
   @override
@@ -86,39 +109,56 @@ class PlayingQueueDrawerState extends State<PlayingQueueDrawer> {
                   const Expanded(child: Center(child: Text('当前没有播放任何歌曲')))
                 else
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
 
-                      child: SilkyScroll(
-                        controller: scrollController,
-                        silkyScrollDuration: ScrollConfig.duration,
-                        scrollSpeed: ScrollConfig.speed,
-                        animationCurve: ScrollConfig.curve,
-                        builder: (context, controller, physics, _) => ListView.builder(
-                          controller: controller,
-                          physics: physics,
-                          itemCount: queue.length,
-                          itemBuilder: (context, index) {
-                            final song = queue[index];
+                            child: SilkyScroll(
+                              controller: scrollController,
+                              silkyScrollDuration: ScrollConfig.duration,
+                              scrollSpeed: ScrollConfig.speed,
+                              animationCurve: ScrollConfig.curve,
+                              builder: (context, controller, physics, _) =>
+                                  ListView.builder(
+                                    controller: controller,
+                                    physics: physics,
+                                    itemCount: queue.length,
+                                    itemBuilder: (context, index) {
+                                      final song = queue[index];
 
-                            // 再次复用 SongTileWidget
-                            return SongTileWidget(
-                              key: ValueKey(song.filePath),
-                              song: song,
-                              index: index,
-                              enableContextMenu: false, // 禁用右键菜单
-                              // 传入当前播放的歌单作为上下文
-                              contextPlaylist:
-                                  playingPlaylist ??
-                                  notifier.allSongsVirtualPlaylist,
-                              onTap: () {
-                                // 这里的index正好就是歌曲在队列中的索引
-                                notifier.playSongFromQueue(index);
-                              },
-                            );
-                          },
+                                      // 再次复用 SongTileWidget
+                                      return SongTileWidget(
+                                        key: ValueKey(song.filePath),
+                                        song: song,
+                                        index: index,
+                                        enableContextMenu: false, // 禁用右键菜单
+                                        locatePulse: _locatePulse,
+                                        // 传入当前播放的歌单作为上下文
+                                        contextPlaylist:
+                                            playingPlaylist ??
+                                            notifier.allSongsVirtualPlaylist,
+                                        onTap: () {
+                                          // 这里的index正好就是歌曲在队列中的索引
+                                          notifier.playSongFromQueue(index);
+                                        },
+                                      );
+                                    },
+                                  ),
+                            ),
+                          ),
                         ),
-                      ),
+                        // 队列里有正在播放的歌曲时，提供一键定位
+                        Positioned(
+                          right: 12,
+                          bottom: 12,
+                          child: LocatePlayingSongButton(
+                            visible: notifier.currentPlayingQueueIndex >= 0,
+                            onPressed: () => _locatePlayingSong(notifier),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],

@@ -1992,6 +1992,25 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return true;
   }
 
+  // 当前播放歌曲在播放队列（playingQueueSongs）中的索引，没有正在播放的歌曲时返回 -1
+  int get currentPlayingQueueIndex {
+    final song = _currentSong;
+    if (song == null) return -1;
+
+    final queue = playingQueueSongs;
+    if (queue.isEmpty) return -1;
+
+    // 优先使用播放器记录的索引；索引与队列不同步时退回按路径查找
+    final index = _isUsingQueue ? _currentQueueIndex : _playingSongIndex;
+    if (index >= 0 &&
+        index < queue.length &&
+        queue[index].filePath == song.filePath) {
+      return index;
+    }
+
+    return queue.indexWhere((queueSong) => queueSong.filePath == song.filePath);
+  }
+
   // 获取当前播放队列的歌曲列表
   List<Song> get playingQueueSongs {
     if (_isUsingQueue && _currentPlayingQueue != null) {
