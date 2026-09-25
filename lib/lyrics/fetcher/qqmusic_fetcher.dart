@@ -139,10 +139,19 @@ class QQMusicFetcher {
 
     if (songs.isEmpty) return null;
 
-    // 降低片段/翻唱/sped up 版本的优先级
+    // 艺术家匹配 > 非片段 > 非翻唱 > 非 sped up/slowed
     int scoreSong(Map<String, dynamic> song) {
       final name = '${song['name'] ?? ''} ${song['title'] ?? ''}';
+      final singers = song['singer'] as List<dynamic>? ?? [];
+      final singer = singers
+          .map((s) => (s as Map<String, dynamic>)['name'] as String? ?? '')
+          .where((n) => n.isNotEmpty)
+          .join(' ');
       var score = 0;
+      if (artist.isNotEmpty &&
+          singer.toLowerCase().contains(artist.toLowerCase())) {
+        score += 1000;
+      }
       if (name.contains('片段')) score -= 500;
       if (name.contains('原唱') || name.contains('翻唱')) score -= 300;
       final lower = name.toLowerCase();

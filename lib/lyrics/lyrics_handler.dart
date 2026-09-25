@@ -94,16 +94,22 @@ class LyricsHandler {
       _notifyListeners();
 
       // 根据设置选择主选歌词源
+      final Song currentSong = _getCurrentSong()!;
+      final String preferredSource;
       if (_settingsProvider.primaryLyricSource == 'qq') {
-        // 后台异步加载QQ音乐歌词
-        _loadQQLyrics(_getCurrentSong()!.title);
+        preferredSource = 'qq'; // QQ音乐
       } else if (_settingsProvider.primaryLyricSource == 'netease') {
-        // 后台异步加载网易云音乐歌词
-        _loadOnlineLyrics(_getCurrentSong()!.title);
+        preferredSource = 'netease'; // 网易云音乐
       } else {
-        // 后台异步加载酷狗音乐歌词
-        _loadKugouLyrics(_getCurrentSong()!.title);
+        preferredSource = 'kugou'; // 酷狗音乐
       }
+      // 后台异步加载在线歌词
+      unawaited(
+        _loadOnlineLyricsPipeline(
+          currentSong,
+          preferredSource: preferredSource,
+        ),
+      );
     } else {
       _currentLyrics = []; // 确保在不执行网络请求时清空歌词
       _notifyListeners();
@@ -268,27 +274,6 @@ class LyricsHandler {
       _currentLyrics = [];
       _notifyListeners();
     }
-  }
-
-  // 后台异步加载网易歌词
-  Future<void> _loadOnlineLyrics(String songTitle) async {
-    final song = _getCurrentSong();
-    if (song == null) return;
-    await _loadOnlineLyricsPipeline(song, preferredSource: 'netease');
-  }
-
-  // 酷狗歌词获取方法
-  Future<void> _loadKugouLyrics(String songTitle) async {
-    final song = _getCurrentSong();
-    if (song == null) return;
-    await _loadOnlineLyricsPipeline(song, preferredSource: 'kugou');
-  }
-
-  // 企鹅音乐歌词获取方法
-  Future<void> _loadQQLyrics(String songTitle) async {
-    final song = _getCurrentSong();
-    if (song == null) return;
-    await _loadOnlineLyricsPipeline(song, preferredSource: 'qq');
   }
 
   // 解析歌词
