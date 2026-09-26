@@ -15,3 +15,6 @@ linter:
 analyzer:
   exclude:
     - 'rust_builder/cargokit/build_tool/**'
+    - build/**
+    - windows/**
+    - linux/**

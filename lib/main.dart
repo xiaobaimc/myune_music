@@ -1,3 +1,13 @@
+// NOTE：Flutter 3.47+ 的 material_ui / cupertino_ui 解耦
+// https://docs.flutter.dev/release/breaking-changes/material-ui-and-cupertino-ui
+
+// 等待以下包或类似的替代品支持：
+// markdown_widget
+// silky_scroll
+// window_manager
+// mesh_gradient
+// scrollable_positioned_list
+
 import 'dart:async';
 import 'dart:io';
 
