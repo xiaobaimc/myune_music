@@ -13,6 +13,14 @@ import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'interlude_animation_widget.dart';
 
+const double _kIdleMainLineAlpha = 0.55; // 原文/主行
+const double _kIdleSecondaryLineAlpha = 0.45; // 翻译、罗马音等次级行
+
+const Duration _kHighlightFadeInDuration = Duration(milliseconds: 80);
+const Duration _kHighlightFadeOutDuration = Duration(milliseconds: 100);
+
+const Curve _kHighlightFadeCurve = Curves.easeOutCubic;
+
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
   final int currentIndex;
@@ -42,6 +50,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   TextAlign? _lastAlignment;
   int? _lastMaxLinesPerLyric;
   double? _lastLyricVerticalSpacing;
+  int? _lastLyricFontWeight;
   bool? _lastAddLyricPadding;
 
   bool _isUserScrolling = false; // 标记用户是否在手动滚动
@@ -60,9 +69,26 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   int _previousIndex = 0;
 
+  // 当前行高亮的点亮程度
+  late final AnimationController _highlightFade;
+
+  Timer? _highlightFadeOutTimer;
+  DateTime? _highlightFadeOutAt;
+  Duration _positionAnchor = Duration.zero;
+  DateTime _positionAnchorTime = DateTime.now();
+  bool _fadeSyncScheduled = false;
+  bool _fadeInScheduled = false;
+
   @override
   void initState() {
     super.initState();
+
+    _highlightFade = AnimationController(
+      vsync: this,
+      duration: _kHighlightFadeInDuration,
+      reverseDuration: _kHighlightFadeOutDuration,
+      value: 1.0, // 首次进入时直接点亮，不做淡入
+    )..addListener(_onHighlightFadeTick);
 
     final settings = context.read<SettingsProvider>();
     if (settings.enableLyricElasticScroll) {
@@ -76,14 +102,132 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (settings.enableLyricElasticScroll) {
         _jumpElasticToCurrent();
       }
+
+      _scheduleHighlightFadeSync();
     });
   }
 
   @override
   void dispose() {
     _scrollStopTimer?.cancel();
+    _highlightFadeOutTimer?.cancel();
+    _highlightFade.dispose();
     _disposeElasticControllers();
     super.dispose();
+  }
+
+  void _onHighlightFadeTick() {
+    if (mounted) setState(() {});
+  }
+
+  Duration _estimatedPosition() {
+    final PlaylistContentNotifier notifier = context
+        .read<PlaylistContentNotifier>();
+    final Duration position = notifier.currentPosition;
+    if (position != _positionAnchor) {
+      _positionAnchor = position;
+      _positionAnchorTime = DateTime.now();
+    }
+    if (!notifier.isPlaying) {
+      return _positionAnchor;
+    }
+    return _positionAnchor + DateTime.now().difference(_positionAnchorTime);
+  }
+
+  Duration? _highlightFadeOutStart(int index) {
+    if (index < 0 || index + 1 >= widget.lyrics.length) return null;
+
+    final LyricLine line = widget.lyrics[index];
+    final Duration start =
+        widget.lyrics[index + 1].timestamp - _kHighlightFadeOutDuration;
+    // 至少让本行先完成淡入，避免超短行导致整行一直不亮
+    final Duration earliest = line.timestamp + _kHighlightFadeInDuration;
+    return start < earliest ? earliest : start;
+  }
+
+  // 调度/校正当前行的熄灭动画。
+  void _syncHighlightFade() {
+    if (!mounted) return;
+
+    final Duration? fadeOutStart = _highlightFadeOutStart(widget.currentIndex);
+    final PlaylistContentNotifier notifier = context
+        .read<PlaylistContentNotifier>();
+    if (fadeOutStart == null || !notifier.isPlaying) {
+      _highlightFadeOutTimer?.cancel();
+      _highlightFadeOutTimer = null;
+      return;
+    }
+
+    final Duration remaining = fadeOutStart - _estimatedPosition();
+
+    if (remaining <= Duration.zero) {
+      _highlightFadeOutTimer?.cancel();
+      _highlightFadeOutTimer = null;
+      final AnimationStatus status = _highlightFade.status;
+      // 已经在熄灭中就不要再打断 正在淡入或已经点亮则需要立刻开始熄灭
+      if (status != AnimationStatus.reverse &&
+          (status == AnimationStatus.forward || _highlightFade.value > 0.0)) {
+        _startHighlightFadeOut();
+      }
+      return;
+    }
+
+    final DateTime target = DateTime.now().add(remaining);
+    final DateTime? scheduled = _highlightFadeOutAt;
+    if (_highlightFadeOutTimer != null &&
+        scheduled != null &&
+        target.difference(scheduled).abs() < const Duration(milliseconds: 50)) {
+      return;
+    }
+
+    _highlightFadeOutTimer?.cancel();
+    _highlightFadeOutAt = target;
+    _highlightFadeOutTimer = Timer(remaining, () {
+      if (mounted) _startHighlightFadeOut();
+    });
+  }
+
+  void _startHighlightFadeOut() {
+    _highlightFade.animateBack(
+      0.0,
+      duration: _kHighlightFadeOutDuration,
+      curve: _kHighlightFadeCurve,
+    );
+  }
+
+  // 避免在 build/didUpdateWidget 过程中触发动画
+  void _scheduleHighlightFadeSync() {
+    if (_fadeSyncScheduled) return;
+    _fadeSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fadeSyncScheduled = false;
+      if (mounted) _syncHighlightFade();
+    });
+  }
+
+  void _scheduleHighlightFadeIn() {
+    if (_fadeInScheduled) return;
+    _fadeInScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fadeInScheduled = false;
+      if (!mounted) return;
+      _highlightFade.value = 0.0;
+      _highlightFade.animateTo(
+        1.0,
+        duration: _kHighlightFadeInDuration,
+        curve: _kHighlightFadeCurve,
+      );
+      _syncHighlightFade();
+    });
+  }
+
+  // 直接点亮（换歌等场景），不做淡入
+  void _scheduleHighlightFadeToLit() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _highlightFade.value = 1.0;
+      _syncHighlightFade();
+    });
   }
 
   // 直接监听滚轮判断用户是否手动滚动
@@ -117,6 +261,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
         previousIndex: oldWidget.currentIndex,
       ); // 👈 传入旧索引
       _previousIndex = oldWidget.currentIndex;
+      // 新的一行从暗到亮淡入，并重新调度熄灭
+      _scheduleHighlightFadeIn();
     }
     // 当歌词列表发生变化时（如切换歌曲），滚动到顶部
     else if (widget.lyrics != oldWidget.lyrics) {
@@ -128,6 +274,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
         }
         _jumpElasticToCurrent();
       });
+      // 直接点亮，不播放淡入
+      _scheduleHighlightFadeToLit();
     }
   }
 
@@ -164,8 +312,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   // 处理逐字歌词
   Widget _buildMultiLineKaraokeRichText(
     List<List<LyricToken>> multiLineTokens,
-    bool isCurrent,
     double fontSize,
+    FontWeight fontWeight,
+    double highlightFactor,
     ColorScheme colorScheme, {
     bool forceSecondary = false,
   }) {
@@ -186,10 +335,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
       alpha: 0.88,
     );
     final Color secondarySurfaceVariantColor = colorScheme.onSurfaceVariant
-        .withValues(alpha: 0.55);
+        .withValues(alpha: _kIdleSecondaryLineAlpha);
 
     final Color surfaceVariantColor = colorScheme.onSurfaceVariant.withValues(
-      alpha: 0.65,
+      alpha: _kIdleMainLineAlpha,
     );
 
     for (int lineIndex = 0; lineIndex < multiLineTokens.length; lineIndex++) {
@@ -202,15 +351,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
       final double lineFontSize = isSecondaryLine
           ? secondaryFontSize
           : fontSize;
-      final FontWeight lineFontWeight = isCurrent
-          ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w600)
-          : (isSecondaryLine ? FontWeight.w400 : FontWeight.w400);
       final Color lineBaseColor = isSecondaryLine
           ? secondarySurfaceVariantColor
           : surfaceVariantColor;
-      final Color lineHighlightColor = isSecondaryLine
-          ? secondaryPrimaryColor
-          : primaryColor;
+      // 已唱到的部分使用高亮色，并跟随整行的淡入/淡出一起过渡
+      final Color lineHighlightColor = Color.lerp(
+        lineBaseColor,
+        isSecondaryLine ? secondaryPrimaryColor : primaryColor,
+        highlightFactor,
+      )!;
 
       for (final token in tokens) {
         children.add(
@@ -218,7 +367,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
             child: AnimatedKaraokeWord(
               text: token.text,
               fontSize: lineFontSize,
-              fontWeight: lineFontWeight,
+              // 高亮行与非高亮行使用统一的字重，避免切换高亮时文本宽度变化导致换行
+              fontWeight: fontWeight,
               startTime: token.start,
               duration: token.end - token.start,
               currentTime: currentPosition,
@@ -277,7 +427,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   Widget _withLyricEffects({
     required Widget child,
-    required TextAlign lyricAlignment,
     required bool isCurrent,
     required bool shouldBlur,
     required int distance,
@@ -289,48 +438,40 @@ class _LyricsWidgetState extends State<LyricsWidget>
       isCurrent,
       blurStrength,
     );
-    final Widget effectiveChild = sigma == 0.0
-        ? child
-        : ImageFiltered(
-            imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-            child: child,
-          );
 
-    return AnimatedScale(
-      alignment: _getAlignmentFromTextAlign(lyricAlignment),
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeInOutSine,
-      scale: isCurrent ? 1.02 : 1.0,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        child: effectiveChild,
-      ),
+    if (sigma == 0.0) {
+      return child;
+    }
+
+    return ImageFiltered(
+      imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      child: child,
     );
   }
 
   TextStyle _lyricTextStyle({
-    required bool isCurrent,
+    required double highlightFactor,
     required bool isSecondaryLine,
     required double fontSize,
+    required FontWeight fontWeight,
     required ColorScheme colorScheme,
   }) {
     final double lineFontSize = isSecondaryLine ? fontSize * 0.88 : fontSize;
-    final FontWeight lineFontWeight = isCurrent
-        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w600)
-        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w400);
-    final Color lineColor = isCurrent
-        ? (isSecondaryLine
-              ? colorScheme.primary.withValues(alpha: 0.88)
-              : colorScheme.primary)
-        : (isSecondaryLine
-              ? colorScheme.onSurfaceVariant.withValues(alpha: 0.58)
-              : colorScheme.onSurfaceVariant.withValues(alpha: 0.7));
+    final Color idleColor = isSecondaryLine
+        ? colorScheme.onSurfaceVariant.withValues(
+            alpha: _kIdleSecondaryLineAlpha,
+          )
+        : colorScheme.onSurfaceVariant.withValues(alpha: _kIdleMainLineAlpha);
+    final Color litColor = isSecondaryLine
+        ? colorScheme.primary.withValues(alpha: 0.88)
+        : colorScheme.primary;
+    final Color lineColor = Color.lerp(idleColor, litColor, highlightFactor)!;
 
     return TextStyle(
       fontSize: lineFontSize,
       height: 1.2,
       color: lineColor,
-      fontWeight: lineFontWeight,
+      fontWeight: fontWeight,
     );
   }
 
@@ -354,6 +495,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required int lyricIndex,
     required double maxWidth,
     required double fontSize,
+    required FontWeight fontWeight,
+    required double currentLineHighlightFactor,
     required double lyricVerticalSpacing,
     required TextAlign lyricAlignment,
     required bool shouldBlur,
@@ -362,6 +505,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }) {
     final line = widget.lyrics[lyricIndex];
     final isCurrent = lyricIndex == widget.currentIndex;
+    // 只有当前行参与点亮/熄灭过渡，其余行永远保持暗色
+    final double highlightFactor = isCurrent ? currentLineHighlightFactor : 0.0;
     final int distance = (lyricIndex - widget.currentIndex).abs();
     final List<Widget> columnChildren = [];
     int renderedLines = 0;
@@ -393,8 +538,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
           final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
           lineWidget = _buildMultiLineKaraokeRichText(
             [tokens],
-            isCurrent,
             fontSize,
+            fontWeight,
+            highlightFactor,
             colorScheme,
             forceSecondary: isSecondaryKaraoke,
           );
@@ -406,9 +552,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
             text: line.texts[i],
             lyricAlignment: lyricAlignment,
             style: _lyricTextStyle(
-              isCurrent: isCurrent,
+              highlightFactor: highlightFactor,
               isSecondaryLine: isSecondaryLine,
               fontSize: fontSize,
+              fontWeight: fontWeight,
               colorScheme: colorScheme,
             ),
           );
@@ -422,7 +569,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
         columnChildren.add(
           _withLyricEffects(
-            lyricAlignment: lyricAlignment,
             isCurrent: isCurrent,
             shouldBlur: shouldBlur,
             distance: distance,
@@ -445,15 +591,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
       columnChildren.add(
         _withLyricEffects(
-          lyricAlignment: lyricAlignment,
           isCurrent: isCurrent,
           shouldBlur: shouldBlur,
           distance: distance,
           blurStrength: blurStrength,
           child: _buildMultiLineKaraokeRichText(
             tokensToRender,
-            isCurrent,
             fontSize,
+            fontWeight,
+            highlightFactor,
             colorScheme,
           ),
         ),
@@ -474,16 +620,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
           text: line.texts[i],
           lyricAlignment: lyricAlignment,
           style: _lyricTextStyle(
-            isCurrent: isCurrent,
+            highlightFactor: highlightFactor,
             isSecondaryLine: isSecondaryLine,
             fontSize: fontSize,
+            fontWeight: fontWeight,
             colorScheme: colorScheme,
           ),
         );
 
         columnChildren.add(
           _withLyricEffects(
-            lyricAlignment: lyricAlignment,
             isCurrent: isCurrent,
             shouldBlur: shouldBlur,
             distance: distance,
@@ -517,16 +663,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
             text: line.texts[i],
             lyricAlignment: lyricAlignment,
             style: _lyricTextStyle(
-              isCurrent: isCurrent,
+              highlightFactor: highlightFactor,
               isSecondaryLine: true,
               fontSize: fontSize,
+              fontWeight: fontWeight,
               colorScheme: colorScheme,
             ),
           );
 
           columnChildren.add(
             _withLyricEffects(
-              lyricAlignment: lyricAlignment,
               isCurrent: isCurrent,
               shouldBlur: shouldBlur,
               distance: distance,
@@ -612,7 +758,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
             child: SizedBox(
               width: maxWidth,
               child: _withLyricEffects(
-                lyricAlignment: lyricAlignment,
                 isCurrent: isCurrent,
                 shouldBlur: shouldBlur,
                 distance: distance,
@@ -629,7 +774,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   child: InterludeAnimationWidget(
                     isCurrent: isCurrent,
                     baseColor: colorScheme.onSurfaceVariant.withValues(
-                      alpha: 0.65,
+                      alpha: _kIdleMainLineAlpha,
                     ),
                     highlightColor: colorScheme.primary.withValues(alpha: 0.88),
                     startTime: line.timestamp,
@@ -666,6 +811,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required double viewportHeight,
     required double maxWidth,
     required double fontSize,
+    required FontWeight fontWeight,
+    required double currentLineHighlightFactor,
     required double lyricVerticalSpacing,
     required TextAlign lyricAlignment,
     required bool addLyricPadding,
@@ -734,6 +881,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             lyricIndex: index,
                             maxWidth: maxWidth,
                             fontSize: fontSize,
+                            fontWeight: fontWeight,
+                            currentLineHighlightFactor:
+                                currentLineHighlightFactor,
                             lyricVerticalSpacing: lyricVerticalSpacing,
                             lyricAlignment: lyricAlignment,
                             shouldBlur: shouldBlur,
@@ -770,6 +920,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     double lyricVerticalSpacing = context.select<SettingsProvider, double>(
       (s) => s.lyricVerticalSpacing,
     );
+    final int lyricFontWeightValue = context.select<SettingsProvider, int>(
+      (s) => s.lyricFontWeight,
+    );
+    final FontWeight lyricFontWeight = FontWeight(lyricFontWeightValue);
     final addLyricPadding = context.select<SettingsProvider, bool>(
       (s) => s.addLyricPadding,
     );
@@ -796,6 +950,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final bool shouldBlur = enableLyricBlur && !_isUserScrolling;
 
+    final double currentLineHighlightFactor = _highlightFade.value;
+    _scheduleHighlightFadeSync();
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // 与下方 Container 宽度保持一致（减去 padding）
@@ -807,6 +964,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             _lastAlignment != lyricAlignment ||
             _lastMaxLinesPerLyric != widget.maxLinesPerLyric ||
             _lastLyricVerticalSpacing != lyricVerticalSpacing ||
+            _lastLyricFontWeight != lyricFontWeightValue ||
             _lastAddLyricPadding != addLyricPadding;
 
         if (settingsChanged) {
@@ -816,6 +974,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           _lastAlignment = lyricAlignment;
           _lastMaxLinesPerLyric = widget.maxLinesPerLyric;
           _lastLyricVerticalSpacing = lyricVerticalSpacing;
+          _lastLyricFontWeight = lyricFontWeightValue;
           _lastAddLyricPadding = addLyricPadding;
 
           // 使用 Future.delayed 将滚动任务推迟到下一事件循环
@@ -843,6 +1002,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 : MediaQuery.of(context).size.height,
             maxWidth: maxWidth,
             fontSize: fontSize,
+            fontWeight: lyricFontWeight,
+            currentLineHighlightFactor: currentLineHighlightFactor,
             lyricVerticalSpacing: lyricVerticalSpacing,
             lyricAlignment: lyricAlignment,
             addLyricPadding: addLyricPadding,
@@ -883,6 +1044,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 final int lyricIndex = index - paddingItemCount;
                 final line = widget.lyrics[lyricIndex];
                 final isCurrent = lyricIndex == widget.currentIndex;
+                // 只有当前行参与点亮/熄灭过渡
+                final double highlightFactor = isCurrent
+                    ? currentLineHighlightFactor
+                    : 0.0;
 
                 line.texts.take(widget.maxLinesPerLyric);
 
@@ -922,34 +1087,27 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   renderedLines += linesToTake;
 
                   columnChildren.add(
-                    AnimatedScale(
-                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeInOutSine,
-                      scale: isCurrent ? 1.02 : 1,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        child: isCurrent || !shouldBlur
-                            ? _buildMultiLineKaraokeRichText(
-                                tokensToRender,
-                                isCurrent,
-                                fontSize,
-                                colorScheme,
-                              )
-                            : ImageFiltered(
-                                imageFilter: ui.ImageFilter.blur(
-                                  sigmaX: calculateSigma(distance),
-                                  sigmaY: calculateSigma(distance),
-                                ),
-                                child: _buildMultiLineKaraokeRichText(
-                                  tokensToRender,
-                                  isCurrent,
-                                  fontSize,
-                                  colorScheme,
-                                ),
-                              ),
-                      ),
-                    ),
+                    isCurrent || !shouldBlur
+                        ? _buildMultiLineKaraokeRichText(
+                            tokensToRender,
+                            fontSize,
+                            lyricFontWeight,
+                            highlightFactor,
+                            colorScheme,
+                          )
+                        : ImageFiltered(
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: calculateSigma(distance),
+                              sigmaY: calculateSigma(distance),
+                            ),
+                            child: _buildMultiLineKaraokeRichText(
+                              tokensToRender,
+                              fontSize,
+                              lyricFontWeight,
+                              highlightFactor,
+                              colorScheme,
+                            ),
+                          ),
                   );
                 } else {
                   final int mainLinesLimit = (karaokeCount > 0
@@ -964,11 +1122,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   final Color primaryColor = colorScheme.primary;
                   final Color secondaryPrimaryColor = colorScheme.primary
                       .withValues(alpha: 0.88);
+                  // 与逐字歌词未唱部分的颜色保持一致
                   final Color surfaceVariantColor = colorScheme.onSurfaceVariant
-                      .withValues(alpha: 0.7);
+                      .withValues(alpha: _kIdleMainLineAlpha);
                   final Color secondarySurfaceVariantColor = colorScheme
                       .onSurfaceVariant
-                      .withValues(alpha: 0.58);
+                      .withValues(alpha: _kIdleSecondaryLineAlpha);
 
                   for (
                     int i = 0;
@@ -982,16 +1141,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     final double lineFontSize = isSecondaryLine
                         ? secondaryFontSize
                         : fontSize;
-                    final FontWeight lineFontWeight = isCurrent
-                        ? (isSecondaryLine ? FontWeight.w600 : FontWeight.w600)
-                        : (isSecondaryLine ? FontWeight.w400 : FontWeight.w400);
-                    final Color lineColor = isCurrent
-                        ? (isSecondaryLine
-                              ? secondaryPrimaryColor
-                              : primaryColor)
-                        : (isSecondaryLine
-                              ? secondarySurfaceVariantColor
-                              : surfaceVariantColor);
+                    // 字重由设置统一决定，高亮行不再加粗
+                    final Color lineColor = Color.lerp(
+                      isSecondaryLine
+                          ? secondarySurfaceVariantColor
+                          : surfaceVariantColor,
+                      isSecondaryLine ? secondaryPrimaryColor : primaryColor,
+                      highlightFactor,
+                    )!;
 
                     final Widget staticText = Text(
                       line.texts[i],
@@ -1000,7 +1157,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         fontSize: lineFontSize,
                         height: 1.2,
                         color: lineColor,
-                        fontWeight: lineFontWeight,
+                        fontWeight: lyricFontWeight,
                       ),
                       textHeightBehavior: const TextHeightBehavior(
                         applyHeightToFirstAscent: false,
@@ -1009,24 +1166,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     );
 
                     columnChildren.add(
-                      AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutSine,
-                        scale: isCurrent ? 1.02 : 1.0,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: isCurrent || !shouldBlur
-                              ? staticText
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: staticText,
-                                ),
-                        ),
-                      ),
+                      isCurrent || !shouldBlur
+                          ? staticText
+                          : ImageFiltered(
+                              imageFilter: ui.ImageFilter.blur(
+                                sigmaX: calculateSigma(distance),
+                                sigmaY: calculateSigma(distance),
+                              ),
+                              child: staticText,
+                            ),
                     );
                     if (i < linesToTake - 1) {
                       columnChildren.add(const SizedBox(height: 6));
@@ -1055,14 +1203,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       style: TextStyle(
                         fontSize: fontSize * 0.88,
                         height: 1.2,
-                        color: isCurrent
-                            ? colorScheme.primary.withValues(alpha: 0.88)
-                            : colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.58,
-                              ),
-                        fontWeight: isCurrent
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                        color: Color.lerp(
+                          colorScheme.onSurfaceVariant.withValues(
+                            alpha: _kIdleSecondaryLineAlpha,
+                          ),
+                          colorScheme.primary.withValues(alpha: 0.88),
+                          highlightFactor,
+                        )!,
+                        fontWeight: lyricFontWeight,
                       ),
                       textHeightBehavior: const TextHeightBehavior(
                         applyHeightToFirstAscent: false,
@@ -1071,24 +1219,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     );
 
                     columnChildren.add(
-                      AnimatedScale(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutSine,
-                        scale: isCurrent ? 1.02 : 1,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: isCurrent || !shouldBlur
-                              ? translationWidget
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: translationWidget,
-                                ),
-                        ),
-                      ),
+                      isCurrent || !shouldBlur
+                          ? translationWidget
+                          : ImageFiltered(
+                              imageFilter: ui.ImageFilter.blur(
+                                sigmaX: calculateSigma(distance),
+                                sigmaY: calculateSigma(distance),
+                              ),
+                              child: translationWidget,
+                            ),
                     );
 
                     // 如果还有下一行且没达到上限，添加间距
@@ -1182,7 +1321,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       child: InterludeAnimationWidget(
                         isCurrent: isCurrent,
                         baseColor: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.65,
+                          alpha: _kIdleMainLineAlpha,
                         ),
                         highlightColor: colorScheme.primary.withValues(
                           alpha: 0.88,
@@ -1204,23 +1343,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         alignment: _getAlignmentFromTextAlign(lyricAlignment),
                         child: SizedBox(
                           width: maxWidth,
-                          child: AnimatedScale(
-                            alignment: _getAlignmentFromTextAlign(
-                              lyricAlignment,
-                            ),
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeInOutSine,
-                            scale: 1.02,
-                            child: isCurrent || !shouldBlur
-                                ? interludeWidget
-                                : ImageFiltered(
-                                    imageFilter: ui.ImageFilter.blur(
-                                      sigmaX: calculateSigma(distance),
-                                      sigmaY: calculateSigma(distance),
-                                    ),
-                                    child: interludeWidget,
+                          child: isCurrent || !shouldBlur
+                              ? interludeWidget
+                              : ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: calculateSigma(distance),
+                                    sigmaY: calculateSigma(distance),
                                   ),
-                          ),
+                                  child: interludeWidget,
+                                ),
                         ),
                       ),
                     );

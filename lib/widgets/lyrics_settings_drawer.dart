@@ -5,194 +5,240 @@ import '../page/setting/settings_provider.dart';
 class LyricsSettingsDrawer extends StatelessWidget {
   const LyricsSettingsDrawer({super.key});
 
+  static String _fontWeightLabel(int weight) {
+    const Map<int, String> names = {
+      100: '极细',
+      200: '特细',
+      300: '细体',
+      400: '常规',
+      500: '中等',
+      600: '半粗',
+      700: '粗体',
+      800: '特粗',
+      900: '极粗',
+    };
+    final String name = names[weight] ?? '自定义';
+    return '$name $weight';
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
 
     return Drawer(
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('歌词显示设置', style: Theme.of(context).textTheme.titleLarge),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    tooltip: '关闭',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const Divider(height: 1),
-              const SizedBox(height: 10),
-
-              // 歌词对齐方式设置
-              Text('歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<TextAlign>(
-                  segments: const [
-                    ButtonSegment(value: TextAlign.left, label: Text('居左')),
-                    ButtonSegment(value: TextAlign.center, label: Text('居中')),
-                    ButtonSegment(value: TextAlign.right, label: Text('居右')),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '歌词显示设置',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      tooltip: '关闭',
+                    ),
                   ],
-                  selected: {settings.lyricAlignment},
-                  onSelectionChanged: (Set<TextAlign> newSelection) {
-                    if (newSelection.isNotEmpty) {
-                      context.read<SettingsProvider>().setLyricAlignment(
-                        newSelection.first,
-                      );
-                    }
+                ),
+                const SizedBox(height: 10),
+                const Divider(height: 1),
+                const SizedBox(height: 10),
+
+                // 歌词对齐方式设置
+                Text('歌词对齐方式', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<TextAlign>(
+                    segments: const [
+                      ButtonSegment(value: TextAlign.left, label: Text('居左')),
+                      ButtonSegment(value: TextAlign.center, label: Text('居中')),
+                      ButtonSegment(value: TextAlign.right, label: Text('居右')),
+                    ],
+                    selected: {settings.lyricAlignment},
+                    onSelectionChanged: (Set<TextAlign> newSelection) {
+                      if (newSelection.isNotEmpty) {
+                        context.read<SettingsProvider>().setLyricAlignment(
+                          newSelection.first,
+                        );
+                      }
+                    },
+                    showSelectedIcon: false,
+                  ),
+                ),
+                const Divider(),
+
+                // 同时间戳歌词行数设置
+                Text(
+                  '同时间戳歌词行数',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 10),
+                SegmentedButton<int>(
+                  segments: List.generate(5, (index) {
+                    final value = index + 1;
+                    return ButtonSegment(value: value, label: Text('$value'));
+                  }),
+                  selected: {settings.maxLinesPerLyric},
+                  onSelectionChanged: (newSelection) {
+                    final value = newSelection.first;
+                    context.read<SettingsProvider>().setMaxLinesPerLyric(value);
                   },
                   showSelectedIcon: false,
                 ),
-              ),
-              const Divider(),
+                const Divider(),
 
-              // 同时间戳歌词行数设置
-              Text('同时间戳歌词行数', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
-              SegmentedButton<int>(
-                segments: List.generate(5, (index) {
-                  final value = index + 1;
-                  return ButtonSegment(value: value, label: Text('$value'));
-                }),
-                selected: {settings.maxLinesPerLyric},
-                onSelectionChanged: (newSelection) {
-                  final value = newSelection.first;
-                  context.read<SettingsProvider>().setMaxLinesPerLyric(value);
-                },
-                showSelectedIcon: false,
-              ),
-              const Divider(),
-
-              // 歌词字体大小设置
-              Text('歌词字体大小', style: Theme.of(context).textTheme.titleMedium),
-              Tooltip(
-                message: settings.autoAdjustLyricLayout
-                    ? '已启用 "自动调节歌词字体与间距" '
-                    : '',
-                child: IgnorePointer(
-                  ignoring: settings.autoAdjustLyricLayout,
-                  child: Opacity(
-                    opacity: settings.autoAdjustLyricLayout ? 0.5 : 1.0,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Slider(
-                          value: settings.fontSize,
-                          min: 12.0,
-                          max: 32.0,
-                          divisions: 20,
-                          label: settings.fontSize.toStringAsFixed(1),
-                          onChanged: (value) {
-                            context.read<SettingsProvider>().setFontSize(value);
-                          },
-                        ),
-                        Text(
-                          '当前大小: ${settings.fontSize.toStringAsFixed(1)}',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const Divider(),
-
-              // 歌词垂直间距设置
-              Text('歌词垂直间距', style: Theme.of(context).textTheme.titleMedium),
-              Tooltip(
-                message: settings.autoAdjustLyricLayout
-                    ? '已启用 "自动调节歌词字体与间距" '
-                    : '',
-                child: IgnorePointer(
-                  ignoring: settings.autoAdjustLyricLayout,
-                  child: Opacity(
-                    opacity: settings.autoAdjustLyricLayout ? 0.5 : 1.0,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Slider(
-                          value: settings.lyricVerticalSpacing,
-                          min: 0.0,
-                          max: 20.0,
-                          divisions: 20,
-                          label: settings.lyricVerticalSpacing.toStringAsFixed(
-                            1,
+                // 歌词字体大小设置
+                Text('歌词字体大小', style: Theme.of(context).textTheme.titleMedium),
+                Tooltip(
+                  message: settings.autoAdjustLyricLayout
+                      ? '已启用 "自动调节歌词字体与间距" '
+                      : '',
+                  child: IgnorePointer(
+                    ignoring: settings.autoAdjustLyricLayout,
+                    child: Opacity(
+                      opacity: settings.autoAdjustLyricLayout ? 0.5 : 1.0,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Slider(
+                            value: settings.fontSize,
+                            min: 12.0,
+                            max: 32.0,
+                            divisions: 20,
+                            label: settings.fontSize.toStringAsFixed(1),
+                            onChanged: (value) {
+                              context.read<SettingsProvider>().setFontSize(
+                                value,
+                              );
+                            },
                           ),
-                          onChanged: (value) {
-                            context
-                                .read<SettingsProvider>()
-                                .setLyricVerticalSpacing(value);
-                          },
-                        ),
-                        Text(
-                          '当前间距: ${settings.lyricVerticalSpacing.toStringAsFixed(1)}',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
+                          Text(
+                            '当前大小: ${settings.fontSize.toStringAsFixed(1)}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const Divider(),
+                const Divider(),
 
-              // 歌词模糊强度设置
-              Text('歌词模糊强度', style: Theme.of(context).textTheme.titleMedium),
-              Tooltip(
-                message: settings.enableLyricBlur ? '' : '需启用 "歌词模糊效果" ',
-                child: IgnorePointer(
-                  ignoring: !settings.enableLyricBlur,
-                  child: Opacity(
-                    opacity: settings.enableLyricBlur ? 1.0 : 0.5,
-                    child: Slider(
-                      value: settings.lyricBlurStrength,
-                      min: 1.0,
-                      max: 4.0,
-                      divisions: 12,
-                      label: settings.lyricBlurStrength.toStringAsFixed(1),
-                      onChanged: (value) {
-                        context.read<SettingsProvider>().setLyricBlurStrength(
-                          value,
-                        );
-                      },
+                // 歌词字重设置（高亮行与非高亮行统一使用）
+                Text('歌词字重', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Slider(
+                  value: settings.lyricFontWeight.toDouble(),
+                  min: 100,
+                  max: 900,
+                  divisions: 16,
+                  label: _fontWeightLabel(settings.lyricFontWeight),
+                  onChanged: (value) {
+                    context.read<SettingsProvider>().setLyricFontWeight(
+                      value.round(),
+                    );
+                  },
+                ),
+                Text(
+                  '当前字重: ${_fontWeightLabel(settings.lyricFontWeight)}',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const Divider(),
+
+                // 歌词垂直间距设置
+                Text('歌词垂直间距', style: Theme.of(context).textTheme.titleMedium),
+                Tooltip(
+                  message: settings.autoAdjustLyricLayout
+                      ? '已启用 "自动调节歌词字体与间距" '
+                      : '',
+                  child: IgnorePointer(
+                    ignoring: settings.autoAdjustLyricLayout,
+                    child: Opacity(
+                      opacity: settings.autoAdjustLyricLayout ? 0.5 : 1.0,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Slider(
+                            value: settings.lyricVerticalSpacing,
+                            min: 0.0,
+                            max: 20.0,
+                            divisions: 20,
+                            label: settings.lyricVerticalSpacing
+                                .toStringAsFixed(1),
+                            onChanged: (value) {
+                              context
+                                  .read<SettingsProvider>()
+                                  .setLyricVerticalSpacing(value);
+                            },
+                          ),
+                          Text(
+                            '当前间距: ${settings.lyricVerticalSpacing.toStringAsFixed(1)}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Text(
-                '当前强度: ${settings.lyricBlurStrength.toStringAsFixed(1)}',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const Divider(),
+                const Divider(),
 
-              // Text('歌词高亮位置', style: Theme.of(context).textTheme.titleMedium),
-              // Slider(
-              //   value: settings.lyricHighlightPosition,
-              //   min: 0.0,
-              //   max: 1.0,
-              //   divisions: 10,
-              //   label: settings.lyricHighlightPosition.toStringAsFixed(1),
-              //   onChanged: (value) {
-              //     context.read<SettingsProvider>().setLyricHighlightPosition(
-              //       value,
-              //     );
-              //   },
-              // ),
-              // Text(
-              //   '当前位置: ${settings.lyricHighlightPosition.toStringAsFixed(1)}',
-              //   style: Theme.of(context).textTheme.bodyMedium,
-              // ),
-            ],
+                // 歌词模糊强度设置
+                Text('歌词模糊强度', style: Theme.of(context).textTheme.titleMedium),
+                Tooltip(
+                  message: settings.enableLyricBlur ? '' : '需启用 "歌词模糊效果" ',
+                  child: IgnorePointer(
+                    ignoring: !settings.enableLyricBlur,
+                    child: Opacity(
+                      opacity: settings.enableLyricBlur ? 1.0 : 0.5,
+                      child: Slider(
+                        value: settings.lyricBlurStrength,
+                        min: 1.0,
+                        max: 4.0,
+                        divisions: 12,
+                        label: settings.lyricBlurStrength.toStringAsFixed(1),
+                        onChanged: (value) {
+                          context.read<SettingsProvider>().setLyricBlurStrength(
+                            value,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                Text(
+                  '当前强度: ${settings.lyricBlurStrength.toStringAsFixed(1)}',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const Divider(),
+
+                // Text('歌词高亮位置', style: Theme.of(context).textTheme.titleMedium),
+                // Slider(
+                //   value: settings.lyricHighlightPosition,
+                //   min: 0.0,
+                //   max: 1.0,
+                //   divisions: 10,
+                //   label: settings.lyricHighlightPosition.toStringAsFixed(1),
+                //   onChanged: (value) {
+                //     context.read<SettingsProvider>().setLyricHighlightPosition(
+                //       value,
+                //     );
+                //   },
+                // ),
+                // Text(
+                //   '当前位置: ${settings.lyricHighlightPosition.toStringAsFixed(1)}',
+                //   style: Theme.of(context).textTheme.bodyMedium,
+                // ),
+              ],
+            ),
           ),
         ),
       ),
