@@ -21,6 +21,12 @@ const Duration _kHighlightFadeOutDuration = Duration(milliseconds: 100);
 
 const Curve _kHighlightFadeCurve = Curves.easeOutCubic;
 
+// 歌词跟随播放滚动的动画参数。
+// 间奏行折叠时，折叠本身承担了这次滚动的一部分位移（见 _scrollToCurrentLine 的说明），
+// 因此两者必须共用同一组参数，否则合成运动会看起来像"跳两次"。
+const Duration _kLyricFollowScrollDuration = Duration(milliseconds: 300);
+const Curve _kLyricFollowScrollCurve = Curves.easeInOut;
+
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
   final int currentIndex;
@@ -256,7 +262,22 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     // 当前行变化，滚动到对应行
     if (widget.currentIndex != oldWidget.currentIndex) {
-      _scrollToCurrentLine();
+      final int previousIndex = oldWidget.currentIndex;
+      // AnimatedSize 收起间奏行的高度 h 时，它后面的内容整体上移 h，
+      // 于是下一行正好接过间奏行原来的位置：滚动目标 = 间奏行当前所在位置
+      // 剩下的位移由折叠补齐（同样的时长与曲线，合成一次平滑移动）
+      //
+      // 若这里照常滚动到下一行
+      // ScrollablePositionedList.scrollTo 的目标偏移是按折叠前的布局算出来的，会多走 h
+      // 再叠加折叠的 h —— 看起来就是先冲过头、动画结束又被拉回来，跳两次
+      final bool interludeHandoff =
+          widget.currentIndex == previousIndex + 1 &&
+          previousIndex >= 0 &&
+          previousIndex < widget.lyrics.length &&
+          widget.lyrics[previousIndex].isInterlude;
+      _scrollToCurrentLine(
+        targetIndex: interludeHandoff ? previousIndex : null,
+      );
       _animateElasticToCurrent(
         previousIndex: oldWidget.currentIndex,
       ); // 👈 传入旧索引
@@ -280,12 +301,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   // 滚动方法
-  void _scrollToCurrentLine({bool instant = false}) {
+  void _scrollToCurrentLine({bool instant = false, int? targetIndex}) {
     if (!mounted || !_itemScrollController.isAttached) return;
 
+    final int index = targetIndex ?? widget.currentIndex;
+
     // 检查索引是否有效
-    if (widget.currentIndex < 0 ||
-        widget.currentIndex >= widget.lyrics.length) {
+    if (index < 0 || index >= widget.lyrics.length) {
       return;
     }
 
@@ -293,17 +315,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final addLyricPadding = settings.addLyricPadding;
     // 计算实际滚动到的索引（考虑填充项偏移）
-    final int actualIndex = addLyricPadding
-        ? widget.currentIndex + 1
-        : widget.currentIndex;
+    final int actualIndex = addLyricPadding ? index + 1 : index;
 
     if (instant) {
       _itemScrollController.jumpTo(index: actualIndex, alignment: 0.0);
     } else {
       _itemScrollController.scrollTo(
         index: actualIndex,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+        duration: _kLyricFollowScrollDuration,
+        curve: _kLyricFollowScrollCurve,
         alignment: 0.38, // 0.38 看起来更顺眼一点
       );
     }
@@ -1357,16 +1377,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     );
                   }
                   return AnimatedSize(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                    onEnd: () {
-                      if (!isCurrent && mounted && !enableLyricElasticScroll) {
-                        // 在普通滚动模式下，间奏折叠（高度从完整变0）会导致后续列表项瞬间上移
-                        // 从而导致原本居中对齐的目标位置偏上
-                        // 在高度收缩动画结束后，再补发一次滚动，将位置修正回来
-                        // _scrollToCurrentLine();
-                      }
-                    },
+                    duration: _kLyricFollowScrollDuration,
+                    curve: _kLyricFollowScrollCurve,
                     child: isCurrent
                         ? TweenAnimationBuilder<double>(
                             key: ValueKey('interlude_normal_$lyricIndex'),
