@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../page/setting/settings_provider.dart';
+import "../page/setting/tabs/info_icon.dart";
 
 class LyricsSettingsDrawer extends StatelessWidget {
   const LyricsSettingsDrawer({super.key});
@@ -134,7 +135,17 @@ class LyricsSettingsDrawer extends StatelessWidget {
                 const Divider(),
 
                 // 歌词字重设置（高亮行与非高亮行统一使用）
-                Text('歌词字重', style: Theme.of(context).textTheme.titleMedium),
+                Row(
+                  children: [
+                    Text(
+                      '歌词字重',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(width: 4),
+                    const InfoIcon('使用自定义字体时，需要字体支持对应的字重'),
+                  ],
+                ),
+
                 const SizedBox(height: 4),
                 Slider(
                   value: settings.lyricFontWeight.toDouble(),
