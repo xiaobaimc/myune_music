@@ -50,6 +50,7 @@ class SettingsProvider with ChangeNotifier {
   static const _preferExternalLyricsKey = 'preferExternalLyrics';
   static const _autoAdjustLyricLayoutKey =
       'autoAdjustLyricLayout'; // 自动调节歌词字体与间距设置的 key
+  static const _lyricFontWeightKey = 'lyricFontWeight'; // 歌词字重设置的 key
 
   static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
   static const _enableLoudnessKey = 'enableLoudness';
@@ -74,6 +75,7 @@ class SettingsProvider with ChangeNotifier {
   bool _allowAnyFormat = false; // 默认不允许任何格式
   bool _forceSingleLineLyric = false; // 默认不强制单行显示歌词
   double _lyricVerticalSpacing = 6.0; // 默认歌词垂直间距为6.0
+  int _lyricFontWeight = 500; // 默认歌词字重（100~900），高亮行与非高亮行统一使用
   bool _addLyricPadding = true; // 默认启用歌词上下补位
   bool _minimizeToTray = false; // 默认不启用最小化到托盘
   bool _enableLyricBlur = true; // 默认启用歌词模糊效果
@@ -127,6 +129,7 @@ class SettingsProvider with ChangeNotifier {
   bool get allowAnyFormat => _allowAnyFormat; // 获取允许任何格式设置
   bool get forceSingleLineLyric => _forceSingleLineLyric; // 获取强制单行歌词设置
   double get lyricVerticalSpacing => _lyricVerticalSpacing; // 获取歌词垂直间距
+  int get lyricFontWeight => _lyricFontWeight; // 获取歌词字重（100~900）
   bool get addLyricPadding => _addLyricPadding; // 获取歌词上下补位设置
   bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
   bool get enableLyricBlur => _enableLyricBlur; // 获取歌词模糊效果设置
@@ -213,6 +216,10 @@ class SettingsProvider with ChangeNotifier {
     _enableOnlineLyrics = prefs.getBool(_enableOnlineLyricsKey) ?? false;
     _lyricVerticalSpacing =
         prefs.getDouble(_lyricVerticalSpacingKey) ?? 6.0; // 加载歌词垂直间距设置
+    _lyricFontWeight = (prefs.getInt(_lyricFontWeightKey) ?? 500).clamp(
+      100,
+      900,
+    ); // 加载歌词字重设置
     _addLyricPadding = prefs.getBool(_addLyricPaddingKey) ?? true; // 加载歌词上下补位设置
     _minimizeToTray = prefs.getBool(_minimizeToTrayKey) ?? false; // 加载最小化到托盘设置
     _enableLyricBlur = prefs.getBool(_enableLyricBlurKey) ?? true; // 加载歌词模糊效果设置
@@ -351,6 +358,15 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_lyricVerticalSpacingKey, value);
+  }
+
+  void setLyricFontWeight(int value) async {
+    final clamped = value.clamp(100, 900);
+    if (_lyricFontWeight == clamped) return;
+    _lyricFontWeight = clamped;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lyricFontWeightKey, clamped);
   }
 
   void setPrimaryLyricSource(String value) async {
