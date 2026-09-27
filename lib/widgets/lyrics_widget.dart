@@ -403,6 +403,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
       lines.add(
         Text.rich(
           TextSpan(children: children),
+          // 段落自身的行高/基线必须由歌词样式决定：不传 style 时会取到环境里的
+          // DefaultTextStyle（Material 正文 14px/height 1.43），于是同一个段落一旦换行，
+          // 它的子行高度就和静态行不一致（占位盒固定高度 vs 文字带 leading，
+          // 且首行 ascent / 末行 descent 的 leading 裁剪只对文字生效）。
+          // 高亮切换时项高度随之变化，弹性层会补一次动画，表现就是换行时的小跳动。
+          style: _lyricTextStyle(
+            highlightFactor: highlightFactor,
+            isSecondaryLine: isSecondaryLine,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            colorScheme: colorScheme,
+          ),
           textAlign: _lastAlignment ?? TextAlign.center,
           textHeightBehavior: const TextHeightBehavior(
             applyHeightToFirstAscent: false,
