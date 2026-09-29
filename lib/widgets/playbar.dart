@@ -362,6 +362,9 @@ class _PlaybarState extends State<Playbar> {
                                 style: TextStyle(
                                   color: onBarColor.withValues(alpha: 0.7),
                                   fontSize: 12,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
                               ),
                             );

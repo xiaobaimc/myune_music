@@ -88,6 +88,7 @@ class _PlaybarState extends State<Playbar> {
                         style: TextStyle(
                           color: onBarColor.withValues(alpha: 0.7),
                           fontSize: 12 * scale,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     );
@@ -347,6 +348,7 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
                           style: TextStyle(
                             color: onBarColor.withValues(alpha: 0.7),
                             fontSize: 12 * scale,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                       );

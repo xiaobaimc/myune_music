@@ -416,10 +416,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
             colorScheme: colorScheme,
           ),
           textAlign: _lastAlignment ?? TextAlign.center,
-          textHeightBehavior: const TextHeightBehavior(
-            applyHeightToFirstAscent: false,
-            applyHeightToLastDescent: false,
-          ),
+          // textHeightBehavior: const TextHeightBehavior(
+          //   applyHeightToFirstAscent: false,
+          //   applyHeightToLastDescent: false,
+          // ),
         ),
       );
 
@@ -516,10 +516,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
       text,
       textAlign: lyricAlignment,
       style: style,
-      textHeightBehavior: const TextHeightBehavior(
-        applyHeightToFirstAscent: false,
-        applyHeightToLastDescent: false,
-      ),
+      // textHeightBehavior: const TextHeightBehavior(
+      //   applyHeightToFirstAscent: false,
+      //   applyHeightToLastDescent: false,
+      // ),
     );
   }
 
@@ -1191,10 +1191,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         color: lineColor,
                         fontWeight: lyricFontWeight,
                       ),
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
+                      // textHeightBehavior: const TextHeightBehavior(
+                      //   applyHeightToFirstAscent: false,
+                      //   applyHeightToLastDescent: false,
+                      // ),
                     );
 
                     columnChildren.add(
@@ -1244,10 +1244,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         )!,
                         fontWeight: lyricFontWeight,
                       ),
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
+                      // textHeightBehavior: const TextHeightBehavior(
+                      //   applyHeightToFirstAscent: false,
+                      //   applyHeightToLastDescent: false,
+                      // ),
                     );
 
                     columnChildren.add(
@@ -1992,10 +1992,10 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
                   color: widget.baseColor,
                   height: 1.2,
                 ),
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
+                // textHeightBehavior: const TextHeightBehavior(
+                //   applyHeightToFirstAscent: false,
+                //   applyHeightToLastDescent: false,
+                // ),
               ),
             ),
 
@@ -2009,10 +2009,10 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
                   color: widget.highlightColor,
                   height: 1.2,
                 ),
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
+                // textHeightBehavior: const TextHeightBehavior(
+                //   applyHeightToFirstAscent: false,
+                //   applyHeightToLastDescent: false,
+                // ),
               ),
             ),
           ],
