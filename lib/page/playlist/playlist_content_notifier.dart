@@ -2932,6 +2932,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
 
       _currentQueueIndex = index;
+
+      if (_playMode == PlayMode.shuffle) {
+        final count = _currentPlayingQueue!.length;
+        _generateShuffledIndices(count: count);
+        _shuffledIndices.remove(index);
+        _shuffledIndices.insert(0, index);
+      }
+
       await _startPlaybackNow();
     } else {
       // 歌单模式下：播放当前播放列表中的歌曲
@@ -2943,6 +2951,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
 
       _playingSongIndex = index;
+
+      if (_playMode == PlayMode.shuffle) {
+        final count = _playingPlaylist!.songFilePaths.length;
+        _generateShuffledIndices(count: count);
+        _shuffledIndices.remove(index);
+        _shuffledIndices.insert(0, index);
+      }
+
       await _startPlaybackNow();
     }
   }
@@ -3162,6 +3178,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 更新播放上下文
     _playingPlaylist = _playlists[_selectedIndex];
     _playingSongIndex = index;
+
+    if (_playMode == PlayMode.shuffle) {
+      final count = _playingPlaylist!.songFilePaths.length;
+      _generateShuffledIndices(count: count);
+      _shuffledIndices.remove(index);
+      _shuffledIndices.insert(0, index);
+    }
 
     await _startPlaybackNow();
   }
@@ -4513,6 +4536,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _playingPlaylist = dynamicPlaylist;
     _playingSongIndex = startIndex;
 
+    if (_playMode == PlayMode.shuffle) {
+      _generateShuffledIndices(count: songs.length);
+      _shuffledIndices.remove(startIndex);
+      _shuffledIndices.insert(0, startIndex);
+    }
+
     notifyListeners();
 
     // 所有后续的播放逻辑都将在这个临时歌单上进行
@@ -4749,6 +4778,13 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 设置播放上下文为虚拟歌单
     _playingPlaylist = _allSongsVirtualPlaylist;
     _playingSongIndex = index;
+
+    if (_playMode == PlayMode.shuffle) {
+      final count = _allSongsVirtualPlaylist.songFilePaths.length;
+      _generateShuffledIndices(count: count);
+      _shuffledIndices.remove(index);
+      _shuffledIndices.insert(0, index);
+    }
 
     await _startPlaybackNow();
   }
