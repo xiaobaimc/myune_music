@@ -38,20 +38,25 @@ class AlbumDetailView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<PlaylistContentNotifier>();
-    final cover = _findAlbumCover(notifier);
 
     return Column(
       children: [
-        _AlbumHeader(
-          title: notifier.activeDetailTitle,
-          songCount: notifier.activeSongList.length,
-          cover: cover,
-          isSearching: notifier.isSearching,
-          onBack: onBack,
-          onSort: () => _showSortDialog(context),
-          onSearch: notifier.startSearch,
-          onSearchChanged: notifier.search,
-          onCloseSearch: notifier.stopSearch,
+        // 封面单独订阅封面仓库：封面加载完成只重建头部，不影响下面的歌曲列表
+        ListenableBuilder(
+          listenable: notifier.coverStore,
+          builder: (context, _) {
+            return _AlbumHeader(
+              title: notifier.activeDetailTitle,
+              songCount: notifier.activeSongList.length,
+              cover: _findAlbumCover(notifier),
+              isSearching: notifier.isSearching,
+              onBack: onBack,
+              onSort: () => _showSortDialog(context),
+              onSearch: notifier.startSearch,
+              onSearchChanged: notifier.search,
+              onCloseSearch: notifier.stopSearch,
+            );
+          },
         ),
         const Expanded(child: SongListDetailWidget(showSearchField: false)),
       ],
@@ -59,11 +64,27 @@ class AlbumDetailView extends StatelessWidget {
   }
 
   Uint8List? _findAlbumCover(PlaylistContentNotifier notifier) {
-    for (final song in notifier.activeSongList) {
-      final albumArt = song.albumArt;
-      if (albumArt != null) {
-        return albumArt;
+    final songs = notifier.activeSongList;
+    if (songs.isEmpty) {
+      return null;
+    }
+
+    // 封面已经与 Song 解耦，改为向 SongCoverStore 查询
+    String? pathToRequest;
+    for (final song in songs) {
+      final cached = notifier.coverOfCacheKey(song.normalizedPath);
+      if (cached != null) {
+        return cached;
       }
+      pathToRequest ??= song.filePath;
+    }
+
+    if (pathToRequest != null) {
+      // 还没加载：申请一次，加载完成后 coverStore 会通知外层重建
+      final path = pathToRequest;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.requestSongCover(path);
+      });
     }
     return null;
   }

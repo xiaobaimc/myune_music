@@ -5,8 +5,9 @@ import '../playlist/playlist_models.dart';
 import 'package:provider/provider.dart';
 import 'package:silky_scroll/silky_scroll.dart';
 import '../../theme/scroll_config.dart';
-import 'dart:typed_data';
 import '../playlist/playlist_content_notifier.dart';
+import '../playlist/playlist_content_widget.dart';
+import '../../widgets/song_cover.dart';
 import '../../widgets/single_line_lyrics.dart';
 import 'artist_detail_view.dart';
 import '../setting/settings_provider.dart';
@@ -247,6 +248,7 @@ class _ArtistListState extends State<ArtistList> {
                                 ListView.builder(
                                   controller: controller,
                                   physics: physics,
+                                  itemExtent: songTileExtentOf(context),
                                   itemCount: artistNames.length,
                                   itemBuilder: (context, index) {
                                     final artistName = artistNames[index];
@@ -257,13 +259,10 @@ class _ArtistListState extends State<ArtistList> {
                                           songs,
                                         ) ??
                                         songs.first;
-                                    final representativeArt =
-                                        representativeSong.albumArt;
 
                                     return ListTile(
                                       leading: _ArtistCoverAvatar(
                                         filePath: representativeSong.filePath,
-                                        representativeArt: representativeArt,
                                       ),
                                       title: Text(artistName),
                                       subtitle: Text('共 ${songs.length} 首歌曲'),
@@ -296,77 +295,25 @@ class _ArtistListState extends State<ArtistList> {
   }
 }
 
-class _ArtistCoverAvatar extends StatefulWidget {
+class _ArtistCoverAvatar extends StatelessWidget {
   final String filePath;
-  final Uint8List? representativeArt;
 
-  const _ArtistCoverAvatar({
-    required this.filePath,
-    required this.representativeArt,
-  });
-
-  @override
-  State<_ArtistCoverAvatar> createState() => _ArtistCoverAvatarState();
-}
-
-class _ArtistCoverAvatarState extends State<_ArtistCoverAvatar> {
-  String? _requestedCoverPath;
-  late PlaylistContentNotifier _notifier;
-
-  @override
-  void initState() {
-    super.initState();
-    _notifier = context.read<PlaylistContentNotifier>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _requestCover(widget.filePath);
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _ArtistCoverAvatar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.filePath != widget.filePath) {
-      final oldPath = oldWidget.filePath;
-      final newPath = widget.filePath;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _releaseCover(oldPath);
-        _requestCover(newPath);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_requestedCoverPath != null) {
-      _releaseCover(_requestedCoverPath!);
-    }
-    super.dispose();
-  }
-
-  void _requestCover(String filePath) {
-    _requestedCoverPath = filePath;
-    _notifier.requestSongCover(filePath);
-  }
-
-  void _releaseCover(String filePath) {
-    if (_requestedCoverPath == null) return;
-    _notifier.releaseSongCover(filePath);
-    _requestedCoverPath = null;
-  }
+  const _ArtistCoverAvatar({required this.filePath});
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      backgroundImage: widget.representativeArt != null
-          ? ResizeImage(
-              MemoryImage(widget.representativeArt!),
-              width: 100,
-              height: 100,
-            )
-          : null,
-      child: widget.representativeArt == null ? const Icon(Icons.person) : null,
+    // 封面来自 SongCoverStore，按路径订阅，加载完成只重建这个头像
+    return SongCoverBuilder(
+      filePath: filePath,
+      builder: (context, cover) {
+        final hasCover = cover != null && cover.isNotEmpty;
+        return CircleAvatar(
+          backgroundImage: hasCover
+              ? ResizeImage(MemoryImage(cover), width: 100, height: 100)
+              : null,
+          child: hasCover ? null : const Icon(Icons.person),
+        );
+      },
     );
   }
 }

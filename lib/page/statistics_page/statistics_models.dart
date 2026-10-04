@@ -95,16 +95,16 @@ class StatisticsData extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 获取歌曲播放排行榜（前N名）
-  List<SongPlayStat> getTopPlayedSongs([int limit = 5]) {
+  // 获取歌曲播放排行榜（前N名；limit 传 null 表示返回全部）
+  List<SongPlayStat> getTopPlayedSongs([int? limit = 5]) {
     final sortedSongs = _songStats.values.toList()
       ..sort((a, b) => b.playCount.compareTo(a.playCount));
-    return sortedSongs.take(limit).toList();
+    return limit == null ? sortedSongs : sortedSongs.take(limit).toList();
   }
 
-  // 获取艺术家播放排行榜（前N名）
+  // 获取艺术家播放排行榜（前N名；limit 传 null 表示返回全部）
   List<MapEntry<String, int>> getTopArtists([
-    int limit = 5,
+    int? limit = 5,
     List<String>? separators,
   ]) {
     final artistPlayCounts = <String, int>{};
@@ -123,11 +123,11 @@ class StatisticsData extends ChangeNotifier {
     final sortedArtists = artistPlayCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return sortedArtists.take(limit).toList();
+    return limit == null ? sortedArtists : sortedArtists.take(limit).toList();
   }
 
-  // 获取专辑播放排行榜（前N名）
-  List<MapEntry<String, int>> getTopAlbums([int limit = 5]) {
+  // 获取专辑播放排行榜（前N名；limit 传 null 表示返回全部）
+  List<MapEntry<String, int>> getTopAlbums([int? limit = 5]) {
     final albumPlayCounts = <String, int>{};
 
     for (final stat in _songStats.values) {
@@ -140,7 +140,7 @@ class StatisticsData extends ChangeNotifier {
     final sortedAlbums = albumPlayCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return sortedAlbums.take(limit).toList();
+    return limit == null ? sortedAlbums : sortedAlbums.take(limit).toList();
   }
 
   // 分割艺术家字符串

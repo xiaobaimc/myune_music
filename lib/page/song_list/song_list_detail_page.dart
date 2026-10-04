@@ -157,6 +157,7 @@ class SongListDetailWidget extends StatelessWidget {
                         physics: physics,
                         slivers: [
                           SliverReorderableList(
+                            itemExtent: songTileExtentOf(context),
                             itemCount: songs.length,
                             onReorderItem: (oldIndex, newIndex) {
                               // 在搜索时，禁用拖拽排序功能

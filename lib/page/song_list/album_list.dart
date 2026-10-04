@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../layout/navigation_notifier.dart';
 import 'package:provider/provider.dart';
-import 'dart:typed_data';
 import 'package:silky_scroll/silky_scroll.dart';
 import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_notifier.dart';
+import '../../widgets/song_cover.dart';
 import '../../widgets/single_line_lyrics.dart';
 import 'album_detail_view.dart';
 import '../../services/pinyin_cache.dart';
@@ -267,12 +267,8 @@ class _AlbumListState extends State<AlbumList> {
                                   itemBuilder: (context, index) {
                                     final albumName = albumNames[index];
                                     final songs = albums[albumName]!;
-                                    final representativeSong = songs.firstWhere(
-                                      (s) => s.albumArt != null,
-                                      orElse: () => songs.first,
-                                    );
-                                    final albumArt =
-                                        representativeSong.albumArt;
+                                    // 封面已经从 Song 解耦，用第一首歌的封面代表专辑
+                                    final representativeSong = songs.first;
 
                                     return InkWell(
                                       onTap: () {
@@ -304,7 +300,6 @@ class _AlbumListState extends State<AlbumList> {
                                               child: _AlbumCoverTile(
                                                 filePath:
                                                     representativeSong.filePath,
-                                                albumArt: albumArt,
                                               ),
                                             ),
                                             Padding(
@@ -353,80 +348,34 @@ class _AlbumListState extends State<AlbumList> {
   }
 }
 
-class _AlbumCoverTile extends StatefulWidget {
+class _AlbumCoverTile extends StatelessWidget {
   final String filePath;
-  final Uint8List? albumArt;
 
-  const _AlbumCoverTile({required this.filePath, required this.albumArt});
-
-  @override
-  State<_AlbumCoverTile> createState() => _AlbumCoverTileState();
-}
-
-class _AlbumCoverTileState extends State<_AlbumCoverTile> {
-  String? _requestedCoverPath;
-  late PlaylistContentNotifier _notifier;
-
-  @override
-  void initState() {
-    super.initState();
-    _notifier = context.read<PlaylistContentNotifier>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _requestCover(widget.filePath);
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _AlbumCoverTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.filePath != widget.filePath) {
-      final oldPath = oldWidget.filePath;
-      final newPath = widget.filePath;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _releaseCover(oldPath);
-        _requestCover(newPath);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_requestedCoverPath != null) {
-      _releaseCover(_requestedCoverPath!);
-    }
-    super.dispose();
-  }
-
-  void _requestCover(String filePath) {
-    _requestedCoverPath = filePath;
-    _notifier.requestSongCover(filePath);
-  }
-
-  void _releaseCover(String filePath) {
-    if (_requestedCoverPath == null) return;
-    _notifier.releaseSongCover(filePath);
-    _requestedCoverPath = null;
-  }
+  const _AlbumCoverTile({required this.filePath});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       color: Theme.of(context).colorScheme.secondaryContainer,
-      // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
-      child: widget.albumArt != null && widget.albumArt!.isNotEmpty
-          ? Image.memory(
-              cacheWidth: 200,
-              widget.albumArt!,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Icons.album, size: 50);
-              },
-            )
-          : const Icon(Icons.album, size: 50),
+      // 封面来自 SongCoverStore，按路径订阅，加载完成只重建这个封面块
+      child: SongCoverBuilder(
+        filePath: filePath,
+        builder: (context, cover) {
+          if (cover == null || cover.isEmpty) {
+            return const Icon(Icons.album, size: 50);
+          }
+          return Image.memory(
+            cacheWidth: 200,
+            cover,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(Icons.album, size: 50);
+            },
+          );
+        },
+      ),
     );
   }
 }

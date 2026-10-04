@@ -59,21 +59,21 @@ class StatisticsManager with ChangeNotifier {
     _saveStatistics();
   }
 
-  // 获取歌曲播放排行榜
-  List<SongPlayStat> getTopPlayedSongs([int limit = 5]) {
+  // 获取歌曲播放排行榜（limit 传 null 表示全部）
+  List<SongPlayStat> getTopPlayedSongs([int? limit = 5]) {
     return _statisticsData.getTopPlayedSongs(limit);
   }
 
-  // 获取艺术家播放排行榜
+  // 获取艺术家播放排行榜（limit 传 null 表示全部）
   List<MapEntry<String, int>> getTopArtists([
-    int limit = 5,
+    int? limit = 5,
     List<String>? separators,
   ]) {
     return _statisticsData.getTopArtists(limit, separators);
   }
 
-  // 获取专辑播放排行榜
-  List<MapEntry<String, int>> getTopAlbums([int limit = 5]) {
+  // 获取专辑播放排行榜（limit 传 null 表示全部）
+  List<MapEntry<String, int>> getTopAlbums([int? limit = 5]) {
     return _statisticsData.getTopAlbums(limit);
   }
 

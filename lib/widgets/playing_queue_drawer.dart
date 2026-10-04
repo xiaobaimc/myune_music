@@ -124,6 +124,7 @@ class PlayingQueueDrawerState extends State<PlayingQueueDrawer> {
                                   ListView.builder(
                                     controller: controller,
                                     physics: physics,
+                                    itemExtent: songTileExtentOf(context),
                                     itemCount: queue.length,
                                     itemBuilder: (context, index) {
                                       final song = queue[index];

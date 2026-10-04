@@ -154,6 +154,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                 physics: physics,
                                 slivers: [
                                   SliverReorderableList(
+                                    itemExtent: songTileExtentOf(context),
                                     proxyDecorator: (child, index, animation) =>
                                         Material(
                                           elevation: 4,

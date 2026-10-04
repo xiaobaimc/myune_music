@@ -14,9 +14,13 @@ import '../../layout/navigation_notifier.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/custom_background_layer.dart';
 import '../../widgets/locate_playing_song_button.dart';
+import '../../widgets/song_cover.dart';
 import '../../utils/scroll_to_index.dart';
 
 enum ManagementMode { manual, folder }
+
+double songTileExtentOf(BuildContext context) =>
+    72.0 + Theme.of(context).visualDensity.baseSizeAdjustment.dy;
 
 class PlaylistContentWidget extends StatelessWidget {
   const PlaylistContentWidget({super.key});
@@ -828,12 +832,17 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = context.watch<PlaylistContentNotifier>();
-    final isSearching = notifier.isSearching;
+    // 只订阅真正需要的数据，避免任何一次 notifyListeners 都重建整个列表页并重算一遍正在播放歌曲的下标
+    final notifier = context.read<PlaylistContentNotifier>();
+    final isSearching = context.select<PlaylistContentNotifier, bool>(
+      (n) => n.isSearching,
+    );
     final aspectRatio = MediaQuery.of(context).size.aspectRatio;
     final isPortrait = aspectRatio <= 1.0;
     // 当前列表中正在播放歌曲的位置，-1 表示当前歌单没有正在播放的歌曲
-    final playingSongIndex = _playingSongIndexInCurrentList(notifier);
+    final playingSongIndex = context.select<PlaylistContentNotifier, int>(
+      _playingSongIndexInCurrentList,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
@@ -864,17 +873,29 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                     },
                   )
                 // --- 正常状态下显示的UI ---
-                : Selector<PlaylistContentNotifier, (String, bool, bool)>(
+                //
+                // 选择器里带上标题栏需要用到的全部状态，
+                // 这样就不用再在外层 watch 整个 notifier 了
+                : Selector<
+                    PlaylistContentNotifier,
+                    (String, bool, bool, bool, bool, int, int)
+                  >(
                     key: const ValueKey('title_bar_playlist'),
                     selector: (_, notifier) {
-                      if (notifier.selectedIndex == -1 ||
-                          notifier.selectedIndex >= notifier.playlists.length) {
-                        return ('无选中歌单', false, notifier.isMultiSelectMode);
-                      }
+                      final hasSelection =
+                          notifier.selectedIndex >= 0 &&
+                          notifier.selectedIndex < notifier.playlists.length;
+                      final playlist = hasSelection
+                          ? notifier.playlists[notifier.selectedIndex]
+                          : null;
                       return (
-                        notifier.playlists[notifier.selectedIndex].name,
-                        true,
+                        playlist?.name ?? '无选中歌单',
+                        hasSelection,
                         notifier.isMultiSelectMode,
+                        playlist?.isFolderBased ?? false,
+                        notifier.isWritingReplayGain,
+                        notifier.selectedSongs.length,
+                        notifier.currentPlaylistSongs.length,
                       );
                     },
                     builder: (context, data, _) {
@@ -882,31 +903,31 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                         playlistName,
                         isPlaylistSelected,
                         isMultiSelectMode,
+                        isFolderBased,
+                        isWritingReplayGain,
+                        selectedSongCount,
+                        playlistSongCount,
                       ) = data;
                       return Row(
                         children: [
                           if (isMultiSelectMode) ...[
                             Text(
-                              '已选择 ${notifier.selectedSongs.length} 首歌曲',
+                              '已选择 $selectedSongCount 首歌曲',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const SizedBox(width: 16),
                             // 全选/取消全选按钮
                             IconButton(
                               icon: Icon(
-                                notifier.selectedSongs.length ==
-                                        notifier.currentPlaylistSongs.length
+                                selectedSongCount == playlistSongCount
                                     ? Icons.deselect
                                     : Icons.select_all,
                               ),
-                              tooltip:
-                                  notifier.selectedSongs.length ==
-                                      notifier.currentPlaylistSongs.length
+                              tooltip: selectedSongCount == playlistSongCount
                                   ? '取消全选'
                                   : '全选',
                               onPressed: () {
-                                if (notifier.selectedSongs.length ==
-                                    notifier.currentPlaylistSongs.length) {
+                                if (selectedSongCount == playlistSongCount) {
                                   notifier.deselectAllSongs();
                                 } else {
                                   notifier.selectAllSongs();
@@ -935,14 +956,12 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                             IconButton(
                               icon: const Icon(Icons.graphic_eq),
                               tooltip: '扫描并写入 ReplayGain 标签',
-                              onPressed: notifier.isWritingReplayGain
+                              onPressed: isWritingReplayGain
                                   ? null
                                   : () => _showReplayGainDialog(context),
                             ),
                             // 只有不是基于文件夹的歌单才显示删除按钮
-                            if (!notifier
-                                .playlists[notifier.selectedIndex]
-                                .isFolderBased)
+                            if (!isFolderBased)
                               IconButton(
                                 icon: const Icon(Icons.delete),
                                 tooltip: '从列表中移除歌曲',
@@ -1088,17 +1107,13 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                               ),
                             const SizedBox(width: 16),
                             // 显示当前歌单歌曲总数
-                            if (isPlaylistSelected &&
-                                notifier.currentPlaylistSongs.isNotEmpty)
+                            if (isPlaylistSelected && playlistSongCount > 0)
                               Text(
-                                '共 ${notifier.currentPlaylistSongs.length} 首',
+                                '共 $playlistSongCount 首',
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
                             const Spacer(),
-                            if (isPlaylistSelected &&
-                                !notifier
-                                    .playlists[notifier.selectedIndex]
-                                    .isFolderBased)
+                            if (isPlaylistSelected && !isFolderBased)
                               ElevatedButton.icon(
                                 onPressed: () => context
                                     .read<PlaylistContentNotifier>()
@@ -1133,10 +1148,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                                 },
                               ),
                             // 为基于文件夹的播放列表添加刷新按钮
-                            if (isPlaylistSelected &&
-                                notifier
-                                    .playlists[notifier.selectedIndex]
-                                    .isFolderBased)
+                            if (isPlaylistSelected && isFolderBased)
                               IconButton(
                                 icon: const Icon(Icons.refresh),
                                 tooltip: '刷新文件夹内容',
@@ -1158,7 +1170,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                   child:
                       Selector<
                         PlaylistContentNotifier,
-                        (bool, List<Song>, bool, Set<String>)
+                        (bool, List<Song>, bool, Set<String>, int)
                       >(
                         selector: (_, notifier) {
                           // 根据是否在搜索，决定使用哪个列表
@@ -1171,6 +1183,7 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                             listToShow,
                             notifier.isMultiSelectMode,
                             notifier.selectedSongPaths,
+                            notifier.selectedIndex,
                           );
                         },
                         // shouldRebuild: (previous, next) => previous != next,
@@ -1181,14 +1194,15 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                             songs,
                             isMultiSelectMode,
                             selectedSongPaths,
-                          ) = data; // `selectedIndex` 不再需要
+                            selectedIndex,
+                          ) = data;
 
                           if (isLoading) {
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
                           }
-                          if (notifier.selectedIndex == -1) {
+                          if (selectedIndex == -1) {
                             return const Center(child: Text('请选择一个歌单'));
                           }
                           if (songs.isEmpty) {
@@ -1210,6 +1224,8 @@ class _HeadSongListWidgetState extends State<HeadSongListWidget> {
                                   physics: physics,
                                   slivers: [
                                     SliverReorderableList(
+                                      // 固定行高 长列表布局开销大幅下降
+                                      itemExtent: songTileExtentOf(context),
                                       proxyDecorator:
                                           (child, index, animation) => Material(
                                             elevation: 4,
@@ -1662,8 +1678,6 @@ class SongTileWidget extends StatefulWidget {
 class _SongTileWidgetState extends State<SongTileWidget>
     with SingleTickerProviderStateMixin {
   bool _isHovered = false;
-  String? _requestedCoverPath;
-  late PlaylistContentNotifier _notifier;
 
   // 命中“定位到当前播放歌曲”时播放一次的高亮动画
   late final AnimationController _locateFlashController;
@@ -1671,19 +1685,12 @@ class _SongTileWidgetState extends State<SongTileWidget>
   @override
   void initState() {
     super.initState();
-    _notifier = context.read<PlaylistContentNotifier>();
     _locateFlashController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 240),
       reverseDuration: const Duration(milliseconds: 640),
     );
     _syncLocatePulse(null, widget.locatePulse);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _requestCover(widget.song.filePath);
-    });
   }
 
   @override
@@ -1692,23 +1699,12 @@ class _SongTileWidgetState extends State<SongTileWidget>
     if (oldWidget.locatePulse != widget.locatePulse) {
       _syncLocatePulse(oldWidget.locatePulse, widget.locatePulse);
     }
-    if (oldWidget.song.filePath != widget.song.filePath) {
-      _releaseCover(oldWidget.song.filePath);
-      _requestCover(widget.song.filePath);
-      return;
-    }
-    if (oldWidget.song.albumArt != null && widget.song.albumArt == null) {
-      _requestCover(widget.song.filePath);
-    }
   }
 
   @override
   void dispose() {
     widget.locatePulse?.removeListener(_handleLocatePulse);
     _locateFlashController.dispose();
-    if (_requestedCoverPath != null) {
-      _releaseCover(_requestedCoverPath!);
-    }
     super.dispose();
   }
 
@@ -1736,17 +1732,28 @@ class _SongTileWidgetState extends State<SongTileWidget>
         .catchError((Object _) {});
   }
 
-  void _requestCover(String filePath) {
-    _requestedCoverPath = filePath;
-    _notifier.requestSongCover(filePath);
-  }
-
-  void _releaseCover(String filePath) {
-    if (_requestedCoverPath == null) {
-      return;
-    }
-    _notifier.releaseSongCover(filePath);
-    _requestedCoverPath = null;
+  // issue #127
+  Widget _buildCover() {
+    return SongCoverBuilder(
+      filePath: widget.song.filePath,
+      builder: (context, cover) {
+        if (cover == null || cover.isEmpty) {
+          return const Icon(Icons.music_note, size: 40, color: Colors.grey);
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.memory(
+            cacheWidth: 100,
+            cover,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(Icons.music_note, size: 40, color: Colors.grey);
+            },
+          ),
+        );
+      },
+    );
   }
 
   void _showSongContextMenu(
@@ -2221,31 +2228,7 @@ class _SongTileWidgetState extends State<SongTileWidget>
                   leading: SizedBox(
                     width: 50,
                     height: 50,
-                    // isNotEmpty: 过滤空字节数组；errorBuilder: 兜底解码失败
-                    child:
-                        widget.song.albumArt != null &&
-                            widget.song.albumArt!.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.memory(
-                              cacheWidth: 100,
-                              widget.song.albumArt!,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(
-                                  Icons.music_note,
-                                  size: 40,
-                                  color: Colors.grey,
-                                );
-                              },
-                            ),
-                          )
-                        : const Icon(
-                            Icons.music_note,
-                            size: 40,
-                            color: Colors.grey,
-                          ),
+                    child: _buildCover(),
                   ),
                   title: Text(
                     widget.song.title,

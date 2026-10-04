@@ -18,6 +18,7 @@ import 'package:pinyin/pinyin.dart';
 
 import 'playlist_models.dart';
 import 'playlist_manager.dart';
+import 'song_cover_store.dart';
 
 import '../setting/settings_provider.dart';
 import '../../theme/theme_provider.dart';
@@ -100,13 +101,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 封面加载队列 ---
   final Set<String> _visibleCoverPaths = {};
   final Set<String> _pendingCoverRequests = {};
-  final ListQueue<String> _coverQueue = ListQueue<String>();
+
+  final LinkedHashSet<String> _coverQueue = LinkedHashSet<String>();
   bool _coverWorkerRunning = false;
 
   // --- 封面内存缓存 ---
-  final Map<String, Uint8List?> _coverCache = {};
+  //
+  // 封面与 Song 解耦，单独存放（见 song_cover_store.dart）
+  final SongCoverStore _coverStore = SongCoverStore();
+  SongCoverStore get coverStore => _coverStore;
+
+  // 已经确认过没有内嵌封面的路径
+  final Set<String> _coverlessPaths = {};
+
   final Set<String> _evictableCoverPaths = {};
-  static const int _maxCoverCacheSize = 100;
+  bool _coverEvictionScheduled = false;
+  static const int _maxCoverCacheSize = 300;
 
   // --- 播放器相关 ---
   final AudioService _audioService = AudioService();
@@ -1027,70 +1037,97 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<Song> _prepareSongForPlayback(String filePath) async {
     // 首先获取基础元数据
     final Song basicSong = await _parseSongMetadata(filePath);
+    final cacheKey = _normalizePath(filePath);
 
-    // 只在没有封面的情况下加载元数据
-    if (basicSong.albumArt == null) {
-      try {
-        final normalizedPath = Uri.file(
-          filePath,
-        ).toFilePath(windows: Platform.isWindows);
-        final metadata = await readAudioInfo(
-          path: normalizedPath,
-          options: const AudioInfoOptions(
-            needCover: true,
-            needLyrics: false,
-            needAudioProps: true,
-            needExtraTags: false,
-            needTrackNumber: false,
-          ),
-        );
-
-        // 使用获取到的完整信息创建Song对象
-        String title = basicSong.title;
-        String artist = basicSong.artist;
-        String album = basicSong.album;
-        Duration? duration = basicSong.duration;
-
-        if (metadata.title != null && metadata.title!.isNotEmpty) {
-          title = metadata.title!;
-        }
-        if (metadata.artist != null && metadata.artist!.isNotEmpty) {
-          artist = metadata.artist!;
-        }
-        if (metadata.album != null && metadata.album!.isNotEmpty) {
-          album = metadata.album!;
-        }
-        if (metadata.durationMs != null) {
-          duration = Duration(milliseconds: metadata.durationMs!.toInt());
-        }
-
-        // 更新缓存
-        final cacheKey = _normalizePath(filePath);
-        if (_songMetadataCache.containsKey(cacheKey)) {
-          final cachedEntry = _songMetadataCache[cacheKey]!;
-          _songMetadataCache[cacheKey] = SongMetadataCacheEntry(
-            title: cachedEntry.title,
-            artist: cachedEntry.artist,
-            album: cachedEntry.album,
-            durationMs: cachedEntry.durationMs,
-            modifiedMs: cachedEntry.modifiedMs,
-          );
-        }
-
-        return Song(
-          title: title,
-          artist: artist,
-          album: album,
-          filePath: filePath,
-          albumArt: metadata.cover,
-          duration: duration,
-        );
-      } catch (e) {
-        return basicSong;
-      }
+    if (basicSong.albumArt != null) {
+      return basicSong;
     }
 
-    return basicSong;
+    // 封面已经在内存缓存里直接复用
+    final cachedCover = _coverStore.coverOf(cacheKey);
+    if (cachedCover != null) {
+      return _copySongWithCover(basicSong, cachedCover);
+    }
+
+    // 只在没有封面的情况下加载元数据
+    try {
+      final normalizedPath = Uri.file(
+        filePath,
+      ).toFilePath(windows: Platform.isWindows);
+      final metadata = await readAudioInfo(
+        path: normalizedPath,
+        options: const AudioInfoOptions(
+          needCover: true,
+          needLyrics: false,
+          needAudioProps: true,
+          needExtraTags: false,
+          needTrackNumber: false,
+        ),
+      );
+
+      // 使用获取到的完整信息创建Song对象
+      String title = basicSong.title;
+      String artist = basicSong.artist;
+      String album = basicSong.album;
+      Duration? duration = basicSong.duration;
+
+      if (metadata.title != null && metadata.title!.isNotEmpty) {
+        title = metadata.title!;
+      }
+      if (metadata.artist != null && metadata.artist!.isNotEmpty) {
+        artist = metadata.artist!;
+      }
+      if (metadata.album != null && metadata.album!.isNotEmpty) {
+        album = metadata.album!;
+      }
+      if (metadata.durationMs != null) {
+        duration = Duration(milliseconds: metadata.durationMs!.toInt());
+      }
+
+      // 更新缓存
+      if (_songMetadataCache.containsKey(cacheKey)) {
+        final cachedEntry = _songMetadataCache[cacheKey]!;
+        _songMetadataCache[cacheKey] = SongMetadataCacheEntry(
+          title: cachedEntry.title,
+          artist: cachedEntry.artist,
+          album: cachedEntry.album,
+          durationMs: cachedEntry.durationMs,
+          modifiedMs: cachedEntry.modifiedMs,
+        );
+      }
+
+      final cover = metadata.cover;
+      if (cover != null && cover.isNotEmpty) {
+        _coverlessPaths.remove(cacheKey);
+        // 播种到封面仓库，正在显示这首歌的列表行会立即拿到封面
+        _coverStore.put(cacheKey, cover);
+      } else {
+        _coverlessPaths.add(cacheKey);
+      }
+
+      return Song(
+        title: title,
+        artist: artist,
+        album: album,
+        filePath: filePath,
+        albumArt: cover,
+        duration: duration,
+      );
+    } catch (e) {
+      return basicSong;
+    }
+  }
+
+  Song _copySongWithCover(Song song, Uint8List? cover) {
+    return Song(
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      filePath: song.filePath,
+      albumArt: cover,
+      duration: song.duration,
+      trackNumber: song.trackNumber,
+    );
   }
 
   // 为系统媒体会话构建封面
@@ -1128,10 +1165,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return 'application/octet-stream';
   }
 
-  void _updateSongInCollections(
+  bool _updateSongInCollections(
     String filePath,
-    Song Function(Song song) updater,
-  ) {
+    Song Function(Song song) updater, {
+    bool notify = true,
+  }) {
     final targetPath = _normalizePath(filePath);
     bool updated = false;
 
@@ -1178,14 +1216,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
       }
     }
 
-    if (updated) {
+    if (updated && notify) {
       notifyListeners();
     }
+    return updated;
   }
 
   // 应用缓存的元数据
-  void _applyCachedMetadata(String filePath, SongMetadataCacheEntry entry) {
-    _updateSongInCollections(filePath, (song) {
+  bool _applyCachedMetadata(
+    String filePath,
+    SongMetadataCacheEntry entry, {
+    bool notify = true,
+  }) {
+    return _updateSongInCollections(filePath, (song) {
       return Song(
         title: entry.title,
         artist: entry.artist,
@@ -1196,7 +1239,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             ? Duration(milliseconds: entry.durationMs!)
             : song.duration,
       );
-    });
+    }, notify: notify);
   }
 
   Song _markSongMissing(Song song) {
@@ -1216,6 +1259,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
   ) async {
     // 延迟执行以避免与前台操作竞争资源
     await Future.delayed(const Duration(milliseconds: 300));
+
+    // 大批量校验时把通知合并成一次，避免每首歌都重建整个列表页
+    bool changed = false;
 
     for (final filePath in filePaths) {
       final cacheKey = _normalizePath(filePath);
@@ -1264,15 +1310,37 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
         _songMetadataCache[cacheKey] = entry;
         _scheduleMetadataCacheSave();
-        _applyCachedMetadata(filePath, entry);
+        changed |= _applyCachedMetadata(filePath, entry, notify: false);
+        _coverlessPaths.remove(cacheKey);
       } catch (e) {
         if (_songMetadataCache.remove(cacheKey) != null) {
           _scheduleMetadataCacheSave();
         }
-        _updateSongInCollections(filePath, _markSongMissing);
+        changed |= _updateSongInCollections(
+          filePath,
+          _markSongMissing,
+          notify: false,
+        );
       }
     }
+
+    if (changed) {
+      notifyListeners();
+    }
   }
+
+  // --- 封面查询 API（给 widget 层用）---
+
+  String coverCacheKey(String filePath) => _normalizePath(filePath);
+  Uint8List? coverOfCacheKey(String cacheKey) => _coverStore.coverOf(cacheKey);
+
+  // 查询某首歌的封面（拿不到时返回 null）
+  Uint8List? coverOfPath(String filePath) =>
+      _coverStore.coverOf(_normalizePath(filePath));
+
+  // 这首歌的封面是否已经有结论（有封面，或已确认没有内嵌封面）
+  bool isCoverResolved(String cacheKey) =>
+      _coverStore.contains(cacheKey) || _coverlessPaths.contains(cacheKey);
 
   // 封面处理
   void requestSongCover(String filePath) {
@@ -1280,19 +1348,23 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _visibleCoverPaths.add(cacheKey);
     _evictableCoverPaths.remove(cacheKey);
 
-    // 缓存命中：直接应用，无需磁盘读取
-    if (_coverCache.containsKey(cacheKey)) {
-      // 延迟到微任务执行，避免在 build 阶段触发 notifyListeners
-      scheduleMicrotask(() => _applyCachedCover(cacheKey));
+    // 缓存已命中：订阅该路径的 widget 在写入时就已经收到通知，这里什么都不用做
+    if (_coverStore.contains(cacheKey)) {
       return;
     }
 
-    // 歌曲对象上已有封面数据：缓存并传播到同路径的其他歌曲
-    final song = _findSongByPath(filePath);
-    final albumArt = song?.albumArt;
-    if (albumArt != null && albumArt.isNotEmpty) {
-      _coverCache[cacheKey] = albumArt;
-      scheduleMicrotask(() => _applyCachedCover(cacheKey));
+    // 已知没有内嵌封面：不必再读一次磁盘
+    if (_coverlessPaths.contains(cacheKey)) {
+      return;
+    }
+
+    // 当前播放歌曲的封面已经在内存里，直接播种给封面仓库
+    final current = _currentSong;
+    if (current != null &&
+        current.normalizedPath == cacheKey &&
+        current.albumArt != null &&
+        current.albumArt!.isNotEmpty) {
+      _coverStore.put(cacheKey, current.albumArt!);
       return;
     }
 
@@ -1310,7 +1382,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     final cacheKey = _normalizePath(filePath);
     _visibleCoverPaths.remove(cacheKey);
     _pendingCoverRequests.remove(cacheKey);
-    _removeFromCoverQueue(cacheKey);
+    _coverQueue.remove(cacheKey);
 
     if (_currentSong != null && _currentSong!.normalizedPath == cacheKey) {
       return;
@@ -1321,90 +1393,31 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _scheduleCoverEviction();
   }
 
-  // 寻找歌曲
-  Song? _findSongByPath(String filePath) {
-    final target = _normalizePath(filePath);
-    if (_isUsingQueue && _currentPlayingQueue != null) {
-      for (final song in _currentPlayingQueue!) {
-        if (song.normalizedPath == target) {
-          return song;
-        }
-      }
-    }
-    if (_playingPlaylist?.songs != null) {
-      for (final song in _playingPlaylist!.songs!) {
-        if (song.normalizedPath == target) {
-          return song;
-        }
-      }
-    }
-    for (final song in _currentPlaylistSongs) {
-      if (song.normalizedPath == target) {
-        return song;
-      }
-    }
-    for (final song in _allSongs) {
-      if (song.normalizedPath == target) {
-        return song;
-      }
-    }
-    return null;
-  }
-
-  void _removeFromCoverQueue(String cacheKey) {
-    if (_coverQueue.isEmpty) {
-      return;
-    }
-    final remaining = ListQueue<String>();
-    while (_coverQueue.isNotEmpty) {
-      final item = _coverQueue.removeFirst();
-      if (item != cacheKey) {
-        remaining.add(item);
-      }
-    }
-    _coverQueue.addAll(remaining);
-  }
-
-  void _applyCachedCover(String cacheKey) {
-    final cachedCover = _coverCache[cacheKey];
-    if (cachedCover == null) return;
-
-    _updateSongInCollections(cacheKey, (song) {
-      if (song.albumArt == cachedCover) return song;
-      return Song(
-        title: song.title,
-        artist: song.artist,
-        album: song.album,
-        filePath: song.filePath,
-        albumArt: cachedCover,
-        duration: song.duration,
-      );
+  void _scheduleCoverEviction() {
+    if (_coverEvictionScheduled) return;
+    _coverEvictionScheduled = true;
+    // 合并同一帧内的所有淘汰请求，并且避免在 build/layout 阶段触发通知
+    scheduleMicrotask(() {
+      _coverEvictionScheduled = false;
+      _evictCoversIfNeeded();
     });
   }
 
-  void _scheduleCoverEviction() {
-    if (_coverCache.length <= _maxCoverCacheSize) return;
+  void _evictCoversIfNeeded() {
+    final overflow = _coverStore.length - _maxCoverCacheSize;
+    if (overflow <= 0) return;
 
-    final toEvict = _coverCache.keys
+    final toEvict = _coverStore.keys
         .where((key) => _evictableCoverPaths.contains(key))
-        .take(_coverCache.length - _maxCoverCacheSize)
-        .toList();
+        .take(overflow)
+        .toList(growable: false);
 
     if (toEvict.isEmpty) return;
 
+    // 只丢弃封面缓存，不再替换 song 对象、不再触发整页重建
     for (final key in toEvict) {
-      _coverCache.remove(key);
       _evictableCoverPaths.remove(key);
-      _updateSongInCollections(key, (song) {
-        return Song(
-          title: song.title,
-          artist: song.artist,
-          album: song.album,
-          filePath: song.filePath,
-          albumArt: null,
-          duration: song.duration,
-        );
-      });
+      _coverStore.remove(key);
     }
   }
 
@@ -1418,7 +1431,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   Future<void> _coverWorker() async {
     while (_coverQueue.isNotEmpty) {
-      final cacheKey = _coverQueue.removeFirst();
+      final cacheKey = _coverQueue.first;
+      _coverQueue.remove(cacheKey);
       if (!_visibleCoverPaths.contains(cacheKey)) {
         _pendingCoverRequests.remove(cacheKey);
         continue;
@@ -1439,23 +1453,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
           ),
         );
 
-        if (metadata.cover != null && metadata.cover!.isNotEmpty) {
-          _coverCache[cacheKey] = metadata.cover;
+        final cover = metadata.cover;
+        if (cover != null && cover.isNotEmpty) {
+          _coverlessPaths.remove(cacheKey);
           _evictableCoverPaths.remove(cacheKey);
-          _updateSongInCollections(filePath, (song) {
-            return Song(
-              title: song.title,
-              artist: song.artist,
-              album: song.album,
-              filePath: song.filePath,
-              albumArt: metadata.cover,
-              duration: song.duration,
-            );
-          });
+          // 只写入封面仓库，按路径通知订阅者
+          // 不再替换 song 对象，也不再 notifyListeners 触发整页重建
+          _coverStore.put(cacheKey, cover);
+        } else {
+          _coverlessPaths.add(cacheKey);
         }
       } catch (e) {
         // 记录失败原因，排查封面加载问题
-        debugPrint('加载封面失败: ${p.basename(filePath)} - $e');
+        // debugPrint('加载封面失败: ${p.basename(filePath)} - $e');
       } finally {
         _pendingCoverRequests.remove(cacheKey);
       }
@@ -1897,6 +1907,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 重新扫描时文件内容可能变了
+      _coverlessPaths.clear();
       await _scanFoldersAndAddSongs(playlist.folderPaths);
       // _notificationService.info('已刷新文件夹内容');
     } catch (e) {
@@ -4631,9 +4643,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
       orderedSongs = songs;
     }
 
-    // 返回第一首有封面的歌曲
+    // 返回第一首封面已经在缓存里的歌曲
+    // 否则退化为第一首，由列表项自己去申请封面
     for (final song in orderedSongs) {
-      if (song.albumArt != null) {
+      if (_coverStore.contains(song.normalizedPath)) {
         return song;
       }
     }
