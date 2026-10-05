@@ -1980,27 +1980,46 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
     return ValueListenableBuilder<double>(
       valueListenable: _progressNotifier,
       builder: (context, progress, child) {
+        const double gradientEdge = 0.08; // 8% 宽度的渐变带
         return Stack(
           children: [
-            ClipRect(
-              clipper: _LyricsClipper(startPercent: progress, endPercent: 1.0),
-              child: Text(
-                widget.text,
-                style: TextStyle(
-                  fontSize: widget.fontSize,
-                  fontWeight: widget.fontWeight,
-                  color: widget.baseColor,
-                  height: 1.2,
-                ),
-                // textHeightBehavior: const TextHeightBehavior(
-                //   applyHeightToFirstAscent: false,
-                //   applyHeightToLastDescent: false,
-                // ),
+            // 底层：完整文字，baseColor
+            Text(
+              widget.text,
+              style: TextStyle(
+                fontSize: widget.fontSize,
+                fontWeight: widget.fontWeight,
+                color: widget.baseColor,
+                height: 1.2,
               ),
+              // textHeightBehavior: const TextHeightBehavior(
+              //   applyHeightToFirstAscent: false,
+              //   applyHeightToLastDescent: false,
+              // ),
             ),
-
-            ClipRect(
-              clipper: _LyricsClipper(startPercent: 0.0, endPercent: progress),
+            ShaderMask(
+              blendMode: BlendMode.dstIn, // 用 shader alpha 裁切子内容
+              shaderCallback: (Rect bounds) {
+                final double fadeStart = (progress - gradientEdge).clamp(
+                  0.0,
+                  1.0,
+                );
+                final double fadeEnd = (progress + gradientEdge).clamp(
+                  0.0,
+                  1.0,
+                );
+                return LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: const [
+                    Colors.white, // 完全可见
+                    Colors.white, // 完全可见
+                    Colors.transparent, // 完全透明
+                    Colors.transparent, // 完全透明
+                  ],
+                  stops: [0.0, fadeStart, fadeEnd, 1.0],
+                ).createShader(bounds);
+              },
               child: Text(
                 widget.text,
                 style: TextStyle(
@@ -2030,6 +2049,7 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
   }
 }
 
+// ignore: unused_element
 class _LyricsClipper extends CustomClipper<Rect> {
   final double startPercent;
   final double endPercent;
