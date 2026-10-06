@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+﻿import 'dart:ui' as ui;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -1977,62 +1977,71 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
 
   @override
   Widget build(BuildContext context) {
+    final TextStyle baseStyle = TextStyle(
+      fontSize: widget.fontSize,
+      fontWeight: widget.fontWeight,
+      color: widget.baseColor,
+      height: 1.2,
+    );
+    final TextStyle highlightStyle = TextStyle(
+      fontSize: widget.fontSize,
+      fontWeight: widget.fontWeight,
+      color: widget.highlightColor,
+      height: 1.2,
+    );
+
     return ValueListenableBuilder<double>(
       valueListenable: _progressNotifier,
       builder: (context, progress, child) {
+        // progress 为 0 或 1 时退化为单层，避免不必要的合成开销与叠色
+        if (progress <= 0.0) {
+          return Text(widget.text, style: baseStyle);
+        }
+        if (progress >= 1.0) {
+          return Text(widget.text, style: highlightStyle);
+        }
+
         const double gradientEdge = 0.08; // 8% 宽度的渐变带
+        final double fadeStart = (progress - gradientEdge).clamp(0.0, 1.0);
+        final double fadeEnd = (progress + gradientEdge).clamp(0.0, 1.0);
+
         return Stack(
           children: [
-            // 底层：完整文字，baseColor
-            Text(
-              widget.text,
-              style: TextStyle(
-                fontSize: widget.fontSize,
-                fontWeight: widget.fontWeight,
-                color: widget.baseColor,
-                height: 1.2,
-              ),
-              // textHeightBehavior: const TextHeightBehavior(
-              //   applyHeightToFirstAscent: false,
-              //   applyHeightToLastDescent: false,
-              // ),
-            ),
+            // 底层：baseColor，在已高亮唱过的区域渐变隐藏，避免半透明透色
             ShaderMask(
-              blendMode: BlendMode.dstIn, // 用 shader alpha 裁切子内容
+              blendMode: BlendMode.dstIn,
               shaderCallback: (Rect bounds) {
-                final double fadeStart = (progress - gradientEdge).clamp(
-                  0.0,
-                  1.0,
-                );
-                final double fadeEnd = (progress + gradientEdge).clamp(
-                  0.0,
-                  1.0,
-                );
                 return LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: const [
-                    Colors.white, // 完全可见
-                    Colors.white, // 完全可见
-                    Colors.transparent, // 完全透明
-                    Colors.transparent, // 完全透明
+                    Colors.transparent, // 已唱部分隐藏
+                    Colors.transparent,
+                    Colors.white, // 未唱部分可见
+                    Colors.white,
                   ],
                   stops: [0.0, fadeStart, fadeEnd, 1.0],
                 ).createShader(bounds);
               },
-              child: Text(
-                widget.text,
-                style: TextStyle(
-                  fontSize: widget.fontSize,
-                  fontWeight: widget.fontWeight,
-                  color: widget.highlightColor,
-                  height: 1.2,
-                ),
-                // textHeightBehavior: const TextHeightBehavior(
-                //   applyHeightToFirstAscent: false,
-                //   applyHeightToLastDescent: false,
-                // ),
-              ),
+              child: Text(widget.text, style: baseStyle),
+            ),
+            // 上层：highlightColor，在未高亮唱到的区域渐变隐藏
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: const [
+                    Colors.white, // 已唱部分可见
+                    Colors.white,
+                    Colors.transparent, // 未唱部分隐藏
+                    Colors.transparent,
+                  ],
+                  stops: [0.0, fadeStart, fadeEnd, 1.0],
+                ).createShader(bounds);
+              },
+              child: Text(widget.text, style: highlightStyle),
             ),
           ],
         );
