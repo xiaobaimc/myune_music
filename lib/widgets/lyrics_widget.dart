@@ -548,10 +548,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
       // 间奏逻辑延后到最后处理，因为它需要直接包裹整个 Padding
     } else if (line.isKaraoke && line.karaokeTextIndices != null) {
       // 有精确索引映射时按 texts 顺序遍历，逐行判断类型
-      final Map<int, int> textIndexToTokenGroup = {
-        for (int k = 0; k < line.karaokeTextIndices!.length; k++)
-          line.karaokeTextIndices![k]: k,
-      };
+      // 解析器用 -1 标记"有 tokens 但没有对应 texts 行"的 token 组
+      // 这里要跳过，避免它去认领别的歌词行
+      final Map<int, int> textIndexToTokenGroup = {};
+      for (int k = 0; k < line.karaokeTextIndices!.length; k++) {
+        final int textIndex = line.karaokeTextIndices![k];
+        if (textIndex >= 0 && k < line.tokens!.length) {
+          textIndexToTokenGroup[textIndex] = k;
+        }
+      }
 
       bool firstChild = true;
 
@@ -821,9 +826,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
         );
 
         return TweenAnimationBuilder<double>(
-          key: ValueKey('interlude_elastic_$lyricIndex'),
+          // 弹性滚动与非弹性列表共用，key 不再带分支名
+          key: ValueKey('interlude_$lyricIndex'),
           tween: Tween<double>(begin: 0.0, end: 1.0),
-          // 前 300ms 等待弹性滚动推开，后 200ms 淡入并放大圆点
+          // 前 300ms 等待跟随滚动推开，后 200ms 淡入并放大圆点
           duration: const Duration(milliseconds: 500),
           builder: (context, value, child) {
             final double dotValue = ((value - 0.6) / 0.4).clamp(0.0, 1.0);
@@ -1075,335 +1081,29 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 // 处理实际歌词项
                 final int lyricIndex = index - paddingItemCount;
                 final line = widget.lyrics[lyricIndex];
-                final isCurrent = lyricIndex == widget.currentIndex;
-                // 只有当前行参与点亮/熄灭过渡
-                final double highlightFactor = isCurrent
-                    ? currentLineHighlightFactor
-                    : 0.0;
 
-                line.texts.take(widget.maxLinesPerLyric);
-
-                // 计算当前行与目标行之间的距离
-                final int distance = (lyricIndex - widget.currentIndex).abs();
-
-                // 根据距离计算模糊值，距离越远模糊越大
-                double calculateSigma(int distance) {
-                  if (!shouldBlur || isCurrent) return 0.0;
-
-                  const int maxDistance = 5;
-                  final double normalizedDistance = (distance / maxDistance)
-                      .clamp(0.0, 1.0);
-                  return normalizedDistance * lyricBlurStrength;
-                }
-
-                final List<Widget> columnChildren = [];
-                int renderedLines = 0;
-                final int maxAllowed = widget.maxLinesPerLyric;
-
-                // 确定有多少行属于卡拉OK原文（如：日语原文+罗马音）
-                final int karaokeCount = (line.tokens != null)
-                    ? line.tokens!.length
-                    : 0;
-
-                if (line.isInterlude) {
-                  // 间奏逻辑由外层统一包裹 AnimatedSize 处理
-                } else if (isCurrent && line.isKaraoke) {
-                  // 限制卡拉OK显示的行数，不能超过总限制
-                  final int linesToTake = (karaokeCount > maxAllowed)
-                      ? maxAllowed
-                      : karaokeCount;
-                  final List<List<LyricToken>> tokensToRender = line.tokens!
-                      .take(linesToTake)
-                      .toList();
-
-                  renderedLines += linesToTake;
-
-                  columnChildren.add(
-                    isCurrent || !shouldBlur
-                        ? _buildMultiLineKaraokeRichText(
-                            tokensToRender,
-                            fontSize,
-                            lyricFontWeight,
-                            highlightFactor,
-                            colorScheme,
-                          )
-                        : ImageFiltered(
-                            imageFilter: ui.ImageFilter.blur(
-                              sigmaX: calculateSigma(distance),
-                              sigmaY: calculateSigma(distance),
-                            ),
-                            child: _buildMultiLineKaraokeRichText(
-                              tokensToRender,
-                              fontSize,
-                              lyricFontWeight,
-                              highlightFactor,
-                              colorScheme,
-                            ),
-                          ),
-                  );
-                } else {
-                  final int mainLinesLimit = (karaokeCount > 0
-                      ? karaokeCount
-                      : 1);
-                  final int linesToTake = (mainLinesLimit > maxAllowed)
-                      ? maxAllowed
-                      : mainLinesLimit;
-
-                  // 预计算样式变量
-                  final double secondaryFontSize = fontSize * 0.88;
-                  final Color primaryColor = colorScheme.primary;
-                  final Color secondaryPrimaryColor = colorScheme.primary
-                      .withValues(alpha: 0.88);
-                  // 与逐字歌词未唱部分的颜色保持一致
-                  final Color surfaceVariantColor = colorScheme.onSurfaceVariant
-                      .withValues(alpha: _kIdleMainLineAlpha);
-                  final Color secondarySurfaceVariantColor = colorScheme
-                      .onSurfaceVariant
-                      .withValues(alpha: _kIdleSecondaryLineAlpha);
-
-                  for (
-                    int i = 0;
-                    i < linesToTake && i < line.texts.length;
-                    i++
-                  ) {
-                    renderedLines++;
-
-                    final bool isSecondaryLine = i > 0;
-
-                    final double lineFontSize = isSecondaryLine
-                        ? secondaryFontSize
-                        : fontSize;
-                    // 字重由设置统一决定，高亮行不再加粗
-                    final Color lineColor = Color.lerp(
-                      isSecondaryLine
-                          ? secondarySurfaceVariantColor
-                          : surfaceVariantColor,
-                      isSecondaryLine ? secondaryPrimaryColor : primaryColor,
-                      highlightFactor,
-                    )!;
-
-                    final Widget staticText = Text(
-                      line.texts[i],
-                      textAlign: lyricAlignment,
-                      style: TextStyle(
-                        fontSize: lineFontSize,
-                        height: 1.2,
-                        color: lineColor,
-                        fontWeight: lyricFontWeight,
-                      ),
-                      // textHeightBehavior: const TextHeightBehavior(
-                      //   applyHeightToFirstAscent: false,
-                      //   applyHeightToLastDescent: false,
-                      // ),
-                    );
-
-                    columnChildren.add(
-                      isCurrent || !shouldBlur
-                          ? staticText
-                          : ImageFiltered(
-                              imageFilter: ui.ImageFilter.blur(
-                                sigmaX: calculateSigma(distance),
-                                sigmaY: calculateSigma(distance),
-                              ),
-                              child: staticText,
-                            ),
-                    );
-                    if (i < linesToTake - 1) {
-                      columnChildren.add(const SizedBox(height: 6));
-                    }
-                  }
-                }
-
-                final int translationStartIndex = (karaokeCount > 0
-                    ? karaokeCount
-                    : 1);
-
-                if (renderedLines < maxAllowed &&
-                    line.texts.length > translationStartIndex) {
-                  columnChildren.add(const SizedBox(height: 6));
-
-                  for (
-                    int i = translationStartIndex;
-                    i < line.texts.length && renderedLines < maxAllowed;
-                    i++
-                  ) {
-                    renderedLines++;
-
-                    final Widget translationWidget = Text(
-                      line.texts[i],
-                      textAlign: lyricAlignment,
-                      style: TextStyle(
-                        fontSize: fontSize * 0.88,
-                        height: 1.2,
-                        color: Color.lerp(
-                          colorScheme.onSurfaceVariant.withValues(
-                            alpha: _kIdleSecondaryLineAlpha,
-                          ),
-                          colorScheme.primary.withValues(alpha: 0.88),
-                          highlightFactor,
-                        )!,
-                        fontWeight: lyricFontWeight,
-                      ),
-                      // textHeightBehavior: const TextHeightBehavior(
-                      //   applyHeightToFirstAscent: false,
-                      //   applyHeightToLastDescent: false,
-                      // ),
-                    );
-
-                    columnChildren.add(
-                      isCurrent || !shouldBlur
-                          ? translationWidget
-                          : ImageFiltered(
-                              imageFilter: ui.ImageFilter.blur(
-                                sigmaX: calculateSigma(distance),
-                                sigmaY: calculateSigma(distance),
-                              ),
-                              child: translationWidget,
-                            ),
-                    );
-
-                    // 如果还有下一行且没达到上限，添加间距
-                    if (i < line.texts.length - 1 &&
-                        renderedLines < maxAllowed) {
-                      columnChildren.add(const SizedBox(height: 6));
-                    }
-                  }
-                }
-
-                Widget itemWidget = Padding(
-                  padding: EdgeInsets.symmetric(
-                    vertical:
-                        lyricVerticalSpacing +
-                        0.4 * (fontSize / 2), // 补偿行高减少的部分
-                    horizontal: 4,
-                  ),
-                  child: Align(
-                    alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                    child: SizedBox(
-                      width: maxWidth,
-                      child: TextButton(
-                        onPressed: () {
-                          widget.onTapLine?.call(lyricIndex);
-                          // 如果当前处于暂停状态，则开始播放
-                          final playlistNotifier =
-                              Provider.of<PlaylistContentNotifier>(
-                                context,
-                                listen: false,
-                              );
-                          if (!playlistNotifier.isPlaying) {
-                            playlistNotifier.play();
-                          }
-                        },
-                        style: ButtonStyle(
-                          padding: WidgetStateProperty.all<EdgeInsets>(
-                            const EdgeInsets.fromLTRB(12, 9, 12, 9),
-                          ),
-                          shape:
-                              WidgetStateProperty.all<RoundedRectangleBorder>(
-                                RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                          backgroundColor:
-                              WidgetStateProperty.resolveWith<Color>((
-                                Set<WidgetState> states,
-                              ) {
-                                if (states.contains(WidgetState.hovered)) {
-                                  return Colors.grey.withValues(alpha: 0.2);
-                                }
-                                return Colors.transparent;
-                              }),
-                          overlayColor: WidgetStateProperty.resolveWith<Color>((
-                            Set<WidgetState> states,
-                          ) {
-                            if (states.contains(WidgetState.pressed)) {
-                              return Colors.grey.withValues(alpha: 0.3);
-                            }
-                            return Colors.transparent;
-                          }),
-                          alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: columnChildren,
-                        ),
-                      ),
-                    ),
-                  ),
+                // 复用 _buildLyricItem，让非弹性列表与弹性滚动走同一套行渲染逻辑
+                final Widget itemWidget = _buildLyricItem(
+                  lyricIndex: lyricIndex,
+                  maxWidth: maxWidth,
+                  fontSize: fontSize,
+                  fontWeight: lyricFontWeight,
+                  currentLineHighlightFactor: currentLineHighlightFactor,
+                  lyricVerticalSpacing: lyricVerticalSpacing,
+                  lyricAlignment: lyricAlignment,
+                  shouldBlur: shouldBlur,
+                  colorScheme: colorScheme,
+                  blurStrength: lyricBlurStrength,
                 );
 
                 if (line.isInterlude) {
-                  if (isCurrent) {
-                    final playlistNotifier =
-                        Provider.of<PlaylistContentNotifier>(
-                          context,
-                          listen: false,
-                        );
-                    final Widget interludeWidget = Container(
-                      height: fontSize * 1.5,
-                      alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                      padding: EdgeInsets.only(
-                        left: lyricAlignment == TextAlign.left
-                            ? fontSize * 0.5
-                            : 0,
-                        right: lyricAlignment == TextAlign.right
-                            ? fontSize * 0.5
-                            : 0,
-                      ),
-                      child: InterludeAnimationWidget(
-                        isCurrent: isCurrent,
-                        baseColor: colorScheme.onSurfaceVariant.withValues(
-                          alpha: _kIdleMainLineAlpha,
-                        ),
-                        highlightColor: colorScheme.primary.withValues(
-                          alpha: 0.88,
-                        ),
-                        startTime: line.timestamp,
-                        interludeDuration:
-                            line.interludeDuration ?? Duration.zero,
-                        currentTime: playlistNotifier.currentPosition,
-                        isPlaying: playlistNotifier.isPlaying,
-                      ),
-                    );
-
-                    itemWidget = Padding(
-                      padding: EdgeInsets.symmetric(
-                        vertical: lyricVerticalSpacing + 0.4 * (fontSize / 2),
-                        horizontal: 4,
-                      ),
-                      child: Align(
-                        alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                        child: SizedBox(
-                          width: maxWidth,
-                          child: isCurrent || !shouldBlur
-                              ? interludeWidget
-                              : ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: calculateSigma(distance),
-                                    sigmaY: calculateSigma(distance),
-                                  ),
-                                  child: interludeWidget,
-                                ),
-                        ),
-                      ),
-                    );
-                  }
+                  // 间奏行折叠时由 AnimatedSize 承担高度变化，
+                  // 与 _kLyricFollowScrollDuration 合成一次平滑滚动
+                  // （见 didUpdateWidget 中 interludeHandoff 的说明）
                   return AnimatedSize(
                     duration: _kLyricFollowScrollDuration,
                     curve: _kLyricFollowScrollCurve,
-                    child: isCurrent
-                        ? TweenAnimationBuilder<double>(
-                            key: ValueKey('interlude_normal_$lyricIndex'),
-                            tween: Tween<double>(begin: 0.0, end: 1.0),
-                            duration: const Duration(milliseconds: 500),
-                            builder: (context, value, child) {
-                              final double dotValue = ((value - 0.6) / 0.4)
-                                  .clamp(0.0, 1.0);
-                              return Opacity(opacity: dotValue, child: child);
-                            },
-                            child: itemWidget,
-                          )
-                        : const SizedBox.shrink(),
+                    child: itemWidget,
                   );
                 }
 

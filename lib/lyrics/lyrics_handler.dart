@@ -349,8 +349,10 @@ class LyricsHandler {
             }
           } else if (tokens.isNotEmpty) {
             // displayText 为空但 tokens 非空（极少数格式），仍需记录 tokens
-            // 但没有对应的 text 行，不记录 textIndex
+            // 该 token 组没有对应的 text 行，用 -1 占位：karaokeTextIndices
+            // 必须与 karaokeTokenMap 的下标一一对应，否则后面所有 token 组都会错位，去渲染别的行
             karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
+            karaokeTextIndexMap.putIfAbsent(timestamp, () => []).add(-1);
           }
         } else {
           // 清除普通歌词里的时间标记（ <> [] () ）
@@ -482,8 +484,10 @@ class LyricsHandler {
             }
           } else if (tokens.isNotEmpty) {
             // displayText 为空但 tokens 非空（极少数格式），仍需记录 tokens
-            // 但没有对应的 text 行，不记录 textIndex
+            // 该 token 组没有对应的 text 行，用 -1 占位：karaokeTextIndices
+            // 必须与 karaokeTokenMap 的下标一一对应，否则后面所有 token 组都会错位，去渲染别的行
             karaokeTokenMap.putIfAbsent(timestamp, () => []).add(tokens);
+            karaokeTextIndexMap.putIfAbsent(timestamp, () => []).add(-1);
           }
         } else {
           // 清除普通歌词里的时间标记（ <> [] () ）

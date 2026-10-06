@@ -2,6 +2,9 @@ import '../../page/playlist/playlist_models.dart';
 import 'parsed_models.dart';
 
 class LyricConverter {
+  // 罗马音与原文行按时间戳匹配时允许的最大偏差
+  static const int _romajiToleranceMs = 100;
+
   static List<LyricLine> convert(ParsedLyrics parsed) {
     final lines = <LyricLine>[];
 
@@ -17,6 +20,19 @@ class LyricConverter {
     }
 
     final usedTranslationIndices = <int>{};
+
+    // 预处理有效的罗马音行（逐字、行级都可能出现，统一过滤 '//' 及空文本）
+    final validRomaji = <ParsedLine>[];
+    for (final rl in parsed.romajiLines) {
+      final t = rl.text.trim();
+      if (t.isNotEmpty &&
+          t != '//' &&
+          t.replaceAll(RegExp(r'\s+'), '') != '//') {
+        validRomaji.add(rl);
+      }
+    }
+
+    final usedRomajiIndices = <int>{};
 
     for (var i = 0; i < parsed.lines.length; i++) {
       final parsedLine = parsed.lines[i];
@@ -85,17 +101,37 @@ class LyricConverter {
         texts.add(matchedTransText);
       }
 
-      //  3.罗马音（卡拉OK行，排在翻译之后）
-      if (i < parsed.romajiLines.length &&
-          parsed.romajiLines[i].hasWordTimestamps) {
-        final romajiLine = parsed.romajiLines[i];
-        final romajiText = romajiLine.text.trim();
-        final romaTokens = _buildTokensWithPauses(romajiLine.words);
+      // 3.罗马音（排在翻译之后）
+      // 与原文行的对应关系按时间戳就近匹配（不用下标，避免行数不一致时错行）
+      if (validRomaji.isNotEmpty) {
+        var bestRomajiIdx = -1;
+        var minRomajiDiff = _romajiToleranceMs + 1;
 
-        if (romaTokens.isNotEmpty && romajiText.isNotEmpty) {
-          karaokeTextIndices.add(texts.length); // 记录罗马音将在 texts 中的位置
-          texts.add(romajiText);
-          tokensList.add(romaTokens);
+        for (var j = 0; j < validRomaji.length; j++) {
+          if (usedRomajiIndices.contains(j)) continue;
+          final diff = (validRomaji[j].startMs - parsedLine.startMs).abs();
+          if (diff < minRomajiDiff) {
+            minRomajiDiff = diff;
+            bestRomajiIdx = j;
+          }
+        }
+
+        if (bestRomajiIdx >= 0) {
+          usedRomajiIndices.add(bestRomajiIdx);
+          final romajiLine = validRomaji[bestRomajiIdx];
+          final romajiText = romajiLine.text.trim();
+
+          if (romajiLine.hasWordTimestamps) {
+            final romaTokens = _buildTokensWithPauses(romajiLine.words);
+            if (romaTokens.isNotEmpty && romajiText.isNotEmpty) {
+              karaokeTextIndices.add(texts.length); // 记录罗马音将在 texts 中的位置
+              texts.add(romajiText);
+              tokensList.add(romaTokens);
+            }
+          } else if (romajiText.isNotEmpty) {
+            // 行级罗马音：普通文本行
+            texts.add(romajiText);
+          }
         }
       }
 

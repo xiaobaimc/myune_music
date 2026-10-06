@@ -9,6 +9,12 @@ class QrcParser {
     dotAll: true,
   );
 
+  // 裸 QRC 正文探测：行首就是 [开始ms,持续ms]
+  static final _bareQrcPattern = RegExp(r'^\[\d+,\d+\]', multiLine: true);
+
+  // 去掉逐字时间戳，用于兜底取纯文本
+  static final _wordStampPattern = RegExp(r'\(\d+,\d+\)');
+
   // 标签正则：[key:value]
   static final _tagPattern = RegExp(r'^\[(\w+):([^\]]*)\]$');
 
@@ -27,13 +33,17 @@ class QrcParser {
   // LRC 时间戳
   static final _lrcStampPattern = RegExp(r'\[(\d+):(\d{1,2})[.:](\d{1,3})\]');
 
-  /// 解析 QRC 歌词（XML 或 LRC 格式）
+  /// 解析 QRC 歌词（XML 包裹的 QRC / 裸 QRC 正文 / LRC 兼容格式）
   ParsedLyrics parse(String lyric) {
-    // 尝试 XML 格式
+    // 1. 带 XML 外壳的 QRC（QQ 音乐接口返回的就是这种）
     if (_qrcPattern.hasMatch(lyric)) {
       return _parseQrcXml(lyric);
     }
-    // 尝试 LRC 格式
+    // 2. 裸 QRC 正文（AMLL 歌词库里的 .qrc 就是这种，没有 XML 外壳）
+    if (_bareQrcPattern.hasMatch(lyric)) {
+      return _parseQrcBody(lyric);
+    }
+    // 3. 尝试 LRC 格式
     if (lyric.contains('[') && lyric.contains(']')) {
       try {
         return _parseLrc(lyric);
@@ -60,10 +70,16 @@ class QrcParser {
       return const ParsedLyrics(lines: []);
     }
 
+    return _parseQrcBody(qrcMatch.namedGroup('content')!);
+  }
+
+  // 解析 QRC 正文：[行开始ms,行持续ms]文字(字开始ms,字持续ms)…
+  // 字时间是绝对时间；(0,0) 是空格占位，没有自己的时间轴
+  ParsedLyrics _parseQrcBody(String body) {
     final tags = <String, String>{};
     final lrcList = <ParsedLine>[];
 
-    for (final rawLine in qrcMatch.namedGroup('content')!.split('\n')) {
+    for (final rawLine in body.split('\n')) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
 
@@ -85,23 +101,54 @@ class QrcParser {
 
         // 解析逐字
         final words = <ParsedWord>[];
+        var pendingPrefix = '';
+
         for (final wm in _wordPattern.allMatches(lineContent)) {
           final wordContent = wm.namedGroup('content')!;
 
           if (wordContent == '\r') continue;
 
           final wordStart = int.parse(wm.namedGroup('start')!);
-          final wordEnd = wordStart + int.parse(wm.namedGroup('duration')!);
+          final wordDuration = int.parse(wm.namedGroup('duration')!);
+
+          // (0,0) 是空格占位，没有自己的时间轴，直接并进上一个字
+          if (wordStart == 0 && wordDuration == 0) {
+            if (wordContent.isEmpty) continue;
+            if (words.isEmpty) {
+              pendingPrefix += wordContent;
+            } else {
+              final last = words.removeLast();
+              words.add(
+                ParsedWord(
+                  startMs: last.startMs,
+                  endMs: last.endMs,
+                  text: '${last.text}$wordContent',
+                ),
+              );
+            }
+            continue;
+          }
 
           words.add(
-            ParsedWord(startMs: wordStart, endMs: wordEnd, text: wordContent),
+            ParsedWord(
+              startMs: wordStart,
+              endMs: wordStart + wordDuration,
+              text: '$pendingPrefix$wordContent',
+            ),
           );
+          pendingPrefix = '';
         }
 
         if (words.isEmpty) {
-          words.add(
-            ParsedWord(startMs: lineStart, endMs: lineEnd, text: lineContent),
-          );
+          final plainText = (pendingPrefix + lineContent)
+              .replaceAll(_wordStampPattern, '')
+              .replaceAll('\r', '')
+              .trim();
+          if (plainText.isNotEmpty) {
+            words.add(
+              ParsedWord(startMs: lineStart, endMs: lineEnd, text: plainText),
+            );
+          }
         }
 
         lrcList.add(

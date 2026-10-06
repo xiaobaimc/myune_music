@@ -179,7 +179,7 @@ class QQMusicFetcher {
     };
   }
 
-  // 获取歌词（加密 QRC 解密 解析）。
+  // 获取歌词（加密 QRC 解密 解析，含翻译与罗马音）
   Future<ParsedLyrics?> _getLyrics(Map<String, dynamic> song) async {
     final songId = song['id'] as int;
     final songTitle = song['title'] as String? ?? '';
@@ -215,38 +215,53 @@ class QQMusicFetcher {
     // 解密各类歌词字段
     final origLrc = data['lyric'] as String? ?? '';
     final transLrc = data['trans'] as String? ?? '';
+    final romaLrc = data['roma'] as String? ?? '';
 
     // 判断加密类型
     final qrcT = data['qrc_t'] as int? ?? 0;
     final lrcT = data['lrc_t'] as int? ?? 0;
     final origT = qrcT != 0 ? qrcT : lrcT;
     final transT = data['trans_t'] as int? ?? 0;
+    final romaT = data['roma_t'] as int? ?? 0;
 
     // 解密原文
-    String? origDecrypted;
-    if (origLrc.isNotEmpty && origT != 0) {
-      origDecrypted = QrcDecryptor.decrypt(origLrc);
-    }
+    final origDecrypted = (origLrc.isNotEmpty && origT != 0)
+        ? QrcDecryptor.decrypt(origLrc)
+        : null;
+
+    // 解密翻译
+    final transDecrypted = (transLrc.isNotEmpty && transT != 0)
+        ? QrcDecryptor.decrypt(transLrc)
+        : null;
+
+    // 解密罗马音
+    final romaDecrypted = (romaLrc.isNotEmpty && romaT != 0)
+        ? QrcDecryptor.decrypt(romaLrc)
+        : null;
+
     if (origDecrypted == null) return null;
+
+    // 解析翻译
+    final translationLines = <ParsedLine>[];
+    if (transDecrypted != null) {
+      translationLines.addAll(_qrcParser.parse(transDecrypted).lines);
+    }
+
+    // 解析罗马音（逐字或行级都可能，交给 LyricConverter 按时间戳匹配）
+    final romajiLines = <ParsedLine>[];
+    if (romaDecrypted != null) {
+      romajiLines.addAll(_qrcParser.parse(romaDecrypted).lines);
+    }
 
     // 解析原文
     final origParsed = _qrcParser.parse(origDecrypted);
     if (origParsed.lines.isEmpty) return null;
 
-    // 解密翻译
-    final translationLines = <ParsedLine>[];
-    if (transLrc.isNotEmpty && transT != 0) {
-      final transDecrypted = QrcDecryptor.decrypt(transLrc);
-      if (transDecrypted != null) {
-        final transParsed = _qrcParser.parse(transDecrypted);
-        translationLines.addAll(transParsed.lines);
-      }
-    }
-
     return ParsedLyrics(
       tags: origParsed.tags,
       lines: origParsed.lines,
       translationLines: translationLines,
+      romajiLines: romajiLines,
     );
   }
 }

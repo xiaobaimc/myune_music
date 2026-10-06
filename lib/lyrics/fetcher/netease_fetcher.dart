@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../decryptor/eapi_decryptor.dart';
 import '../parser/parsed_models.dart';
-// import '../parser/yrc_parser.dart';
+import '../parser/yrc_parser.dart';
 
 class NeteaseFetcher {
   static const _baseUrl = 'https://music.163.com';
@@ -18,7 +18,16 @@ class NeteaseFetcher {
     'Content-Type': 'application/x-www-form-urlencoded',
   };
 
-  // final _yrcParser = YrcParser();
+  final _yrcParser = YrcParser();
+
+  // 把 YRC 的逐字时间轴贴回 LRC 行时，向前看几行
+  static const int _wordLookaheadLines = 4;
+
+  // 没匹配上的逐字行落后多少毫秒就丢弃
+  static const int _lineOffsetToleranceMs = 1000;
+
+  // 文本对不上时，允许的行起始偏差
+  static const int _lineMatchToleranceMs = 60;
 
   // 搜索歌曲并获取歌词 同时附带歌曲 ID（用于 AMLL 查询）
   Future<({ParsedLyrics? lyrics, int? songId})> search(
@@ -105,14 +114,15 @@ class NeteaseFetcher {
     }
   }
 
-  // 获取歌词（含 YRC 逐字）
+  // 获取歌词（逐字原文用 YRC，翻译用 tlyric，罗马音用 romalrc）
   Future<ParsedLyrics?> _getLyrics(int songId) async {
     const path = '/api/song/lyric/v1';
 
     final params = {
       'id': songId,
       'lv': -1, // 普通歌词版本
-      'tv': -1, // 翻译版本
+      'tv': -1, // 翻译版本（tlyric）
+      'rv': -1, // 罗马音版本（romalrc）
       'yv': -1, // YRC 逐字版本
     };
 
@@ -133,48 +143,122 @@ class NeteaseFetcher {
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       if (data['code'] != 200) return null;
 
-      // final yrcData = data['yrc'] as Map<String, dynamic>? ?? {};
+      final yrcData = data['yrc'] as Map<String, dynamic>? ?? {};
       final lrcData = data['lrc'] as Map<String, dynamic>? ?? {};
       final tlyricData = data['tlyric'] as Map<String, dynamic>? ?? {};
+      final romalrcData = data['romalrc'] as Map<String, dynamic>? ?? {};
 
-      // final yrcContent = yrcData['lyric'] as String? ?? '';
+      final yrcContent = yrcData['lyric'] as String? ?? '';
       final lrcContent = lrcData['lyric'] as String? ?? '';
       final tlyricContent = tlyricData['lyric'] as String? ?? '';
+      final romalrcContent = romalrcData['lyric'] as String? ?? '';
 
-      // 暂时不使用逐字歌词（YRC），只使用普通 LRC 歌词
-      // if (yrcContent.isNotEmpty) {
-      //   final parsed = _yrcParser.parse(yrcContent);
-      //   // 合并翻译
-      //   if (tlyricContent.isNotEmpty) {
-      //     return _mergeTranslation(parsed, tlyricContent);
-      //   }
-      //   return parsed;
-      // } else if (lrcContent.isNotEmpty) {
-      if (lrcContent.isNotEmpty) {
-        final lines = _parseLrcToLines(lrcContent);
-        if (tlyricContent.isNotEmpty) {
-          final transLines = _parseLrcToLines(tlyricContent);
-          return ParsedLyrics(lines: lines, translationLines: transLines);
-        }
-        return ParsedLyrics(lines: lines);
+      final yrcLines = yrcContent.isNotEmpty
+          ? _yrcParser.parse(yrcContent).lines
+          : <ParsedLine>[];
+
+      var lines = _parseLrcToLines(lrcContent);
+      if (yrcLines.isNotEmpty) {
+        lines = _attachWordTimings(lines, yrcLines);
+      } else if (lines.isEmpty) {
+        // 没有 LRC 时退回 YRC 自己的行（会少掉头部行）
+        lines = yrcLines;
       }
 
-      return null;
+      if (lines.isEmpty) return null;
+
+      final transLines = tlyricContent.isNotEmpty
+          ? _parseLrcToLines(tlyricContent)
+          : <ParsedLine>[];
+
+      // 行级罗马音（romalrc）与 LRC/翻译共用同一套时间戳
+      final romaLines = romalrcContent.isNotEmpty
+          ? _parseLrcToLines(romalrcContent)
+          : <ParsedLine>[];
+
+      return ParsedLyrics(
+        lines: lines,
+        translationLines: transLines,
+        romajiLines: romaLines,
+      );
     } catch (_) {
       return null;
     }
   }
 
-  // 将翻译 LRC 合并到 YRC 解析结果中
-  // ParsedLyrics _mergeTranslation(ParsedLyrics yrcParsed, String tlyricLrc) {
-  //   final transLines = _parseLrcToLines(tlyricLrc);
-  //   return ParsedLyrics(
-  //     tags: yrcParsed.tags,
-  //     lines: yrcParsed.lines,
-  //     translationLines: transLines,
-  //     romajiLines: yrcParsed.romajiLines,
-  //   );
-  // }
+  // 把逐字歌词（YRC）的时间轴贴到行级歌词（LRC）上
+  // 行起始时间仍然用 LRC 的，只替换成 YRC 的逐字 words
+  // 这样后面的翻译/罗马音按时间戳匹配不会因为两套时间轴的整体偏移而错行
+  //
+  // 两套时间轴实测会差几十 几百毫秒（YRC 的行起始是第一个字的起点）
+  // 所以以文本一致为主要判据，时间戳只作兜底
+  List<ParsedLine> _attachWordTimings(
+    List<ParsedLine> baseLines,
+    List<ParsedLine> wordLines,
+  ) {
+    if (baseLines.isEmpty || wordLines.isEmpty) return baseLines;
+
+    final result = <ParsedLine>[];
+    var j = 0;
+
+    for (final base in baseLines) {
+      // 只在接下来的几行里找匹配
+      // 同时避免错配到相邻的其它行
+      final int windowEnd = (j + _wordLookaheadLines) < wordLines.length
+          ? (j + _wordLookaheadLines)
+          : wordLines.length;
+
+      var matchedIndex = -1;
+
+      // 1. 文本一致（忽略空白）最可靠
+      for (var k = j; k < windowEnd; k++) {
+        if (wordLines[k].words.isNotEmpty &&
+            _isSameText(base.text, wordLines[k].text)) {
+          matchedIndex = k;
+          break;
+        }
+      }
+
+      // 2. 文本对不上时退回时间戳（容差很小，避免抢走相邻行）
+      if (matchedIndex < 0) {
+        for (var k = j; k < windowEnd; k++) {
+          if (wordLines[k].words.isEmpty) continue;
+          if ((wordLines[k].startMs - base.startMs).abs() <=
+              _lineMatchToleranceMs) {
+            matchedIndex = k;
+            break;
+          }
+        }
+      }
+
+      if (matchedIndex < 0) {
+        // 落后时才丢弃它，避免指针一直卡住
+        while (j < wordLines.length &&
+            wordLines[j].startMs < base.startMs - _lineOffsetToleranceMs) {
+          j++;
+        }
+        result.add(base);
+        continue;
+      }
+
+      result.add(
+        ParsedLine(
+          startMs: base.startMs,
+          endMs: base.endMs,
+          words: wordLines[matchedIndex].words,
+        ),
+      );
+      j = matchedIndex + 1;
+    }
+
+    return result;
+  }
+
+  static bool _isSameText(String a, String b) {
+    final na = a.replaceAll(RegExp(r'\s+'), '');
+    final nb = b.replaceAll(RegExp(r'\s+'), '');
+    return na.isNotEmpty && na == nb;
+  }
 
   // 简单 LRC 解析
   static final _lrcPattern = RegExp(r'\[(\d+):(\d{1,2})[.:](\d{1,3})\]');
