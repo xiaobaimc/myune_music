@@ -261,32 +261,85 @@ class QrcDecryptor {
     return cur;
   }
 
-  // 解密 QQ 音乐 QRC 歌词
+  // 解密 QQ 音乐 QRC 歌词（内容是十六进制字符串）
   static String? decrypt(String encryptedQrc) {
     if (encryptedQrc.isEmpty) return null;
 
     try {
-      final encryptedBytes = _hexDecode(encryptedQrc);
-      final schedule = _tripledesKeySetup(_qrcKey, _decrypt);
-
-      final builder = BytesBuilder(copy: false);
-      for (var i = 0; i < encryptedBytes.length; i += 8) {
-        final block = encryptedBytes.sublist(i, i + 8);
-        builder.add(_tripledesCrypt(block, schedule));
-      }
-
-      final decryptedData = builder.takeBytes();
-
-      // zlib 解压
-      try {
-        final decompressed = zlib.decode(decryptedData);
-        return utf8.decode(decompressed);
-      } catch (_) {
-        final decompressed = ZLibDecoder(raw: true).convert(decryptedData);
-        return utf8.decode(decompressed);
-      }
+      return _decryptRaw(_hexDecode(encryptedQrc));
     } catch (_) {
       return null;
+    }
+  }
+
+  /// 解密 QRC 字节流，兼容两种落盘形态
+  static String? decryptBytes(Uint8List raw) {
+    if (raw.isEmpty) return null;
+
+    // 十六进制文本形态
+    if (_looksLikeHexText(raw)) {
+      try {
+        final text = utf8.decode(raw).replaceAll(_whitespacePattern, '');
+        return decrypt(text);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // 二进制密文形态：3DES 按 8 字节分组，尾部不足一组的零散字节忽略
+    final body = raw.length % 8 == 0
+        ? raw
+        : raw.sublist(0, raw.length - raw.length % 8);
+    if (body.isEmpty) return null;
+    return _decryptRaw(body);
+  }
+
+  static final RegExp _whitespacePattern = RegExp(r'\s+');
+
+  // 头部采样判断是否为十六进制文本（允许换行/空格）
+  static bool _looksLikeHexText(Uint8List raw) {
+    if (raw.length < 16) return false;
+    var checked = 0;
+    for (var i = 0; i < raw.length && checked < 64; i++) {
+      final c = raw[i];
+      final isHex = (c >= 0x30 && c <= 0x39) ||
+          (c >= 0x41 && c <= 0x46) ||
+          (c >= 0x61 && c <= 0x66);
+      if (isHex) {
+        checked++;
+        continue;
+      }
+      if (c == 0x0A || c == 0x0D || c == 0x20 || c == 0x09) continue;
+      return false;
+    }
+    return checked >= 64;
+  }
+
+  // 3DES 解密 + zlib 解压
+  static String? _decryptRaw(Uint8List encryptedBytes) {
+    if (encryptedBytes.isEmpty) return null;
+
+    final schedule = _tripledesKeySetup(_qrcKey, _decrypt);
+
+    final builder = BytesBuilder(copy: false);
+    for (var i = 0; i + 8 <= encryptedBytes.length; i += 8) {
+      final block = encryptedBytes.sublist(i, i + 8);
+      builder.add(_tripledesCrypt(block, schedule));
+    }
+
+    final decryptedData = builder.takeBytes();
+
+    // zlib 解压
+    try {
+      final decompressed = zlib.decode(decryptedData);
+      return utf8.decode(decompressed);
+    } catch (_) {
+      try {
+        final decompressed = ZLibDecoder(raw: true).convert(decryptedData);
+        return utf8.decode(decompressed);
+      } catch (_) {
+        return null;
+      }
     }
   }
 

@@ -7,6 +7,7 @@ import 'package:silky_scroll/silky_scroll.dart';
 import '../../../theme/scroll_config.dart';
 import '../settings_provider.dart';
 import '../../../widgets/font_selector_row.dart';
+import '../lyric_source_order.dart';
 import '../page_visibility_settings.dart';
 import 'custom_background_settings.dart';
 import 'info_icon.dart';
@@ -20,6 +21,20 @@ class PersonalizationTab extends StatefulWidget {
 
 class _PersonalizationTabState extends State<PersonalizationTab> {
   late final ScrollController _scrollController = ScrollController();
+
+  // 显示歌词来源优先级排序对话框
+  void _showLyricSourceOrder(BuildContext context, SettingsProvider settings) {
+    showDialog<List<String>>(
+      context: context,
+      builder: (BuildContext context) {
+        return LyricSourceOrderDialog(order: settings.lyricSourceOrder);
+      },
+    ).then((newOrder) {
+      if (newOrder != null) {
+        settings.setLyricSourceOrder(newOrder);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -50,6 +65,39 @@ class _PersonalizationTabState extends State<PersonalizationTab> {
           child: PageVisibilitySettings(),
         ),
 
+        // 歌词来源优先级
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(
+                          '歌词来源优先级',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(width: 4),
+                        const InfoIcon('当一首歌同时存在多种歌词时，按选择的顺序依次尝试获取，获取到就停止'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showLyricSourceOrder(context, settings),
+                    icon: const Icon(Icons.swap_vert_circle_outlined, size: 20),
+                    label: const Text('调整顺序'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
         if (Platform.isWindows)
           SwitchListTile(
             title: const Text('在任务栏显示播放进度'),
@@ -69,20 +117,7 @@ class _PersonalizationTabState extends State<PersonalizationTab> {
             context.read<SettingsProvider>().setForceSingleLineLyric(value);
           },
         ),
-        // 优先读取外置LRC歌词
-        SwitchListTile(
-          title: const Row(
-            children: [
-              Text('优先读取外置LRC歌词'),
-              SizedBox(width: 4),
-              InfoIcon('启用后会优先读取同名.lrc作为歌词，其次内嵌歌词，否则相反\n该选项适用于同时拥有内嵌以及外置歌词的情况'),
-            ],
-          ),
-          value: settings.preferExternalLyrics,
-          onChanged: (value) {
-            context.read<SettingsProvider>().setPreferExternalLyrics(value);
-          },
-        ),
+
         // 始终显示专辑名称
         SwitchListTile(
           title: const Text('始终显示专辑名称'),

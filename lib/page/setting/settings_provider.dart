@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+
+import '../../lyrics/lyric_source.dart';
 
 // 自定义背景遮罩样式
 enum BackgroundMaskStyle { none, solid, glass }
@@ -47,7 +50,7 @@ class SettingsProvider with ChangeNotifier {
   static const _audioDeviceDescKey = 'audio_device_desc';
   static const _audioDeviceIsAutoKey = 'audio_device_is_auto';
   static const _ignorePlaybackErrorsKey = 'ignorePlaybackErrors';
-  static const _preferExternalLyricsKey = 'preferExternalLyrics';
+  static const _lyricSourceOrderKey = 'lyricSourceOrder'; // 歌词来源优先级顺序
   static const _autoAdjustLyricLayoutKey =
       'autoAdjustLyricLayout'; // 自动调节歌词字体与间距设置的 key
   static const _lyricFontWeightKey = 'lyricFontWeight'; // 歌词字重设置的 key
@@ -86,7 +89,7 @@ class SettingsProvider with ChangeNotifier {
   String? _audioDeviceName; // 音频设备名称
   String? _audioDeviceDesc; // 音频设备描述
   bool _ignorePlaybackErrors = false; // 默认不忽略播放错误
-  bool _preferExternalLyrics = false; // 默认不优先读取外置LRC歌词
+  List<String> _lyricSourceOrder = LyricSource.defaultOrderIds; // 歌词来源优先级顺序
   bool _autoAdjustLyricLayout = false; // 默认不自动调节歌词布局
   bool _enableLyricElasticScroll = false;
   bool _enableLoudness = false;
@@ -151,7 +154,8 @@ class SettingsProvider with ChangeNotifier {
   String? get audioDeviceDesc => _audioDeviceDesc;
   bool get ignorePlaybackErrors => _ignorePlaybackErrors;
 
-  bool get preferExternalLyrics => _preferExternalLyrics; // 获取优先读取外置LRC歌词设置
+  // 歌词来源优先级顺序
+  List<String> get lyricSourceOrder => List.unmodifiable(_lyricSourceOrder);
   bool get autoAdjustLyricLayout => _autoAdjustLyricLayout; // 获取是否自动调节歌词布局
   bool get enableLyricElasticScroll => _enableLyricElasticScroll;
   bool get enableLoudness => _enableLoudness;
@@ -238,7 +242,6 @@ class SettingsProvider with ChangeNotifier {
     _audioDeviceName = prefs.getString(_audioDeviceNameKey);
     _audioDeviceDesc = prefs.getString(_audioDeviceDescKey);
     _ignorePlaybackErrors = prefs.getBool(_ignorePlaybackErrorsKey) ?? false;
-    _preferExternalLyrics = prefs.getBool(_preferExternalLyricsKey) ?? false;
     _autoAdjustLyricLayout = prefs.getBool(_autoAdjustLyricLayoutKey) ?? false;
     _enableLyricElasticScroll =
         prefs.getBool(_enableLyricElasticScrollKey) ?? false;
@@ -274,6 +277,12 @@ class SettingsProvider with ChangeNotifier {
     final separatorsList = prefs.getStringList(_artistSeparatorsKey);
     if (separatorsList != null && separatorsList.isNotEmpty) {
       _artistSeparators = separatorsList;
+    }
+
+    // 加载歌词来源优先级顺序
+    final lyricSourceOrderList = prefs.getStringList(_lyricSourceOrderKey);
+    if (lyricSourceOrderList != null && lyricSourceOrderList.isNotEmpty) {
+      _lyricSourceOrder = LyricSource.normalizeOrder(lyricSourceOrderList);
     }
 
     final alignmentString = prefs.getString(_lyricAlignmentKey);
@@ -512,11 +521,14 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setBool(_autoHidePlayPageComponentsKey, value);
   }
 
-  void setPreferExternalLyrics(bool value) async {
-    _preferExternalLyrics = value;
+  void setLyricSourceOrder(List<String> order) async {
+    final normalized = LyricSource.normalizeOrder(order);
+    if (listEquals(_lyricSourceOrder, normalized)) return;
+
+    _lyricSourceOrder = normalized;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_preferExternalLyricsKey, value);
+    await prefs.setStringList(_lyricSourceOrderKey, normalized);
   }
 
   void setEnableLyricElasticScroll(bool value) async {

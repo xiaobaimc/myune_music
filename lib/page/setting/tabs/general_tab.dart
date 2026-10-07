@@ -238,7 +238,7 @@ class _GeneralTabState extends State<GeneralTab> {
             children: [
               Text('从网络获取歌词'),
               SizedBox(width: 4),
-              InfoIcon("启用后将在未读取到内嵌及本地lrc歌词时从网络获取歌词"),
+              InfoIcon("默认在内嵌和外置歌词都未读取到时获取，可在个性化更改歌词来源优先级"),
             ],
           ),
           value: settings.enableOnlineLyrics,
@@ -260,7 +260,7 @@ class _GeneralTabState extends State<GeneralTab> {
                   ),
                   const SizedBox(width: 4),
                   const InfoIcon(
-                    '企鹅：匹配准、支持翻译和逐字歌词和注音\n网抑：匹配一般，支持翻译和注音以及部分逐字歌词\n库狗：匹配高、支持翻译和逐字歌词以及注音\n当前选中的源未匹配到歌曲时，会自动使用其他源进行匹配\n显示注音需歌词设置抽屉中的同时间戳歌词行数≥3',
+                    '企鹅：匹配准、支持翻译和逐字歌词和注音\n网抑：匹配一般、支持翻译和注音以及部分逐字歌词\n库狗：匹配高、支持翻译和逐字歌词以及注音\n显示注音需歌词设置抽屉中的同时间戳歌词行数≥3',
                   ),
                 ],
               ),

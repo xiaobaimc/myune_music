@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -10,12 +11,19 @@ import '../page/setting/settings_provider.dart';
 import '../src/rust/api/audio_info.dart';
 import '../services/notification_service.dart';
 
+import 'decryptor/krc_decryptor.dart';
+import 'decryptor/lyric_encryption_detector.dart';
+import 'decryptor/qrc_decryptor.dart';
 import 'fetcher/netease_fetcher.dart';
 import 'fetcher/kugou_fetcher.dart';
 import 'fetcher/qqmusic_fetcher.dart';
 // import 'fetcher/amll_fetcher.dart';
+import 'lyric_source.dart';
+import 'parser/krc_parser.dart';
 import 'parser/lyric_converter.dart';
 import 'parser/parsed_models.dart';
+import 'parser/qrc_parser.dart';
+import 'parser/yrc_parser.dart';
 
 class LyricsHandler {
   final SettingsProvider _settingsProvider;
@@ -27,6 +35,10 @@ class LyricsHandler {
   final KugouFetcher _kugouFetcher = KugouFetcher();
   final QQMusicFetcher _qqmusicFetcher = QQMusicFetcher();
   // final AmllFetcher _amllFetcher = AmllFetcher();
+
+  final KrcParser _krcParser = KrcParser();
+  final QrcParser _qrcParser = QrcParser();
+  final YrcParser _yrcParser = YrcParser();
 
   List<LyricLine> _currentLyrics = [];
   int _currentLyricLineIndex = -1;
@@ -65,78 +77,156 @@ class LyricsHandler {
     _lyricLineIndexController.add(-1);
     _notifyListeners();
 
-    if (_settingsProvider.preferExternalLyrics) {
-      // 优先读取外置LRC歌词
-      await _loadExternalLyrics(songFilePath);
-      if (_currentLyrics.isNotEmpty) {
-        return;
+    final order = _settingsProvider.lyricSourceOrder;
+    final song = _getCurrentSong();
+
+    // 按用户设置的优先级依次尝试各个歌词来源
+    for (var i = 0; i < order.length; i++) {
+      // 加载过程中切歌则放弃，避免把上一首的歌词贴到新歌上
+      if (song != null && _getCurrentSong()?.filePath != song.filePath) return;
+
+      final source = LyricSource.fromId(order[i]);
+      if (source == null) continue;
+
+      switch (source) {
+        case LyricSource.embedded:
+          await _loadEmbeddedLyrics(songFilePath);
+          break;
+        case LyricSource.externalLrc:
+        case LyricSource.externalKrc:
+        case LyricSource.externalQrc:
+        case LyricSource.externalYrc:
+          await _loadExternalLyrics(songFilePath, source);
+          break;
+        case LyricSource.online:
+          if (!_settingsProvider.enableOnlineLyrics || song == null) break;
+
+          // 网络歌词排在最后时仍然后台加载，不阻塞本地歌词的展示
+          if (i == order.length - 1) {
+            unawaited(
+              _loadOnlineLyricsPipeline(
+                song,
+                preferredSource: _preferredOnlineSource(),
+              ),
+            );
+            return;
+          }
+
+          // 排在中间时必须等出结果，否则无法判断是否继续尝试后面的来源
+          await _loadOnlineLyricsPipeline(
+            song,
+            preferredSource: _preferredOnlineSource(),
+          );
+          break;
       }
-      // 内嵌歌词
-      await _loadEmbeddedLyrics(songFilePath);
-      if (_currentLyrics.isNotEmpty) {
-        return;
-      }
-    } else {
-      // 优先读取内嵌歌词
-      await _loadEmbeddedLyrics(songFilePath);
-      if (_currentLyrics.isNotEmpty) {
-        return;
-      }
-      // 外置歌词
-      await _loadExternalLyrics(songFilePath);
-      if (_currentLyrics.isNotEmpty) {
-        return;
-      }
+
+      if (_currentLyrics.isNotEmpty) return;
     }
 
-    if (_settingsProvider.enableOnlineLyrics && _getCurrentSong() != null) {
-      _currentLyrics = []; // 清空歌词
-      _notifyListeners();
+    // 所有来源都没有歌词
+    _currentLyrics = [];
+    _notifyListeners();
+  }
 
-      // 根据设置选择主选歌词源
-      final Song currentSong = _getCurrentSong()!;
-      final String preferredSource;
-      if (_settingsProvider.primaryLyricSource == 'qq') {
-        preferredSource = 'qq'; // QQ音乐
-      } else if (_settingsProvider.primaryLyricSource == 'netease') {
-        preferredSource = 'netease'; // 网易云音乐
-      } else {
-        preferredSource = 'kugou'; // 酷狗音乐
-      }
-      // 后台异步加载在线歌词
-      unawaited(
-        _loadOnlineLyricsPipeline(
-          currentSong,
-          preferredSource: preferredSource,
-        ),
-      );
-    } else {
-      _currentLyrics = []; // 确保在不执行网络请求时清空歌词
-      _notifyListeners();
+  // 当前选中的网络歌词主源
+  String _preferredOnlineSource() {
+    switch (_settingsProvider.primaryLyricSource) {
+      case 'qq':
+        return 'qq'; // QQ音乐
+      case 'netease':
+        return 'netease'; // 网易云音乐
+      default:
+        return 'kugou'; // 酷狗音乐
     }
   }
 
-  Future<void> _loadExternalLyrics(String songFilePath) async {
-    final songDirectory = p.dirname(songFilePath);
-    final songFileNameWithoutExtension = p.basenameWithoutExtension(
-      songFilePath,
-    );
-    final lrcFilePath = p.join(
-      songDirectory,
-      '$songFileNameWithoutExtension.lrc',
+  // 加载外置歌词文件（.lrc / .krc / .qrc / .yrc）
+  Future<void> _loadExternalLyrics(
+    String songFilePath,
+    LyricSource source,
+  ) async {
+    final extension = source.fileExtension;
+    if (extension == null) return;
+
+    final lyricFilePath = p.join(
+      p.dirname(songFilePath),
+      '${p.basenameWithoutExtension(songFilePath)}.$extension',
     );
 
-    final lrcFile = File(lrcFilePath);
+    final lyricFile = File(lyricFilePath);
+    if (!await lyricFile.exists()) return;
 
-    if (await lrcFile.exists()) {
-      try {
-        final lines = await lrcFile.readAsLines();
-        _currentLyrics = _parseLrcContent(lines);
+    try {
+      final bytes = await lyricFile.readAsBytes();
+      final lyrics = _parseExternalLyric(bytes, source);
+      if (lyrics != null && lyrics.isNotEmpty) {
+        _currentLyrics = lyrics;
         _notifyListeners();
-        return;
-      } catch (e) {
-        // debugPrint('读取.lrc文件失败：$e');
       }
+    } catch (e) {
+      // 读取或解析失败时静默跳过，交给下一个来源
+    }
+  }
+
+  // 解析外置歌词文件内容
+  // 加密形态先做常数级的特征检测，命中才调用解密器，避免明文文件白跑一次解密
+  List<LyricLine>? _parseExternalLyric(Uint8List bytes, LyricSource source) {
+    final text = _decodeUtf8(bytes);
+
+    switch (source) {
+      case LyricSource.externalLrc:
+        if (text == null) return null;
+        return _parseLrcContent(text.split(RegExp(r'\r?\n')));
+
+      case LyricSource.externalKrc:
+        // 明文 KRC 直接解析；加密 KRC（Base64 文本或带 krc1 魔数的二进制）才解密
+        if (text != null && !LyricEncryptionDetector.isEncryptedKrc(text)) {
+          return _toLyricLines(_krcParser.parse(text));
+        }
+        final decryptedKrc = KrcDecryptor.decryptBytes(bytes);
+        if (decryptedKrc == null) return null;
+        return _toLyricLines(_krcParser.parse(decryptedKrc));
+
+      case LyricSource.externalQrc:
+        // 明文直接解析；加密 QRC 可能是十六进制文本，也可能是二进制密文
+        final String? qrcContent;
+        if (text == null) {
+          qrcContent = QrcDecryptor.decryptBytes(bytes);
+        } else {
+          qrcContent = LyricEncryptionDetector.isEncryptedQrc(text)
+              ? QrcDecryptor.decryptBytes(bytes)
+              : text;
+        }
+        if (qrcContent == null) return null;
+        return _toLyricLines(_qrcParser.parse(qrcContent));
+
+      case LyricSource.externalYrc:
+        if (text == null) return null;
+        // 网易云 YRC 官方就是明文，这里只排除疑似加密/二进制的内容
+        if (LyricEncryptionDetector.isEncryptedYrc(text)) return null;
+        return _toLyricLines(_yrcParser.parse(text));
+
+      default:
+        return null;
+    }
+  }
+
+  // 解析结果转成界面使用的歌词行，并补上间奏
+  List<LyricLine> _toLyricLines(ParsedLyrics parsed) {
+    if (parsed.lines.isEmpty) return <LyricLine>[];
+    return _processInterludes(LyricConverter.convert(parsed));
+  }
+
+  // 严格 UTF-8 解码，失败返回 null（调用方据此判断是否为二进制文件）
+  String? _decodeUtf8(Uint8List bytes) {
+    try {
+      var text = utf8.decode(bytes);
+      if (text.isNotEmpty && text.codeUnitAt(0) == 0xFEFF) {
+        text = text.substring(1); // 去掉 UTF-8 BOM
+      }
+      return text;
+    } catch (e) {
+      return null;
     }
   }
 
