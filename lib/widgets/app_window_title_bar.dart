@@ -3,6 +3,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 
 import '../page/setting/settings_provider.dart';
+import '../utils/pixel_snap.dart';
 import 'custom_background_layer.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
@@ -17,8 +18,9 @@ class AppWindowTitleBar extends StatelessWidget {
           settings,
           colorScheme.surface,
         );
+    final double titleBarHeight = snapToDevicePixel(context, 31.0);
     return Container(
-      height: 31.0,
+      height: titleBarHeight,
       color: titleBarBackgroundColor,
       child: Row(
         children: [

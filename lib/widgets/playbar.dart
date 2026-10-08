@@ -9,6 +9,7 @@ import 'balance_rate_control.dart';
 import 'play_pause_button.dart';
 import 'play_mode_button.dart';
 import '../page/setting/settings_provider.dart';
+import '../utils/pixel_snap.dart';
 import 'custom_background_layer.dart';
 
 // 格式化时间函数
@@ -64,13 +65,15 @@ class _PlaybarState extends State<Playbar> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrowScreen = screenWidth < 700;
 
+    final double playbarHeight = snapToDevicePixel(context, 70.0);
+
     // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
     return Consumer<PlaylistContentNotifier>(
       builder: (context, playlistNotifier, child) {
         final Player player = playlistNotifier.mediaPlayer;
 
         return Container(
-          height: 70,
+          height: playbarHeight,
           color: CustomBackgroundSurfaces.transparentWhenEnabled(
             settings,
             colorScheme.surface,

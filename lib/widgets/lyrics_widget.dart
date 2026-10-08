@@ -16,7 +16,7 @@ import 'interlude_animation_widget.dart';
 const double _kIdleMainLineAlpha = 0.55; // 原文/主行
 const double _kIdleSecondaryLineAlpha = 0.45; // 翻译、罗马音等次级行
 
-const Duration _kHighlightFadeInDuration = Duration(milliseconds: 80);
+const Duration _kHighlightFadeInDuration = Duration(milliseconds: 160);
 const Duration _kHighlightFadeOutDuration = Duration(milliseconds: 100);
 
 const Curve _kHighlightFadeCurve = Curves.easeOutCubic;
@@ -1701,9 +1701,9 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
           return Text(widget.text, style: highlightStyle);
         }
 
-        const double gradientEdge = 0.08; // 8% 宽度的渐变带
-        final double fadeStart = (progress - gradientEdge).clamp(0.0, 1.0);
-        final double fadeEnd = (progress + gradientEdge).clamp(0.0, 1.0);
+        final double edgePx = widget.fontSize * 0.16;
+        double edgeOf(Rect bounds) =>
+            bounds.width > 0 ? (edgePx / bounds.width).clamp(0.0, 0.5) : 0.0;
 
         return Stack(
           children: [
@@ -1711,6 +1711,9 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
             ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (Rect bounds) {
+                final double edge = edgeOf(bounds);
+                final double fadeStart = (progress - edge).clamp(0.0, 1.0);
+                final double fadeEnd = (progress + edge).clamp(0.0, 1.0);
                 return LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
@@ -1729,6 +1732,9 @@ class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
             ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (Rect bounds) {
+                final double edge = edgeOf(bounds);
+                final double fadeStart = (progress - edge).clamp(0.0, 1.0);
+                final double fadeEnd = (progress + edge).clamp(0.0, 1.0);
                 return LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
