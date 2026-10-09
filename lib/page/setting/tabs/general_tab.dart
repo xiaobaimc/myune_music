@@ -168,6 +168,20 @@ class _GeneralTabState extends State<GeneralTab> {
               ),
             ),
           ),
+        // 启动时自动检查更新
+        SwitchListTile(
+          title: Row(
+            children: [
+              Text('自动检查更新', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(width: 4),
+              const InfoIcon('启用后将在启动应用时静默检查更新'),
+            ],
+          ),
+          value: settings.autoCheckUpdates,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setAutoCheckUpdates(value);
+          },
+        ),
         // 主题模式
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

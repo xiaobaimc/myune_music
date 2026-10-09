@@ -60,6 +60,7 @@ class SettingsProvider with ChangeNotifier {
   static const _enableReplayGainKey = 'enableReplayGain';
   static const _enableGaplessPlaybackKey = 'enableGaplessPlayback';
   static const _autoHidePlayPageComponentsKey = 'autoHidePlayPageComponents';
+  static const _autoCheckUpdatesKey = 'autoCheckUpdates'; // 启动时自动检查更新设置的 key
 
   static const _enableCustomBackgroundKey =
       'enableCustomBackground'; // 自定义背景图开关
@@ -96,6 +97,7 @@ class SettingsProvider with ChangeNotifier {
   bool _enableReplayGain = false;
   bool _enableGaplessPlayback = false; // 默认不启用无缝播放
   bool _autoHidePlayPageComponents = false; // 默认不自动隐藏部分组件
+  bool _autoCheckUpdates = true; // 默认启用启动时自动检查更新
 
   bool _enableCustomBackground = false; // 默认不启用自定义背景图
   String? _customBackgroundPath; // 自定义背景图文件路径
@@ -162,6 +164,7 @@ class SettingsProvider with ChangeNotifier {
   bool get enableReplayGain => _enableReplayGain;
   bool get enableGaplessPlayback => _enableGaplessPlayback;
   bool get autoHidePlayPageComponents => _autoHidePlayPageComponents;
+  bool get autoCheckUpdates => _autoCheckUpdates; // 获取启动时自动检查更新设置
 
   bool get enableCustomBackground => _enableCustomBackground; // 获取自定义背景图开关
   String? get customBackgroundPath => _customBackgroundPath; // 获取自定义背景图路径
@@ -250,6 +253,7 @@ class SettingsProvider with ChangeNotifier {
     _enableGaplessPlayback = prefs.getBool(_enableGaplessPlaybackKey) ?? false;
     _autoHidePlayPageComponents =
         prefs.getBool(_autoHidePlayPageComponentsKey) ?? false;
+    _autoCheckUpdates = prefs.getBool(_autoCheckUpdatesKey) ?? true; // 加载自动检查更新设置
 
     // 加载自定义背景图设置
     _enableCustomBackground =
@@ -519,6 +523,14 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoHidePlayPageComponentsKey, value);
+  }
+
+  void setAutoCheckUpdates(bool value) async {
+    if (_autoCheckUpdates == value) return;
+    _autoCheckUpdates = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoCheckUpdatesKey, value);
   }
 
   void setLyricSourceOrder(List<String> order) async {

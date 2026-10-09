@@ -27,7 +27,9 @@ import 'theme/theme_provider.dart';
 import 'layout/app_shell.dart';
 import 'page/playlist/playlist_content_notifier.dart';
 import 'services/notification_service.dart';
+import 'services/update_check_service.dart';
 import 'page/setting/settings_provider.dart';
+import 'page/setting/setting_page.dart';
 import 'src/rust/frb_generated.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -193,6 +195,27 @@ class _MyAppState extends State<MyApp> with TrayListener {
         _initializeTaskbarProgress();
       }
     });
+
+    // 启动时自动检查更新
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runStartupUpdateCheck();
+    });
+  }
+
+  Future<void> _runStartupUpdateCheck() async {
+    try {
+      final settings = _settingsProvider ?? context.read<SettingsProvider>();
+      // 等待设置读取完成，避免拿到默认值
+      await settings.initializationFuture;
+      if (!mounted || !settings.autoCheckUpdates) return;
+
+      await UpdateCheckService.runSilentCheck(
+        currentVersion: appVersion,
+        notificationService: context.read<NotificationService>(),
+      );
+    } catch (e) {
+      debugPrint('启动时自动检查更新出现错误: $e');
+    }
   }
 
   @override
