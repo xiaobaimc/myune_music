@@ -12,6 +12,10 @@ import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'interlude_animation_widget.dart';
+import 'lyrics_line_box.dart';
+
+// 歌词 TextButton 的内边距
+const EdgeInsets _kLyricButtonPadding = EdgeInsets.fromLTRB(12, 9, 12, 9);
 
 const double _kIdleMainLineAlpha = 0.55; // 原文/主行
 const double _kIdleSecondaryLineAlpha = 0.45; // 翻译、罗马音等次级行
@@ -26,6 +30,14 @@ const Curve _kHighlightFadeCurve = Curves.easeOutCubic;
 // 因此两者必须共用同一组参数，否则合成运动会看起来像"跳两次"。
 const Duration _kLyricFollowScrollDuration = Duration(milliseconds: 300);
 const Curve _kLyricFollowScrollCurve = Curves.easeInOut;
+
+// 把弹性滚动的小数位移吸附到整个设备像素
+double _snapToDevicePixel(double value, double devicePixelRatio) {
+  if (!devicePixelRatio.isFinite || devicePixelRatio <= 0) {
+    return value.roundToDouble();
+  }
+  return (value * devicePixelRatio).roundToDouble() / devicePixelRatio;
+}
 
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
@@ -337,6 +349,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     double highlightFactor,
     ColorScheme colorScheme, {
     bool forceSecondary = false,
+    String? plainText,
+    double? contentWidth,
+    BuildContext? styleContext,
   }) {
     // 获取当前播放位置和播放状态
     final playlistNotifier = Provider.of<PlaylistContentNotifier>(
@@ -400,26 +415,32 @@ class _LyricsWidgetState extends State<LyricsWidget>
         );
       }
 
+      final TextStyle lineStyle = _lyricTextStyle(
+        highlightFactor: highlightFactor,
+        isSecondaryLine: isSecondaryLine,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        colorScheme: colorScheme,
+      );
+      final TextStyle effectiveStyle = styleContext == null
+          ? lineStyle
+          : DefaultTextStyle.of(styleContext).style.merge(lineStyle);
+
       lines.add(
-        Text.rich(
-          TextSpan(children: children),
-          // 段落自身的行高/基线必须由歌词样式决定：不传 style 时会取到环境里的
-          // DefaultTextStyle（Material 正文 14px/height 1.43），于是同一个段落一旦换行，
-          // 它的子行高度就和静态行不一致（占位盒固定高度 vs 文字带 leading，
-          // 且首行 ascent / 末行 descent 的 leading 裁剪只对文字生效）。
-          // 高亮切换时项高度随之变化，弹性层会补一次动画，表现就是换行时的小跳动。
-          style: _lyricTextStyle(
-            highlightFactor: highlightFactor,
-            isSecondaryLine: isSecondaryLine,
-            fontSize: fontSize,
-            fontWeight: fontWeight,
-            colorScheme: colorScheme,
+        _compensateKaraokeLineBox(
+          plainText: plainText ?? tokens.map((t) => t.text).join(),
+          style: effectiveStyle,
+          maxWidth: contentWidth ?? double.infinity,
+          child: Text.rich(
+            TextSpan(children: children),
+            // 段落自身的行高/基线必须由歌词样式决定
+            style: lineStyle,
+            textAlign: _lastAlignment ?? TextAlign.center,
+            // textHeightBehavior: const TextHeightBehavior(
+            //   applyHeightToFirstAscent: false,
+            //   applyHeightToLastDescent: false,
+            // ),
           ),
-          textAlign: _lastAlignment ?? TextAlign.center,
-          // textHeightBehavior: const TextHeightBehavior(
-          //   applyHeightToFirstAscent: false,
-          //   applyHeightToLastDescent: false,
-          // ),
         ),
       );
 
@@ -442,6 +463,48 @@ class _LyricsWidgetState extends State<LyricsWidget>
       crossAxisAlignment: columnAlignment, // 容器对齐
       children: lines,
     );
+  }
+
+  // 逐字行的行盒补偿（见 lyrics_line_box.dart）
+  Widget _compensateKaraokeLineBox({
+    required String plainText,
+    required TextStyle style,
+    required double maxWidth,
+    required Widget child,
+  }) {
+    if (plainText.isEmpty || !maxWidth.isFinite || maxWidth <= 0) {
+      return child;
+    }
+    final LyricLineBoxMetrics? metrics = _measureLineBoxSafely(
+      plainText: plainText,
+      style: style,
+      maxWidth: maxWidth,
+    );
+    if (metrics == null || !metrics.needsCompensation) {
+      return child;
+    }
+    return LyricLineBox(
+      height: metrics.plainHeight,
+      offsetY: metrics.shift,
+      child: child,
+    );
+  }
+
+  // 测量行盒
+  LyricLineBoxMetrics? _measureLineBoxSafely({
+    required String plainText,
+    required TextStyle style,
+    required double maxWidth,
+  }) {
+    try {
+      return cachedLyricLineBox(
+        plainText: plainText,
+        style: style,
+        maxWidth: maxWidth,
+      );
+    } catch (e) {
+      return null;
+    }
   }
 
   double _calculateSigma(
@@ -573,13 +636,19 @@ class _LyricsWidgetState extends State<LyricsWidget>
           // 当前高亮行：卡拉OK行渲染为逐字动画效果
           final bool isSecondaryKaraoke = tokenGroupIndex > 0;
           final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
-          lineWidget = _buildMultiLineKaraokeRichText(
-            [tokens],
-            fontSize,
-            fontWeight,
-            highlightFactor,
-            colorScheme,
-            forceSecondary: isSecondaryKaraoke,
+          lineWidget = Builder(
+            builder: (BuildContext innerContext) =>
+                _buildMultiLineKaraokeRichText(
+                  [tokens],
+                  fontSize,
+                  fontWeight,
+                  highlightFactor,
+                  colorScheme,
+                  forceSecondary: isSecondaryKaraoke,
+                  plainText: line.texts[i],
+                  contentWidth: maxWidth - _kLyricButtonPadding.horizontal,
+                  styleContext: innerContext,
+                ),
           );
         } else {
           // 非高亮行，或该行是翻译行：渲染为静态文本
@@ -632,12 +701,21 @@ class _LyricsWidgetState extends State<LyricsWidget>
           shouldBlur: shouldBlur,
           distance: distance,
           blurStrength: blurStrength,
-          child: _buildMultiLineKaraokeRichText(
-            tokensToRender,
-            fontSize,
-            fontWeight,
-            highlightFactor,
-            colorScheme,
+          child: Builder(
+            builder: (BuildContext innerContext) =>
+                _buildMultiLineKaraokeRichText(
+                  tokensToRender,
+                  fontSize,
+                  fontWeight,
+                  highlightFactor,
+                  colorScheme,
+                  // 只有单组 token 时，纯文本基准才是这一行的 texts[0]
+                  plainText: tokensToRender.length == 1 && line.texts.isNotEmpty
+                      ? line.texts.first
+                      : null,
+                  contentWidth: maxWidth - _kLyricButtonPadding.horizontal,
+                  styleContext: innerContext,
+                ),
           ),
         ),
       );
@@ -747,7 +825,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             },
             style: ButtonStyle(
               padding: WidgetStateProperty.all<EdgeInsets>(
-                const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                _kLyricButtonPadding,
               ),
               shape: WidgetStateProperty.all<RoundedRectangleBorder>(
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -865,6 +943,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final double paddingHeight = addLyricPadding ? viewportHeight * 0.37 : 0;
     _rebuildElasticBasePositions(topPadding: paddingHeight);
     _measureElasticItems(paddingHeight, viewportHeight);
+    final double devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
     final double contentHeight =
         paddingHeight +
@@ -905,13 +984,17 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     _elasticControllers[index].value,
                     _elasticBaseYPositions[index],
                   );
+                  final double paintOffset = _snapToDevicePixel(
+                    renderOffset,
+                    devicePixelRatio,
+                  );
                   return Positioned(
                     top: 0, // 固定top，交给Transform.translate处理
                     left: 0,
                     right: 0,
 
                     child: Transform.translate(
-                      offset: Offset(0, renderOffset),
+                      offset: Offset(0, paintOffset),
                       child: RepaintBoundary(
                         child: KeyedSubtree(
                           key: _elasticItemKeys[index],
