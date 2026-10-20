@@ -12,7 +12,7 @@ import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'interlude_animation_widget.dart';
-import 'lyrics_line_box.dart';
+import 'karaoke_line_text.dart';
 
 // 歌词 TextButton 的内边距
 const EdgeInsets _kLyricButtonPadding = EdgeInsets.fromLTRB(12, 9, 12, 9);
@@ -341,7 +341,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  // 处理逐字歌词
+  // 处理逐字歌词：整行一个段落（KaraokeLineText），不再用 WidgetSpan
   Widget _buildMultiLineKaraokeRichText(
     List<List<LyricToken>> multiLineTokens,
     double fontSize,
@@ -349,9 +349,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     double highlightFactor,
     ColorScheme colorScheme, {
     bool forceSecondary = false,
-    String? plainText,
-    double? contentWidth,
-    BuildContext? styleContext,
   }) {
     // 获取当前播放位置和播放状态
     final playlistNotifier = Provider.of<PlaylistContentNotifier>(
@@ -363,84 +360,36 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final List<Widget> lines = [];
 
-    final double secondaryFontSize = fontSize * 0.88;
-    final Color primaryColor = colorScheme.primary;
-
-    final Color secondaryPrimaryColor = colorScheme.primary.withValues(
-      alpha: 0.88,
-    );
-    final Color secondarySurfaceVariantColor = colorScheme.onSurfaceVariant
-        .withValues(alpha: _kIdleSecondaryLineAlpha);
-
-    final Color surfaceVariantColor = colorScheme.onSurfaceVariant.withValues(
-      alpha: _kIdleMainLineAlpha,
-    );
-
     for (int lineIndex = 0; lineIndex < multiLineTokens.length; lineIndex++) {
       final List<LyricToken> tokens = multiLineTokens[lineIndex];
-      final List<InlineSpan> children = [];
 
       // forceSecondary：强制使用次级样式（如罗马音行）
       final bool isSecondaryLine = forceSecondary || lineIndex > 0;
 
-      final double lineFontSize = isSecondaryLine
-          ? secondaryFontSize
-          : fontSize;
-      final Color lineBaseColor = isSecondaryLine
-          ? secondarySurfaceVariantColor
-          : surfaceVariantColor;
-      // 已唱到的部分使用高亮色，并跟随整行的淡入/淡出一起过渡
-      final Color lineHighlightColor = Color.lerp(
-        lineBaseColor,
-        isSecondaryLine ? secondaryPrimaryColor : primaryColor,
-        highlightFactor,
-      )!;
-
-      for (final token in tokens) {
-        children.add(
-          WidgetSpan(
-            child: AnimatedKaraokeWord(
-              text: token.text,
-              fontSize: lineFontSize,
-              // 高亮行与非高亮行使用统一的字重，避免切换高亮时文本宽度变化导致换行
-              fontWeight: fontWeight,
-              startTime: token.start,
-              duration: token.end - token.start,
-              currentTime: currentPosition,
-              baseColor: lineBaseColor,
-              highlightColor: lineHighlightColor,
-              isPlaying: isPlaying,
-            ),
-          ),
-        );
-      }
-
-      final TextStyle lineStyle = _lyricTextStyle(
+      // 两层样式只差颜色
+      final TextStyle baseStyle = _lyricTextStyle(
+        highlightFactor: 0.0,
+        isSecondaryLine: isSecondaryLine,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        colorScheme: colorScheme,
+      );
+      final TextStyle highlightStyle = _lyricTextStyle(
         highlightFactor: highlightFactor,
         isSecondaryLine: isSecondaryLine,
         fontSize: fontSize,
         fontWeight: fontWeight,
         colorScheme: colorScheme,
       );
-      final TextStyle effectiveStyle = styleContext == null
-          ? lineStyle
-          : DefaultTextStyle.of(styleContext).style.merge(lineStyle);
 
       lines.add(
-        _compensateKaraokeLineBox(
-          plainText: plainText ?? tokens.map((t) => t.text).join(),
-          style: effectiveStyle,
-          maxWidth: contentWidth ?? double.infinity,
-          child: Text.rich(
-            TextSpan(children: children),
-            // 段落自身的行高/基线必须由歌词样式决定
-            style: lineStyle,
-            textAlign: _lastAlignment ?? TextAlign.center,
-            // textHeightBehavior: const TextHeightBehavior(
-            //   applyHeightToFirstAscent: false,
-            //   applyHeightToLastDescent: false,
-            // ),
-          ),
+        KaraokeLineText(
+          tokens: tokens,
+          baseStyle: baseStyle,
+          highlightStyle: highlightStyle,
+          currentTime: currentPosition,
+          isPlaying: isPlaying,
+          textAlign: _lastAlignment ?? TextAlign.center,
         ),
       );
 
@@ -463,48 +412,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
       crossAxisAlignment: columnAlignment, // 容器对齐
       children: lines,
     );
-  }
-
-  // 逐字行的行盒补偿（见 lyrics_line_box.dart）
-  Widget _compensateKaraokeLineBox({
-    required String plainText,
-    required TextStyle style,
-    required double maxWidth,
-    required Widget child,
-  }) {
-    if (plainText.isEmpty || !maxWidth.isFinite || maxWidth <= 0) {
-      return child;
-    }
-    final LyricLineBoxMetrics? metrics = _measureLineBoxSafely(
-      plainText: plainText,
-      style: style,
-      maxWidth: maxWidth,
-    );
-    if (metrics == null || !metrics.needsCompensation) {
-      return child;
-    }
-    return LyricLineBox(
-      height: metrics.plainHeight,
-      offsetY: metrics.shift,
-      child: child,
-    );
-  }
-
-  // 测量行盒
-  LyricLineBoxMetrics? _measureLineBoxSafely({
-    required String plainText,
-    required TextStyle style,
-    required double maxWidth,
-  }) {
-    try {
-      return cachedLyricLineBox(
-        plainText: plainText,
-        style: style,
-        maxWidth: maxWidth,
-      );
-    } catch (e) {
-      return null;
-    }
   }
 
   double _calculateSigma(
@@ -636,26 +543,25 @@ class _LyricsWidgetState extends State<LyricsWidget>
           // 当前高亮行：卡拉OK行渲染为逐字动画效果
           final bool isSecondaryKaraoke = tokenGroupIndex > 0;
           final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
-          lineWidget = Builder(
-            builder: (BuildContext innerContext) =>
-                _buildMultiLineKaraokeRichText(
-                  [tokens],
-                  fontSize,
-                  fontWeight,
-                  highlightFactor,
-                  colorScheme,
-                  forceSecondary: isSecondaryKaraoke,
-                  plainText: line.texts[i],
-                  contentWidth: maxWidth - _kLyricButtonPadding.horizontal,
-                  styleContext: innerContext,
-                ),
+          lineWidget = _buildMultiLineKaraokeRichText(
+            [tokens],
+            fontSize,
+            fontWeight,
+            highlightFactor,
+            colorScheme,
+            forceSecondary: isSecondaryKaraoke,
           );
         } else {
           // 非高亮行，或该行是翻译行：渲染为静态文本
           final bool isSecondaryLine =
               tokenGroupIndex == null || tokenGroupIndex > 0;
+          final String displayText = tokenGroupIndex != null
+              ? line.tokens![tokenGroupIndex]
+                    .map((LyricToken token) => token.text)
+                    .join()
+              : line.texts[i];
           lineWidget = _buildStaticLyricText(
-            text: line.texts[i],
+            text: displayText,
             lyricAlignment: lyricAlignment,
             style: _lyricTextStyle(
               highlightFactor: highlightFactor,
@@ -701,21 +607,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
           shouldBlur: shouldBlur,
           distance: distance,
           blurStrength: blurStrength,
-          child: Builder(
-            builder: (BuildContext innerContext) =>
-                _buildMultiLineKaraokeRichText(
-                  tokensToRender,
-                  fontSize,
-                  fontWeight,
-                  highlightFactor,
-                  colorScheme,
-                  // 只有单组 token 时，纯文本基准才是这一行的 texts[0]
-                  plainText: tokensToRender.length == 1 && line.texts.isNotEmpty
-                      ? line.texts.first
-                      : null,
-                  contentWidth: maxWidth - _kLyricButtonPadding.horizontal,
-                  styleContext: innerContext,
-                ),
+          child: _buildMultiLineKaraokeRichText(
+            tokensToRender,
+            fontSize,
+            fontWeight,
+            highlightFactor,
+            colorScheme,
           ),
         ),
       );
@@ -1655,195 +1552,6 @@ class LyricsView extends StatelessWidget {
         }
       },
     );
-  }
-}
-
-class AnimatedKaraokeWord extends StatefulWidget {
-  final String text;
-  final double fontSize;
-  final FontWeight fontWeight;
-  final Duration startTime;
-  final Duration duration;
-  final Duration currentTime;
-  final Color baseColor;
-  final Color highlightColor;
-  final bool isPlaying;
-
-  const AnimatedKaraokeWord({
-    super.key,
-    required this.text,
-    required this.fontSize,
-    required this.fontWeight,
-    required this.startTime,
-    required this.duration,
-    required this.currentTime,
-    required this.baseColor,
-    required this.highlightColor,
-    required this.isPlaying,
-  });
-
-  @override
-  State<AnimatedKaraokeWord> createState() => _AnimatedKaraokeWordState();
-}
-
-class _AnimatedKaraokeWordState extends State<AnimatedKaraokeWord>
-    with TickerProviderStateMixin {
-  late ValueNotifier<double> _progressNotifier;
-  Duration _lastAudioTime = Duration.zero;
-  DateTime? _lastAudioUpdateTime;
-  Duration _uiTime = Duration.zero;
-  Ticker? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _progressNotifier = ValueNotifier<double>(0.0);
-
-    _lastAudioTime = widget.currentTime;
-    _lastAudioUpdateTime = DateTime.now();
-
-    _startTicker();
-  }
-
-  @override
-  void didUpdateWidget(AnimatedKaraokeWord oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // 检查音频时间是否更新
-    if (oldWidget.currentTime != widget.currentTime) {
-      _lastAudioTime = widget.currentTime;
-      _lastAudioUpdateTime = DateTime.now();
-    }
-
-    // 检查播放状态是否变化
-    if (oldWidget.isPlaying != widget.isPlaying) {
-      if (widget.isPlaying) {
-        // 从暂停恢复播放，更新参考时间
-        _lastAudioUpdateTime = DateTime.now();
-      }
-    }
-  }
-
-  void _startTicker() {
-    // 创建一个每帧更新的Ticker
-    _ticker = createTicker((elapsed) {
-      if (widget.isPlaying) {
-        // 基于上次音频时间 + 经过的时间
-        if (_lastAudioUpdateTime != null) {
-          final now = DateTime.now();
-          final timeSinceLastUpdate = now.difference(_lastAudioUpdateTime!);
-          _uiTime = _lastAudioTime + timeSinceLastUpdate;
-        }
-      } else {
-        _uiTime = _lastAudioTime;
-      }
-
-      // 更新进度值
-      final progress = _calculateProgress(_uiTime).clamp(0.0, 1.0);
-      _progressNotifier.value = progress;
-    });
-    _ticker!.start();
-  }
-
-  double _calculateProgress(Duration currentTime) {
-    if (currentTime < widget.startTime) {
-      return 0.0;
-    } else if (currentTime >= widget.startTime + widget.duration) {
-      return 1.0;
-    } else {
-      final elapsed = (currentTime - widget.startTime).inMilliseconds
-          .toDouble();
-      final total = widget.duration.inMilliseconds.toDouble();
-      return total > 0 ? elapsed / total : 0.0;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final TextStyle baseStyle = TextStyle(
-      fontSize: widget.fontSize,
-      fontWeight: widget.fontWeight,
-      color: widget.baseColor,
-      height: 1.2,
-    );
-    final TextStyle highlightStyle = TextStyle(
-      fontSize: widget.fontSize,
-      fontWeight: widget.fontWeight,
-      color: widget.highlightColor,
-      height: 1.2,
-    );
-
-    return ValueListenableBuilder<double>(
-      valueListenable: _progressNotifier,
-      builder: (context, progress, child) {
-        // progress 为 0 或 1 时退化为单层，避免不必要的合成开销与叠色
-        if (progress <= 0.0) {
-          return Text(widget.text, style: baseStyle);
-        }
-        if (progress >= 1.0) {
-          return Text(widget.text, style: highlightStyle);
-        }
-
-        final double edgePx = widget.fontSize * 0.16;
-        double edgeOf(Rect bounds) =>
-            bounds.width > 0 ? (edgePx / bounds.width).clamp(0.0, 0.5) : 0.0;
-
-        return Stack(
-          children: [
-            // 底层：baseColor，在已高亮唱过的区域渐变隐藏，避免半透明透色
-            ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (Rect bounds) {
-                final double edge = edgeOf(bounds);
-                final double fadeStart = (progress - edge).clamp(0.0, 1.0);
-                final double fadeEnd = (progress + edge).clamp(0.0, 1.0);
-                return LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: const [
-                    Colors.transparent, // 已唱部分隐藏
-                    Colors.transparent,
-                    Colors.white, // 未唱部分可见
-                    Colors.white,
-                  ],
-                  stops: [0.0, fadeStart, fadeEnd, 1.0],
-                ).createShader(bounds);
-              },
-              child: Text(widget.text, style: baseStyle),
-            ),
-            // 上层：highlightColor，在未高亮唱到的区域渐变隐藏
-            ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (Rect bounds) {
-                final double edge = edgeOf(bounds);
-                final double fadeStart = (progress - edge).clamp(0.0, 1.0);
-                final double fadeEnd = (progress + edge).clamp(0.0, 1.0);
-                return LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: const [
-                    Colors.white, // 已唱部分可见
-                    Colors.white,
-                    Colors.transparent, // 未唱部分隐藏
-                    Colors.transparent,
-                  ],
-                  stops: [0.0, fadeStart, fadeEnd, 1.0],
-                ).createShader(bounds);
-              },
-              child: Text(widget.text, style: highlightStyle),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _ticker?.stop();
-    _ticker?.dispose();
-    _progressNotifier.dispose();
-    super.dispose();
   }
 }
 
