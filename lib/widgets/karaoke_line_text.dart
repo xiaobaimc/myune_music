@@ -62,8 +62,6 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     with SingleTickerProviderStateMixin {
   static const double _kFadeRatio = 0.16;
 
-  static const double _kFallbackTokenMs = 300.0;
-
   late final Ticker _ticker;
   final ValueNotifier<double> _timeMs = ValueNotifier<double>(0);
 
@@ -167,9 +165,7 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
         final double? nextStart = i + 1 < tokens.length
             ? tokens[i + 1].start.inMicroseconds / 1000.0
             : null;
-        end = (nextStart != null && nextStart > start)
-            ? nextStart
-            : start + _kFallbackTokenMs;
+        end = (nextStart != null && nextStart > start) ? nextStart : start;
       }
       geometries.add(
         _TokenGeometry(
