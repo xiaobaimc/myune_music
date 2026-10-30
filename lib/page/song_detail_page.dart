@@ -446,12 +446,8 @@ class _SongDetailPageState extends State<SongDetailPage> {
                                                 .watch<SettingsProvider>()
                                                 .maxLinesPerLyric,
                                             onTapLine: (index) {
-                                              final seekTime =
-                                                  currentLyrics[index]
-                                                      .timestamp;
-                                              playlistNotifier.mediaPlayer.seek(
-                                                seekTime,
-                                              );
+                                              playlistNotifier
+                                                  .seekToLyricLine(index);
                                             },
                                           );
                                         },
@@ -796,12 +792,8 @@ class _SongDetailPageState extends State<SongDetailPage> {
                                                 .watch<SettingsProvider>()
                                                 .maxLinesPerLyric,
                                             onTapLine: (index) {
-                                              final seekTime =
-                                                  currentLyrics[index]
-                                                      .timestamp;
-                                              playlistNotifier.mediaPlayer.seek(
-                                                seekTime,
-                                              );
+                                              playlistNotifier
+                                                  .seekToLyricLine(index);
                                             },
                                           );
                                         },

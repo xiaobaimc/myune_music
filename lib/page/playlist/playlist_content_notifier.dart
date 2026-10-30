@@ -227,6 +227,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
   int get currentLyricLineIndex => _lyricsHandler.currentLyricLineIndex;
   Stream<int> get lyricLineIndexStream => _lyricsHandler.lyricLineIndexStream;
 
+  // 点击歌词跳转到指定行
+  Future<void> seekToLyricLine(int index) async {
+    final List<LyricLine> lyrics = _lyricsHandler.currentLyrics;
+    if (index < 0 || index >= lyrics.length) return;
+
+    final Duration target = lyrics[index].timestamp;
+    _lyricsHandler.lockCurrentLyricLine(index);
+    await _audioService.seek(
+      target + const Duration(milliseconds: 20),
+    ); // 给一点提前量
+  }
+
   // --- 搜索相关 ---
   String _searchKeyword = ''; // 当前搜索关键词
   bool _isSearching = false; // 是否正在搜索（用于切换UI）

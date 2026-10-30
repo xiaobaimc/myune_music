@@ -45,6 +45,10 @@ class LyricsHandler {
   final StreamController<int> _lyricLineIndexController =
       StreamController<int>.broadcast();
 
+  int? _lockedLyricIndex;
+  Timer? _lockedLyricTimer;
+  Duration _lastKnownPosition = Duration.zero;
+
   LyricsHandler({
     required SettingsProvider settingsProvider,
     required NotificationService notificationService,
@@ -60,6 +64,7 @@ class LyricsHandler {
   Stream<int> get lyricLineIndexStream => _lyricLineIndexController.stream;
 
   void clearLyrics() {
+    _releaseLockedLyricLine();
     _currentLyrics = [];
     _currentLyricLineIndex = -1;
     _lyricLineIndexController.add(-1);
@@ -67,11 +72,39 @@ class LyricsHandler {
   }
 
   void dispose() {
+    _releaseLockedLyricLine();
     _lyricLineIndexController.close();
+  }
+
+  // 点击歌词跳转立刻把当前行切到目标行并短暂锁定
+  void lockCurrentLyricLine(int index) {
+    if (index < 0 || index >= _currentLyrics.length) return;
+
+    _lockedLyricIndex = index;
+    _lockedLyricTimer?.cancel();
+    _lockedLyricTimer = Timer(const Duration(milliseconds: 500), () {
+      _lockedLyricTimer = null;
+      if (_lockedLyricIndex != index) return;
+      _lockedLyricIndex = null;
+      // seek 没有生效用最后一次已知位置重新定位
+      updateLyricLine(_lastKnownPosition);
+    });
+
+    if (_currentLyricLineIndex != index) {
+      _currentLyricLineIndex = index;
+      _lyricLineIndexController.add(index);
+    }
+  }
+
+  void _releaseLockedLyricLine() {
+    _lockedLyricTimer?.cancel();
+    _lockedLyricTimer = null;
+    _lockedLyricIndex = null;
   }
 
   // 加载指定歌曲的歌词
   Future<void> loadLyricsForSong(String songFilePath) async {
+    _releaseLockedLyricLine();
     _currentLyrics = []; // 清空之前的歌词
     _currentLyricLineIndex = -1; // 重置歌词行索引
     _lyricLineIndexController.add(-1);
@@ -1025,6 +1058,8 @@ class LyricsHandler {
   }
 
   void updateLyricLine(Duration currentPosition) {
+    _lastKnownPosition = currentPosition;
+
     if (_currentLyrics.isEmpty) {
       if (_currentLyricLineIndex != -1) {
         _currentLyricLineIndex = -1;
@@ -1049,6 +1084,17 @@ class LyricsHandler {
         left = mid + 1;
       } else {
         right = mid - 1;
+      }
+    }
+
+    final int? lockedIndex = _lockedLyricIndex;
+    if (lockedIndex != null) {
+      if (lockedIndex >= _currentLyrics.length) {
+        _releaseLockedLyricLine();
+      } else if (newIndex != lockedIndex) {
+        return;
+      } else {
+        _releaseLockedLyricLine();
       }
     }
 
