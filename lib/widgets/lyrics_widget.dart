@@ -1,9 +1,9 @@
-import 'dart:ui' as ui;
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/physics.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
@@ -12,6 +12,7 @@ import '../page/setting/settings_provider.dart';
 import '../page/playlist/playlist_content_notifier.dart';
 import 'interlude_animation_widget.dart';
 import 'karaoke_line_text.dart';
+import 'lyric_blur.dart';
 
 // 歌词 TextButton 的内边距
 const EdgeInsets _kLyricButtonPadding = EdgeInsets.fromLTRB(12, 9, 12, 9);
@@ -32,14 +33,6 @@ const Animation<double> _kNoHighlight = AlwaysStoppedAnimation<double>(0.0);
 // 因此两者必须共用同一组参数，否则合成运动会看起来像"跳两次"。
 const Duration _kLyricFollowScrollDuration = Duration(milliseconds: 300);
 const Curve _kLyricFollowScrollCurve = Curves.easeInOut;
-
-// 把弹性滚动的小数位移吸附到整个设备像素
-double _snapToDevicePixel(double value, double devicePixelRatio) {
-  if (!devicePixelRatio.isFinite || devicePixelRatio <= 0) {
-    return value.roundToDouble();
-  }
-  return (value * devicePixelRatio).roundToDouble() / devicePixelRatio;
-}
 
 class LyricsWidget extends StatefulWidget {
   final List<LyricLine> lyrics;
@@ -373,6 +366,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     double highlightFactor,
     ColorScheme colorScheme, {
     bool forceSecondary = false,
+    double blurSigma = 0.0,
   }) {
     // 获取当前播放位置和播放状态
     final playlistNotifier = Provider.of<PlaylistContentNotifier>(
@@ -397,6 +391,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         fontSize: fontSize,
         fontWeight: fontWeight,
         colorScheme: colorScheme,
+        blurSigma: blurSigma,
       );
       final TextStyle highlightStyle = _lyricTextStyle(
         highlightFactor: highlightFactor,
@@ -404,6 +399,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         fontSize: fontSize,
         fontWeight: fontWeight,
         colorScheme: colorScheme,
+        blurSigma: blurSigma,
       );
 
       lines.add(
@@ -505,36 +501,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
     return normalizedDistance * blurStrength;
   }
 
-  Widget _withLyricEffects({
-    required Widget child,
-    required bool isCurrent,
-    required bool shouldBlur,
-    required int distance,
-    required double blurStrength,
-  }) {
-    final double sigma = _calculateSigma(
-      distance,
-      shouldBlur,
-      isCurrent,
-      blurStrength,
-    );
-
-    if (sigma == 0.0) {
-      return child;
-    }
-
-    return ImageFiltered(
-      imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-      child: child,
-    );
-  }
-
   TextStyle _lyricTextStyle({
     required double highlightFactor,
     required bool isSecondaryLine,
     required double fontSize,
     required FontWeight fontWeight,
     required ColorScheme colorScheme,
+    double blurSigma = 0.0,
   }) {
     final double lineFontSize = isSecondaryLine ? fontSize * 0.88 : fontSize;
     final Color idleColor = isSecondaryLine
@@ -547,11 +520,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
         : colorScheme.primary;
     final Color lineColor = Color.lerp(idleColor, litColor, highlightFactor)!;
 
-    return TextStyle(
+    return buildLyricTextStyle(
+      lineColor: lineColor,
       fontSize: lineFontSize,
-      height: 1.2,
-      color: lineColor,
       fontWeight: fontWeight,
+      blurSigma: blurSigma,
     );
   }
 
@@ -585,6 +558,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }) {
     final line = widget.lyrics[lyricIndex];
     final isCurrent = lyricIndex == widget.currentIndex;
+
+    // 本行的模糊强度，直接写进文字样式（见 _lyricTextStyle）
+    final double blurSigma = _calculateSigma(
+      distance,
+      shouldBlur,
+      isCurrent,
+      blurStrength,
+    );
 
     // 只有当前行参与点亮/熄灭过渡，其余行永远保持暗色
     // 非当前行用常量动画，不会被通知
@@ -637,6 +618,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
               factor,
               colorScheme,
               forceSecondary: isSecondaryKaraoke,
+              blurSigma: blurSigma,
             ),
           );
         } else {
@@ -658,6 +640,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 fontSize: fontSize,
                 fontWeight: fontWeight,
                 colorScheme: colorScheme,
+                blurSigma: blurSigma,
               ),
             ),
           );
@@ -691,6 +674,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             fontWeight,
             factor,
             colorScheme,
+            blurSigma: blurSigma,
           ),
         ),
       );
@@ -716,6 +700,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
               fontSize: fontSize,
               fontWeight: fontWeight,
               colorScheme: colorScheme,
+              blurSigma: blurSigma,
             ),
           ),
         );
@@ -753,6 +738,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 fontSize: fontSize,
                 fontWeight: fontWeight,
                 colorScheme: colorScheme,
+                blurSigma: blurSigma,
               ),
             ),
           );
@@ -811,16 +797,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
               }),
               alignment: _getAlignmentFromTextAlign(lyricAlignment),
             ),
-            // 整行只做一次模糊
-            child: _withLyricEffects(
-              isCurrent: isCurrent,
-              shouldBlur: shouldBlur,
-              distance: distance,
-              blurStrength: blurStrength,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: columnChildren,
-              ),
+            // 模糊写在各行文字样式里（见 _lyricTextStyle），整行不再包离屏滤镜
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: columnChildren,
             ),
           ),
         ),
@@ -842,31 +822,23 @@ class _LyricsWidgetState extends State<LyricsWidget>
             alignment: _getAlignmentFromTextAlign(lyricAlignment),
             child: SizedBox(
               width: maxWidth,
-              child: _withLyricEffects(
-                isCurrent: isCurrent,
-                shouldBlur: shouldBlur,
-                distance: distance,
-                blurStrength: blurStrength,
-                child: Container(
-                  height: fontSize * 1.5,
-                  alignment: _getAlignmentFromTextAlign(lyricAlignment),
-                  padding: EdgeInsets.only(
-                    left: lyricAlignment == TextAlign.left ? fontSize * 0.5 : 0,
-                    right: lyricAlignment == TextAlign.right
-                        ? fontSize * 0.5
-                        : 0,
+              child: Container(
+                height: fontSize * 1.5,
+                alignment: _getAlignmentFromTextAlign(lyricAlignment),
+                padding: EdgeInsets.only(
+                  left: lyricAlignment == TextAlign.left ? fontSize * 0.5 : 0,
+                  right: lyricAlignment == TextAlign.right ? fontSize * 0.5 : 0,
+                ),
+                child: InterludeAnimationWidget(
+                  isCurrent: isCurrent,
+                  baseColor: colorScheme.onSurfaceVariant.withValues(
+                    alpha: _kIdleMainLineAlpha,
                   ),
-                  child: InterludeAnimationWidget(
-                    isCurrent: isCurrent,
-                    baseColor: colorScheme.onSurfaceVariant.withValues(
-                      alpha: _kIdleMainLineAlpha,
-                    ),
-                    highlightColor: colorScheme.primary.withValues(alpha: 0.88),
-                    startTime: line.timestamp,
-                    interludeDuration: line.interludeDuration ?? Duration.zero,
-                    currentTime: playlistNotifier.currentPosition,
-                    isPlaying: playlistNotifier.isPlaying,
-                  ),
+                  highlightColor: colorScheme.primary.withValues(alpha: 0.88),
+                  startTime: line.timestamp,
+                  interludeDuration: line.interludeDuration ?? Duration.zero,
+                  currentTime: playlistNotifier.currentPosition,
+                  isPlaying: playlistNotifier.isPlaying,
                 ),
               ),
             ),
@@ -923,7 +895,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       _elasticNeedsMeasure = false;
       _measureElasticItems(paddingHeight, viewportHeight);
     }
-    final double devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+
     // 视口外多留一点才跳过绘制
     final double cullMargin = 24.0 + (shouldBlur ? blurStrength * 3.0 : 0.0);
 
@@ -931,16 +903,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
         paddingHeight +
         _elasticItemHeights.fold<double>(0, (sum, height) => sum + height) +
         paddingHeight;
-
-    double stabilizeOffset(double value, double target) {
-      final diff = value - target;
-
-      if (diff.abs() < 0.3) {
-        return target;
-      }
-
-      return value;
-    }
 
     // 影响"整行渲染结果"的参数
     // 变化时需要重建行内容
@@ -1032,14 +994,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         ),
                       ),
                       builder: (BuildContext context, Widget? child) {
-                        final double renderOffset = stabilizeOffset(
-                          controller.value,
-                          _elasticBaseYPositions[index],
-                        );
-                        final double paintOffset = _snapToDevicePixel(
-                          renderOffset,
-                          devicePixelRatio,
-                        );
+                        final double paintOffset = controller.value;
                         // 视口外的行不参与绘制
                         final double rowHeight =
                             index < _elasticItemHeights.length
@@ -1049,6 +1004,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             paintOffset + rowHeight < -cullMargin ||
                             paintOffset > viewportHeight + cullMargin;
                         return Transform.translate(
+                          filterQuality: FilterQuality.low, // 双线性过滤，解决文字抖动
                           offset: Offset(0, paintOffset),
                           child: Opacity(
                             opacity: offscreen ? 0.0 : 1.0,
@@ -1415,11 +1371,42 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 小于500毫秒或大于7行，不同步延迟
     final bool shouldTriggerWave = timeDiffMs >= 500 && lineDiff <= 7;
 
-    const curve = LyricSpringCurve(omega: 9.167, zeta: 0.91);
-    const duration = Duration(milliseconds: 550);
+    final springDesc = SpringDescription.withDampingRatio(
+      mass: 1.0,
+      stiffness: 280.0,
+      ratio: 0.91,
+    );
+    const tolerance = Tolerance(distance: 0.1, velocity: 0.5);
 
     final int generation = ++_elasticAnimationGeneration;
     final int anchorIndex = _estimateElasticAnchorIndex(vh);
+
+    void startSpringAnimation(AnimationController controller, double targetY) {
+      if ((controller.value - targetY).abs() < 0.1) {
+        controller.value = targetY;
+        controller.stop();
+        return;
+      }
+
+      final double currentVelocity =
+          controller.isAnimating && controller.velocity.isFinite
+          ? controller.velocity
+          : 0.0;
+
+      final simulation = SpringSimulation(
+        springDesc,
+        controller.value,
+        targetY,
+        currentVelocity,
+        tolerance: tolerance,
+      );
+
+      controller.animateWith(simulation).whenCompleteOrCancel(() {
+        if (mounted && (controller.value - targetY).abs() < 0.2) {
+          controller.value = targetY;
+        }
+      });
+    }
 
     for (int i = 0; i < widget.lyrics.length; i++) {
       if (i >= _elasticControllers.length) break;
@@ -1439,30 +1426,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
               return;
             }
 
-            final controller = _elasticControllers[i];
-
-            // 避免微小差距闪烁
-            if ((controller.value - targetY).abs() < 0.2) {
-              controller.value = targetY;
-              controller.stop();
-              return;
-            }
-
-            controller.stop();
-            controller.animateTo(targetY, duration: duration, curve: curve);
+            startSpringAnimation(_elasticControllers[i], targetY);
           },
         );
       } else {
-        final controller = _elasticControllers[i];
-
-        // 避免微小差距闪烁
-        if ((controller.value - targetY).abs() < 0.2) {
-          controller.value = targetY;
-          controller.stop();
-        } else {
-          controller.stop();
-          controller.animateTo(targetY, duration: duration, curve: curve);
-        }
+        startSpringAnimation(_elasticControllers[i], targetY);
       }
     }
   }
