@@ -56,6 +56,8 @@ class SettingsProvider with ChangeNotifier {
   static const _lyricFontWeightKey = 'lyricFontWeight'; // 歌词字重设置的 key
 
   static const _enableLyricElasticScrollKey = 'enableLyricElasticScroll';
+  static const _enableLyricFloatingAnimationKey =
+      'enableLyricFloatingAnimation';
   static const _enableLoudnessKey = 'enableLoudness';
   static const _enableReplayGainKey = 'enableReplayGain';
   static const _enableGaplessPlaybackKey = 'enableGaplessPlayback';
@@ -93,6 +95,7 @@ class SettingsProvider with ChangeNotifier {
   List<String> _lyricSourceOrder = LyricSource.defaultOrderIds; // 歌词来源优先级顺序
   bool _autoAdjustLyricLayout = false; // 默认不自动调节歌词布局
   bool _enableLyricElasticScroll = false;
+  bool _enableLyricFloatingAnimation = false;
   bool _enableLoudness = false;
   bool _enableReplayGain = false;
   bool _enableGaplessPlayback = false; // 默认不启用无缝播放
@@ -138,6 +141,8 @@ class SettingsProvider with ChangeNotifier {
   bool get addLyricPadding => _addLyricPadding; // 获取歌词上下补位设置
   bool get minimizeToTray => _minimizeToTray; // 获取最小化到托盘设置
   bool get enableLyricBlur => _enableLyricBlur; // 获取歌词模糊效果设置
+  bool get enableLyricFloatingAnimation =>
+      _enableLyricFloatingAnimation; // 获取逐字歌词上浮动画设置
   double get lyricBlurStrength => _lyricBlurStrength; // 获取歌词模糊强度设置
   bool get showTaskbarProgress => _showTaskbarProgress; // 获取任务栏进度显示设置
   bool get showAlbumName => _showAlbumName; // 获取显示专辑名称设置
@@ -248,12 +253,15 @@ class SettingsProvider with ChangeNotifier {
     _autoAdjustLyricLayout = prefs.getBool(_autoAdjustLyricLayoutKey) ?? false;
     _enableLyricElasticScroll =
         prefs.getBool(_enableLyricElasticScrollKey) ?? false;
+    _enableLyricFloatingAnimation =
+        prefs.getBool(_enableLyricFloatingAnimationKey) ?? false;
     _enableLoudness = prefs.getBool(_enableLoudnessKey) ?? false;
     _enableReplayGain = prefs.getBool(_enableReplayGainKey) ?? false;
     _enableGaplessPlayback = prefs.getBool(_enableGaplessPlaybackKey) ?? false;
     _autoHidePlayPageComponents =
         prefs.getBool(_autoHidePlayPageComponentsKey) ?? false;
-    _autoCheckUpdates = prefs.getBool(_autoCheckUpdatesKey) ?? true; // 加载自动检查更新设置
+    _autoCheckUpdates =
+        prefs.getBool(_autoCheckUpdatesKey) ?? true; // 加载自动检查更新设置
 
     // 加载自定义背景图设置
     _enableCustomBackground =
@@ -548,6 +556,13 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableLyricElasticScrollKey, value);
+  }
+
+  void setEnableLyricFloatingAnimation(bool value) async {
+    _enableLyricFloatingAnimation = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableLyricFloatingAnimationKey, value);
   }
 
   void setEnableLoudness(bool value) async {

@@ -98,6 +98,22 @@ class PlaybackPageTab extends StatelessWidget {
             context.read<SettingsProvider>().setEnableLyricElasticScroll(value);
           },
         ),
+        // 逐字歌词上浮动画
+        SwitchListTile(
+          title: const Row(
+            children: [
+              Text('逐字歌词上浮动画'),
+              SizedBox(width: 4),
+              InfoIcon('实验性功能。无逐字歌词时不生效'),
+            ],
+          ),
+          value: settings.enableLyricFloatingAnimation,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setEnableLyricFloatingAnimation(
+              value,
+            );
+          },
+        ),
       ],
     );
   }

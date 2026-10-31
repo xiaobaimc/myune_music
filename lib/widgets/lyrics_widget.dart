@@ -21,12 +21,14 @@ const double _kIdleMainLineAlpha = 0.55; // 原文/主行
 const double _kIdleSecondaryLineAlpha = 0.45; // 翻译、罗马音等次级行
 
 const Duration _kHighlightFadeInDuration = Duration(milliseconds: 160);
-const Duration _kHighlightFadeOutDuration = Duration(milliseconds: 100);
+
+// 退场动画触发在高亮已经交给下一行之后
+const double _kExitDurationRatio = 0.22;
+const Duration _kExitMinDuration = Duration(milliseconds: 160);
+const Duration _kExitMaxDuration = Duration(milliseconds: 250);
 
 const Curve _kHighlightFadeCurve = Curves.easeOutCubic;
-
-// 非当前行用的高亮动画占位
-const Animation<double> _kNoHighlight = AlwaysStoppedAnimation<double>(0.0);
+const Curve _kExitCurve = Curves.easeInOutCubic;
 
 // 歌词跟随播放滚动的动画参数。
 // 间奏行折叠时，折叠本身承担了这次滚动的一部分位移（见 _scrollToCurrentLine 的说明），
@@ -93,11 +95,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   // 当前行高亮的点亮程度
   late final AnimationController _highlightFade;
 
-  Timer? _highlightFadeOutTimer;
-  DateTime? _highlightFadeOutAt;
-  Duration _positionAnchor = Duration.zero;
-  DateTime _positionAnchorTime = DateTime.now();
-  bool _fadeSyncScheduled = false;
+  // 上一行的退场程度：1 = 还保持高亮时的样子，0 = 完全熄灭、位移归零。
+  // 在 currentIndex 切到下一行的同一时刻从 1 走到 0，退场因此发生在“交接之后”。
+  late final AnimationController _exitFade;
+
   bool _fadeInScheduled = false;
 
   int? _fadeInPendingIndex;
@@ -109,9 +110,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _highlightFade = AnimationController(
       vsync: this,
       duration: _kHighlightFadeInDuration,
-      reverseDuration: _kHighlightFadeOutDuration,
       value: 1.0, // 首次进入时直接点亮，不做淡入
     );
+    _exitFade = AnimationController(
+      vsync: this,
+      duration: _kExitMaxDuration,
+      value: 0.0,
+    );
+    _exitFade.addStatusListener(_onExitFadeStatus);
 
     final settings = context.read<SettingsProvider>();
     if (settings.enableLyricElasticScroll) {
@@ -125,103 +131,57 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (settings.enableLyricElasticScroll) {
         _jumpElasticToCurrent();
       }
-
-      _scheduleHighlightFadeSync();
     });
   }
 
   @override
   void dispose() {
     _scrollStopTimer?.cancel();
-    _highlightFadeOutTimer?.cancel();
+    _exitFade.removeStatusListener(_onExitFadeStatus);
+    _exitFade.dispose();
     _highlightFade.dispose();
     _disposeElasticControllers();
     super.dispose();
   }
 
-  Duration _estimatedPosition() {
-    final PlaylistContentNotifier notifier = context
-        .read<PlaylistContentNotifier>();
-    final Duration position = notifier.currentPosition;
-    if (position != _positionAnchor) {
-      _positionAnchor = position;
-      _positionAnchorTime = DateTime.now();
+  // 上一行的退场时长：按它的跨度自适应
+  Duration _exitDuration(int index) {
+    if (index < 0 || index + 1 >= widget.lyrics.length) {
+      return _kExitMinDuration;
     }
-    if (!notifier.isPlaying) {
-      return _positionAnchor;
-    }
-    return _positionAnchor + DateTime.now().difference(_positionAnchorTime);
-  }
-
-  Duration? _highlightFadeOutStart(int index) {
-    if (index < 0 || index + 1 >= widget.lyrics.length) return null;
-
-    final LyricLine line = widget.lyrics[index];
-    final Duration start =
-        widget.lyrics[index + 1].timestamp - _kHighlightFadeOutDuration;
-    // 至少让本行先完成淡入，避免超短行导致整行一直不亮
-    final Duration earliest = line.timestamp + _kHighlightFadeInDuration;
-    return start < earliest ? earliest : start;
-  }
-
-  // 调度/校正当前行的熄灭动画。
-  void _syncHighlightFade() {
-    if (!mounted) return;
-
-    final Duration? fadeOutStart = _highlightFadeOutStart(widget.currentIndex);
-    final PlaylistContentNotifier notifier = context
-        .read<PlaylistContentNotifier>();
-    if (fadeOutStart == null || !notifier.isPlaying) {
-      _highlightFadeOutTimer?.cancel();
-      _highlightFadeOutTimer = null;
-      return;
-    }
-
-    final Duration remaining = fadeOutStart - _estimatedPosition();
-
-    if (remaining <= Duration.zero) {
-      _highlightFadeOutTimer?.cancel();
-      _highlightFadeOutTimer = null;
-      final AnimationStatus status = _highlightFade.status;
-      // 已经在熄灭中就不要再打断 正在淡入或已经点亮则需要立刻开始熄灭
-      if (status != AnimationStatus.reverse &&
-          (status == AnimationStatus.forward || _highlightFade.value > 0.0)) {
-        _startHighlightFadeOut();
-      }
-      return;
-    }
-
-    final DateTime target = DateTime.now().add(remaining);
-    final DateTime? scheduled = _highlightFadeOutAt;
-    if (_highlightFadeOutTimer != null &&
-        scheduled != null &&
-        target.difference(scheduled).abs() < const Duration(milliseconds: 50)) {
-      return;
-    }
-
-    _highlightFadeOutTimer?.cancel();
-    _highlightFadeOutAt = target;
-    _highlightFadeOutTimer = Timer(remaining, () {
-      if (mounted) _startHighlightFadeOut();
-    });
-  }
-
-  void _startHighlightFadeOut() {
-    _highlightFade.animateBack(
-      0.0,
-      duration: _kHighlightFadeOutDuration,
-      curve: _kHighlightFadeCurve,
+    final Duration span =
+        widget.lyrics[index + 1].timestamp - widget.lyrics[index].timestamp;
+    final double ms = span.inMicroseconds / 1000.0 * _kExitDurationRatio;
+    return Duration(
+      milliseconds: ms
+          .clamp(
+            _kExitMinDuration.inMilliseconds.toDouble(),
+            _kExitMaxDuration.inMilliseconds.toDouble(),
+          )
+          .round(),
     );
   }
 
-  // 避免在 build/didUpdateWidget 过程中触发动画
-  void _scheduleHighlightFadeSync() {
-    if (_fadeSyncScheduled) return;
-    _fadeSyncScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fadeSyncScheduled = false;
-      if (mounted) _syncHighlightFade();
-    });
+  void _startExitFade(int previousIndex) {
+    if (previousIndex < 0 || previousIndex + 1 != widget.currentIndex) {
+      _exitFade.value = 0.0;
+      return;
+    }
+    // 从交接前那一帧的真实高亮程度起步，连超短行的淡入中途也接得上
+    _exitFade.value = _highlightFade.value.clamp(0.0, 1.0);
+    if (_exitFade.value <= 0.0) return;
+    _exitFade.animateBack(
+      0.0,
+      duration: _exitDuration(previousIndex),
+      curve: _kExitCurve,
+    );
+  }
+
+  // 退场结束后让列表重建一次，把上一行切回普通静态文本渲染
+  void _onExitFadeStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && mounted) {
+      setState(() {});
+    }
   }
 
   void _scheduleHighlightFadeIn() {
@@ -239,7 +199,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
         duration: _kHighlightFadeInDuration,
         curve: _kHighlightFadeCurve,
       );
-      _syncHighlightFade();
     });
   }
 
@@ -254,7 +213,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _highlightFade.value = 1.0;
-      _syncHighlightFade();
     });
   }
 
@@ -311,12 +269,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _animateElasticToCurrent(previousIndex: previousIndex);
       });
       _previousIndex = oldWidget.currentIndex;
-      // 新的一行从暗到亮淡入，并重新调度熄灭
+      // 上一行开始退场（熄灭 + 上浮位移落回），新的一行从暗到亮淡入
+      _startExitFade(previousIndex);
       _scheduleHighlightFadeIn();
     }
     // 当歌词列表发生变化时（如切换歌曲），滚动到顶部
     else if (widget.lyrics != oldWidget.lyrics) {
       _resetElasticState();
+      // 换歌不做上一行的退场
+      _exitFade.value = 0.0;
       // 使用微延迟确保在新歌词加载后执行滚动
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (widget.currentIndex == 0 && _itemScrollController.isAttached) {
@@ -367,6 +328,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     ColorScheme colorScheme, {
     bool forceSecondary = false,
     double blurSigma = 0.0,
+    bool enableFloating = true,
   }) {
     // 获取当前播放位置和播放状态
     final playlistNotifier = Provider.of<PlaylistContentNotifier>(
@@ -410,6 +372,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
           currentTime: currentPosition,
           isPlaying: isPlaying,
           textAlign: _lastAlignment ?? TextAlign.center,
+          highlightFactor: highlightFactor,
+          // 只有主行参与上浮
+          enableFloating: enableFloating && !isSecondaryLine,
         ),
       );
 
@@ -555,9 +520,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required bool shouldBlur,
     required ColorScheme colorScheme,
     required double blurStrength,
+    bool enableFloating = true,
   }) {
     final line = widget.lyrics[lyricIndex];
-    final isCurrent = lyricIndex == widget.currentIndex;
+    final bool isCurrent = lyricIndex == widget.currentIndex;
+
+    // 上一行交接出去之后的一小段退场期
+    final bool isExiting =
+        !isCurrent &&
+        lyricIndex == widget.currentIndex - 1 &&
+        _exitFade.value > 0.0;
 
     // 本行的模糊强度，直接写进文字样式（见 _lyricTextStyle）
     final double blurSigma = _calculateSigma(
@@ -567,14 +539,24 @@ class _LyricsWidgetState extends State<LyricsWidget>
       blurStrength,
     );
 
-    // 只有当前行参与点亮/熄灭过渡，其余行永远保持暗色
+    // 当前行跟着点亮动画；上一行在退场期跟着 _exitFade；其余行永远保持暗色
     // 非当前行用常量动画，不会被通知
     Widget withHighlight(Widget Function(double factor) builder) {
-      return AnimatedBuilder(
-        animation: isCurrent ? _highlightFade : _kNoHighlight,
-        builder: (BuildContext context, Widget? _) =>
-            builder(isCurrent ? _currentLineHighlightFactor : 0.0),
-      );
+      if (isCurrent) {
+        return AnimatedBuilder(
+          animation: _highlightFade,
+          builder: (BuildContext context, Widget? _) =>
+              builder(_currentLineHighlightFactor),
+        );
+      }
+      if (isExiting) {
+        return AnimatedBuilder(
+          animation: _exitFade,
+          builder: (BuildContext context, Widget? _) =>
+              builder(_exitFade.value),
+        );
+      }
+      return builder(0.0);
     }
 
     final List<Widget> columnChildren = [];
@@ -606,8 +588,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
         Widget lineWidget;
 
-        if (tokenGroupIndex != null && isCurrent) {
-          // 当前高亮行：卡拉OK行渲染为逐字动画效果
+        if (tokenGroupIndex != null && (isCurrent || isExiting)) {
+          // 当前高亮行 / 正在退场的上一行：渲染为逐字动画效果
           final bool isSecondaryKaraoke = tokenGroupIndex > 0;
           final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
           lineWidget = withHighlight(
@@ -618,6 +600,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
               factor,
               colorScheme,
               forceSecondary: isSecondaryKaraoke,
+              enableFloating: enableFloating,
               blurSigma: blurSigma,
             ),
           );
@@ -654,7 +637,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
         columnChildren.add(lineWidget);
       }
-    } else if (isCurrent && line.isKaraoke) {
+    } else if ((isCurrent || isExiting) && line.isKaraoke) {
       // 没有 karaokeTextIndices 时，沿用原有的批量渲染逻辑
       final int karaokeCount = line.tokens!.length;
       final int linesToTake = (karaokeCount > maxAllowed)
@@ -670,6 +653,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         withHighlight(
           (double factor) => _buildMultiLineKaraokeRichText(
             tokensToRender,
+            enableFloating: enableFloating,
             fontSize,
             fontWeight,
             factor,
@@ -876,6 +860,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required bool shouldBlur,
     required ColorScheme colorScheme,
     required double blurStrength,
+    bool enableFloating = true,
     required List<int> visualRanks,
   }) {
     if (_elasticControllers.length != widget.lyrics.length) {
@@ -943,6 +928,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       _elasticControllers[index];
                   final int distance = _visualDistance(index, visualRanks);
                   final bool isCurrent = index == widget.currentIndex;
+                  // 正在退场的上一行不能进行缓存
+                  final bool isExitingRow =
+                      !isCurrent &&
+                      index == widget.currentIndex - 1 &&
+                      _exitFade.value > 0.0;
                   final int rowHash = Object.hash(
                     index,
                     _calculateSigma(
@@ -953,7 +943,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     ),
                     configHash,
                   );
-                  final _ElasticRowCacheEntry? cached = isCurrent
+                  final _ElasticRowCacheEntry? cached =
+                      (isCurrent || isExitingRow)
                       ? null
                       : _elasticRowCache[index];
                   Widget row;
@@ -971,8 +962,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       shouldBlur: shouldBlur,
                       colorScheme: colorScheme,
                       blurStrength: blurStrength,
+                      enableFloating: enableFloating,
                     );
-                    if (isCurrent) {
+                    if (isCurrent || isExitingRow) {
                       _elasticRowCache.remove(index);
                     } else {
                       _elasticRowCache[index] = _ElasticRowCacheEntry(
@@ -1064,13 +1056,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final enableLyricElasticScroll = context.select<SettingsProvider, bool>(
       (s) => s.enableLyricElasticScroll,
     );
+    final enableLyricFloatingAnimation = context.select<SettingsProvider, bool>(
+      (s) => s.enableLyricFloatingAnimation,
+    );
     final lyricBlurStrength = context.select<SettingsProvider, double>(
       (s) => s.lyricBlurStrength,
     );
 
-    final bool shouldBlur = enableLyricBlur && !_isUserScrolling;
-
-    _scheduleHighlightFadeSync();
+    final shouldBlur = enableLyricBlur && !_isUserScrolling;
 
     // 折叠中的间奏行不可见，模糊梯度需要按看得见的计算
     final List<int> visualRanks = _buildVisualRanks();
@@ -1138,6 +1131,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             shouldBlur: shouldBlur,
             colorScheme: colorScheme,
             blurStrength: lyricBlurStrength,
+            enableFloating: enableLyricFloatingAnimation,
             visualRanks: visualRanks,
           );
         }
@@ -1185,6 +1179,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   shouldBlur: shouldBlur,
                   colorScheme: colorScheme,
                   blurStrength: lyricBlurStrength,
+                  enableFloating: enableLyricFloatingAnimation,
                 );
 
                 if (line.isInterlude) {

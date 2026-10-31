@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,8 @@ class KaraokeLineText extends StatefulWidget {
     required this.currentTime,
     required this.isPlaying,
     this.textAlign = TextAlign.center,
+    this.highlightFactor = 1.0,
+    this.enableFloating = true,
   });
 
   final List<LyricToken> tokens;
@@ -26,20 +29,34 @@ class KaraokeLineText extends StatefulWidget {
   final bool isPlaying;
   final TextAlign textAlign;
 
+  final double highlightFactor;
+
+  // 是否启用逐字上浮动效
+  // 关闭时渲染路径与旧实现应该一致
+  final bool enableFloating;
+
   @override
   State<KaraokeLineText> createState() => _KaraokeLineTextState();
 }
 
 class _TokenGeometry {
   const _TokenGeometry({
+    required this.tokenIndex,
+    required this.startCharIndex,
+    required this.endCharIndex,
     required this.charLength,
     required this.startMs,
     required this.endMs,
+    required this.boxes,
   });
 
+  final int tokenIndex;
+  final int startCharIndex;
+  final int endCharIndex;
   final int charLength;
   final double startMs;
   final double endMs;
+  final List<Rect> boxes;
 
   double get durationMs => endMs - startMs;
 }
@@ -61,6 +78,11 @@ class _FillState {
 class _KaraokeLineTextState extends State<KaraokeLineText>
     with SingleTickerProviderStateMixin {
   static const double _kFadeRatio = 0.16;
+
+  // 主行上浮幅度：相对字号的比例，以及像素上下限
+  static const double _kFloatDistanceRatio = 0.095;
+  static const double _kFloatDistanceMin = 2.2;
+  static const double _kFloatDistanceMax = 4.4;
 
   late final Ticker _ticker;
   final ValueNotifier<double> _timeMs = ValueNotifier<double>(0);
@@ -155,10 +177,19 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     _layoutKey = key;
     _paragraphSize = Size(painter.width, painter.height);
 
+    final double width = maxWidth.isFinite ? maxWidth : _paragraphSize.width;
+    final List<Rect> rows = _lineRects(painter, width);
+
     final List<LyricToken> tokens = widget.tokens;
     final List<_TokenGeometry> geometries = <_TokenGeometry>[];
+    int charCursor = 0;
     for (int i = 0; i < tokens.length; i++) {
       final LyricToken token = tokens[i];
+      final int len = token.text.length;
+      final int startChar = charCursor;
+      final int endChar = charCursor + len;
+      charCursor = endChar;
+
       final double start = token.start.inMicroseconds / 1000.0;
       double end = token.end.inMicroseconds / 1000.0;
       if (end <= start) {
@@ -167,11 +198,39 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
             : null;
         end = (nextStart != null && nextStart > start) ? nextStart : start;
       }
+
+      final List<Rect> rawBoxes = len > 0
+          ? painter
+                .getBoxesForSelection(
+                  TextSelection(baseOffset: startChar, extentOffset: endChar),
+                )
+                .map((ui.TextBox b) => b.toRect())
+                .toList()
+          : const <Rect>[];
+
+      // 将 rawBoxes 的上下边界校准为完整的行边界
+      // 避免 getBoxesForSelection 只取字形 EM-Box 导致文字被裁切且相对容器偏上
+      final List<Rect> fullRowBoxes = <Rect>[];
+      for (final Rect box in rawBoxes) {
+        final double midY = (box.top + box.bottom) / 2.0;
+        final int rowIndex = _rowIndexAt(midY, rows);
+        final Rect row = (rowIndex >= 0 && rowIndex < rows.length)
+            ? rows[rowIndex]
+            : Rect.fromLTWH(0, 0, width, _paragraphSize.height);
+        fullRowBoxes.add(
+          Rect.fromLTRB(box.left, row.top, box.right, row.bottom),
+        );
+      }
+
       geometries.add(
         _TokenGeometry(
-          charLength: token.text.length,
+          tokenIndex: i,
+          startCharIndex: startChar,
+          endCharIndex: endChar,
+          charLength: len,
           startMs: start,
           endMs: end,
+          boxes: fullRowBoxes,
         ),
       );
     }
@@ -309,6 +368,32 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     );
   }
 
+  // 计算单个音节当前时刻的上浮位移
+  double _calculateTokenFloatY({
+    required _TokenGeometry geometry,
+    required double timeMs,
+    required double maxFloatDistance,
+    required double highlightFactor,
+  }) {
+    if (maxFloatDistance <= 0.0 || highlightFactor <= 0.0) return 0.0;
+    if (timeMs < geometry.startMs) return 0.0;
+
+    final double durationMs = geometry.durationMs;
+    final double riseDuration = math.max(850.0, durationMs);
+
+    final double elapsed = timeMs - geometry.startMs;
+    final double progress = (elapsed / riseDuration).clamp(0.0, 1.0);
+
+    // 柔
+    const Curve floatCurve = Cubic(0.2, 0.0, 0.25, 1.0);
+    final double curveValue = floatCurve.transform(progress);
+
+    // 基础向上浮动位移
+    final double floatY = -maxFloatDistance * curveValue;
+
+    return floatY * highlightFactor;
+  }
+
   // 当前行的软边遮罩
   LinearGradient _edgeGradient({
     required Rect bounds,
@@ -392,6 +477,15 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
             : _paragraphSize.width;
         final double fade = _fadeWidth;
 
+        // 主行逐字上浮幅度：约 0.095em
+        final double fontSize = widget.baseStyle.fontSize ?? 24.0;
+        final double maxFloatDistance = widget.enableFloating
+            ? (fontSize * _kFloatDistanceRatio).clamp(
+                _kFloatDistanceMin,
+                _kFloatDistanceMax,
+              )
+            : 0.0;
+
         return SizedBox(
           width: width,
           height: _paragraphSize.height,
@@ -399,63 +493,185 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
             valueListenable: _timeMs,
             builder: (BuildContext context, double timeMs, Widget? child) {
               final _FillState fill = _fillStateAt(timeMs);
+              // 高亮因子同时缩放颜色与上浮位移：交接后从 1 平滑回到 0
+              final double highlightFactor = widget.highlightFactor.clamp(
+                0.0,
+                1.0,
+              );
+              final double settledFloatY = -maxFloatDistance * highlightFactor;
               final List<Widget> layers = <Widget>[];
 
-              // 已唱完的整行
-              if (fill.beforeRows.isNotEmpty) {
-                layers.add(
-                  ClipPath(
-                    clipper: _RectsClipper(fill.beforeRows),
-                    child: highlightLayer,
-                  ),
-                );
-              }
-              // 还没开唱的整行
-              if (fill.afterRows.isNotEmpty) {
-                layers.add(
-                  ClipPath(
-                    clipper: _RectsClipper(fill.afterRows),
-                    child: baseLayer,
-                  ),
-                );
-              }
-              // 正在唱的当前行：两层互补的软边遮罩
-              final Rect? currentRow = fill.currentRow;
-              if (currentRow != null) {
-                final List<Rect> rowRects = <Rect>[currentRow];
-                layers.add(
-                  ClipPath(
-                    clipper: _RectsClipper(rowRects),
-                    child: ShaderMask(
-                      blendMode: BlendMode.dstIn,
-                      shaderCallback: (Rect bounds) => _edgeGradient(
-                        bounds: bounds,
-                        edgeX: fill.edgeX,
-                        fade: fade,
-                        highlightSide: false,
-                      ).createShader(bounds),
-                      child: baseLayer,
-                    ),
-                  ),
-                );
-                layers.add(
-                  ClipPath(
-                    clipper: _RectsClipper(rowRects),
-                    child: ShaderMask(
-                      blendMode: BlendMode.dstIn,
-                      shaderCallback: (Rect bounds) => _edgeGradient(
-                        bounds: bounds,
-                        edgeX: fill.edgeX,
-                        fade: fade,
-                        highlightSide: true,
-                      ).createShader(bounds),
+              if (!widget.enableFloating || _geometries.isEmpty) {
+                // 未启用上浮动效时的兼容渲染路径
+                if (fill.beforeRows.isNotEmpty) {
+                  layers.add(
+                    ClipPath(
+                      clipper: _RectsClipper(fill.beforeRows),
                       child: highlightLayer,
                     ),
-                  ),
-                );
+                  );
+                }
+                if (fill.afterRows.isNotEmpty) {
+                  layers.add(
+                    ClipPath(
+                      clipper: _RectsClipper(fill.afterRows),
+                      child: baseLayer,
+                    ),
+                  );
+                }
+                final Rect? currentRow = fill.currentRow;
+                if (currentRow != null) {
+                  final List<Rect> rowRects = <Rect>[currentRow];
+                  layers.add(
+                    ClipPath(
+                      clipper: _RectsClipper(rowRects),
+                      child: ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (Rect bounds) => _edgeGradient(
+                          bounds: bounds,
+                          edgeX: fill.edgeX,
+                          fade: fade,
+                          highlightSide: false,
+                        ).createShader(bounds),
+                        child: baseLayer,
+                      ),
+                    ),
+                  );
+                  layers.add(
+                    ClipPath(
+                      clipper: _RectsClipper(rowRects),
+                      child: ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (Rect bounds) => _edgeGradient(
+                          bounds: bounds,
+                          edgeX: fill.edgeX,
+                          fade: fade,
+                          highlightSide: true,
+                        ).createShader(bounds),
+                        child: highlightLayer,
+                      ),
+                    ),
+                  );
+                }
+              } else {
+                // 上浮动效路径
+                final List<Rect> unsungBoxes = <Rect>[];
+                final List<Rect> settledBoxes = <Rect>[];
+                final List<Widget> floatingWidgets = <Widget>[];
+
+                for (final _TokenGeometry geom in _geometries) {
+                  if (geom.boxes.isEmpty) continue;
+
+                  final double startMs = geom.startMs;
+                  final double endMs = geom.endMs;
+                  final double durationMs = geom.durationMs;
+                  final double riseDuration = math.max(850.0, durationMs);
+                  final double riseEndMs = startMs + riseDuration;
+
+                  if (timeMs < startMs) {
+                    // 尚未唱到的音节：保持原位未高亮
+                    unsungBoxes.addAll(geom.boxes);
+                  } else if (timeMs >= riseEndMs && timeMs >= endMs) {
+                    // 唱完且浮动到位沉淀的音节：统一归入沉淀高亮层
+                    settledBoxes.addAll(geom.boxes);
+                  } else {
+                    // 正在演唱中，或正在向上浮动上升中的音节
+                    final double tokenFloatY = _calculateTokenFloatY(
+                      geometry: geom,
+                      timeMs: timeMs,
+                      maxFloatDistance: maxFloatDistance,
+                      highlightFactor: highlightFactor,
+                    );
+
+                    final bool isWiping = timeMs < endMs;
+
+                    if (isWiping) {
+                      // 正在演唱中的音节：应用卡拉OK水平擦除过渡，同时整体上浮
+                      floatingWidgets.add(
+                        Transform.translate(
+                          filterQuality: FilterQuality.low,
+                          offset: Offset(0, tokenFloatY),
+                          child: ClipPath(
+                            clipper: _RectsClipper(geom.boxes),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: <Widget>[
+                                ShaderMask(
+                                  blendMode: BlendMode.dstIn,
+                                  shaderCallback: (Rect bounds) =>
+                                      _edgeGradient(
+                                        bounds: bounds,
+                                        edgeX: fill.edgeX,
+                                        fade: fade,
+                                        highlightSide: false,
+                                      ).createShader(bounds),
+                                  child: baseLayer,
+                                ),
+                                ShaderMask(
+                                  blendMode: BlendMode.dstIn,
+                                  shaderCallback: (Rect bounds) =>
+                                      _edgeGradient(
+                                        bounds: bounds,
+                                        edgeX: fill.edgeX,
+                                        fade: fade,
+                                        highlightSide: true,
+                                      ).createShader(bounds),
+                                  child: highlightLayer,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    } else {
+                      // 唱完了但还在平滑减速上升到位的音节：全高亮，随自身浮动位移上升
+                      floatingWidgets.add(
+                        Transform.translate(
+                          filterQuality: FilterQuality.low,
+                          offset: Offset(0, tokenFloatY),
+                          child: ClipPath(
+                            clipper: _RectsClipper(geom.boxes),
+                            child: highlightLayer,
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                }
+
+                // 未唱到的音节层
+                if (unsungBoxes.isNotEmpty) {
+                  layers.add(
+                    ClipPath(
+                      clipper: _RectsClipper(unsungBoxes),
+                      child: baseLayer,
+                    ),
+                  );
+                }
+
+                // 已唱完并沉淀的音节层
+                if (settledBoxes.isNotEmpty) {
+                  layers.add(
+                    Transform.translate(
+                      filterQuality: FilterQuality.low,
+                      offset: Offset(0, settledFloatY),
+                      child: ClipPath(
+                        clipper: _RectsClipper(settledBoxes),
+                        child: highlightLayer,
+                      ),
+                    ),
+                  );
+                }
+
+                // 正在上浮及当前演唱的音节
+                layers.addAll(floatingWidgets);
               }
 
-              return Stack(fit: StackFit.expand, children: layers);
+              return Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.none,
+                children: layers,
+              );
             },
           ),
         );
