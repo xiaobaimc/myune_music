@@ -24,8 +24,8 @@ const Duration _kHighlightFadeInDuration = Duration(milliseconds: 160);
 
 // 退场动画触发在高亮已经交给下一行之后
 const double _kExitDurationRatio = 0.22;
-const Duration _kExitMinDuration = Duration(milliseconds: 160);
-const Duration _kExitMaxDuration = Duration(milliseconds: 250);
+const Duration _kExitMinDuration = Duration(milliseconds: 260);
+const Duration _kExitMaxDuration = Duration(milliseconds: 380);
 
 const Curve _kHighlightFadeCurve = Curves.easeOutCubic;
 const Curve _kExitCurve = Curves.easeInOutCubic;
@@ -453,6 +453,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
+  // 目标 sigma：只由"这行离当前行几行"决定；
+  // 实际显示值由 AnimatedLyricBlur 补间过去（换行、跳转、结束手动滚动、改设置
+  // 都会走过渡，而不是在一帧内换样式）。
   double _calculateSigma(
     int distance,
     bool shouldBlur,
@@ -531,7 +534,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         lyricIndex == widget.currentIndex - 1 &&
         _exitFade.value > 0.0;
 
-    // 本行的模糊强度，直接写进文字样式（见 _lyricTextStyle）
+    // 本行的目标模糊强度；实际显示值由 AnimatedLyricBlur 补间过去
     final double blurSigma = _calculateSigma(
       distance,
       shouldBlur,
@@ -541,6 +544,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     // 当前行跟着点亮动画；上一行在退场期跟着 _exitFade；其余行永远保持暗色
     // 非当前行用常量动画，不会被通知
+    //
+    // 调用处的嵌套顺序是 AnimatedLyricBlur( withHighlight( ... ) )，故意的：
+    // 补间放在外层，当前行/退场行切换渲染路径时补间状态不会被重建；
+    // 补间只包一行文字本身（不是整行 TextButton），行的外层结构仍走行缓存。
     Widget withHighlight(Widget Function(double factor) builder) {
       if (isCurrent) {
         return AnimatedBuilder(
@@ -592,16 +599,19 @@ class _LyricsWidgetState extends State<LyricsWidget>
           // 当前高亮行 / 正在退场的上一行：渲染为逐字动画效果
           final bool isSecondaryKaraoke = tokenGroupIndex > 0;
           final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
-          lineWidget = withHighlight(
-            (double factor) => _buildMultiLineKaraokeRichText(
-              [tokens],
-              fontSize,
-              fontWeight,
-              factor,
-              colorScheme,
-              forceSecondary: isSecondaryKaraoke,
-              enableFloating: enableFloating,
-              blurSigma: blurSigma,
+          lineWidget = AnimatedLyricBlur(
+            targetSigma: blurSigma,
+            builder: (double sigma) => withHighlight(
+              (double factor) => _buildMultiLineKaraokeRichText(
+                [tokens],
+                fontSize,
+                fontWeight,
+                factor,
+                colorScheme,
+                forceSecondary: isSecondaryKaraoke,
+                enableFloating: enableFloating,
+                blurSigma: sigma,
+              ),
             ),
           );
         } else {
@@ -613,17 +623,20 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     .map((LyricToken token) => token.text)
                     .join()
               : line.texts[i];
-          lineWidget = withHighlight(
-            (double factor) => _buildStaticLyricText(
-              text: displayText,
-              lyricAlignment: lyricAlignment,
-              style: _lyricTextStyle(
-                highlightFactor: factor,
-                isSecondaryLine: isSecondaryLine,
-                fontSize: fontSize,
-                fontWeight: fontWeight,
-                colorScheme: colorScheme,
-                blurSigma: blurSigma,
+          lineWidget = AnimatedLyricBlur(
+            targetSigma: blurSigma,
+            builder: (double sigma) => withHighlight(
+              (double factor) => _buildStaticLyricText(
+                text: displayText,
+                lyricAlignment: lyricAlignment,
+                style: _lyricTextStyle(
+                  highlightFactor: factor,
+                  isSecondaryLine: isSecondaryLine,
+                  fontSize: fontSize,
+                  fontWeight: fontWeight,
+                  colorScheme: colorScheme,
+                  blurSigma: sigma,
+                ),
               ),
             ),
           );
@@ -650,15 +663,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
       renderedLines += linesToTake;
 
       columnChildren.add(
-        withHighlight(
-          (double factor) => _buildMultiLineKaraokeRichText(
-            tokensToRender,
-            enableFloating: enableFloating,
-            fontSize,
-            fontWeight,
-            factor,
-            colorScheme,
-            blurSigma: blurSigma,
+        AnimatedLyricBlur(
+          targetSigma: blurSigma,
+          builder: (double sigma) => withHighlight(
+            (double factor) => _buildMultiLineKaraokeRichText(
+              tokensToRender,
+              enableFloating: enableFloating,
+              fontSize,
+              fontWeight,
+              factor,
+              colorScheme,
+              blurSigma: sigma,
+            ),
           ),
         ),
       );
@@ -674,17 +690,20 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
         final bool isSecondaryLine = i > 0;
 
-        final Widget staticText = withHighlight(
-          (double factor) => _buildStaticLyricText(
-            text: line.texts[i],
-            lyricAlignment: lyricAlignment,
-            style: _lyricTextStyle(
-              highlightFactor: factor,
-              isSecondaryLine: isSecondaryLine,
-              fontSize: fontSize,
-              fontWeight: fontWeight,
-              colorScheme: colorScheme,
-              blurSigma: blurSigma,
+        final Widget staticText = AnimatedLyricBlur(
+          targetSigma: blurSigma,
+          builder: (double sigma) => withHighlight(
+            (double factor) => _buildStaticLyricText(
+              text: line.texts[i],
+              lyricAlignment: lyricAlignment,
+              style: _lyricTextStyle(
+                highlightFactor: factor,
+                isSecondaryLine: isSecondaryLine,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                colorScheme: colorScheme,
+                blurSigma: sigma,
+              ),
             ),
           ),
         );
@@ -712,17 +731,20 @@ class _LyricsWidgetState extends State<LyricsWidget>
         ) {
           renderedLines++;
 
-          final Widget translationWidget = withHighlight(
-            (double factor) => _buildStaticLyricText(
-              text: line.texts[i],
-              lyricAlignment: lyricAlignment,
-              style: _lyricTextStyle(
-                highlightFactor: factor,
-                isSecondaryLine: true,
-                fontSize: fontSize,
-                fontWeight: fontWeight,
-                colorScheme: colorScheme,
-                blurSigma: blurSigma,
+          final Widget translationWidget = AnimatedLyricBlur(
+            targetSigma: blurSigma,
+            builder: (double sigma) => withHighlight(
+              (double factor) => _buildStaticLyricText(
+                text: line.texts[i],
+                lyricAlignment: lyricAlignment,
+                style: _lyricTextStyle(
+                  highlightFactor: factor,
+                  isSecondaryLine: true,
+                  fontSize: fontSize,
+                  fontWeight: fontWeight,
+                  colorScheme: colorScheme,
+                  blurSigma: sigma,
+                ),
               ),
             ),
           );
@@ -1368,7 +1390,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final springDesc = SpringDescription.withDampingRatio(
       mass: 1.0,
-      stiffness: 280.0,
+      stiffness: 240.0,
       ratio: 0.91,
     );
     const tolerance = Tolerance(distance: 0.1, velocity: 0.5);

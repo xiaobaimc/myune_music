@@ -80,9 +80,9 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
   static const double _kFadeRatio = 0.16;
 
   // 主行上浮幅度：相对字号的比例，以及像素上下限
-  static const double _kFloatDistanceRatio = 0.095;
-  static const double _kFloatDistanceMin = 2.2;
-  static const double _kFloatDistanceMax = 4.4;
+  static const double _kFloatDistanceRatio = 0.07;
+  static const double _kFloatDistanceMin = 1.5;
+  static const double _kFloatDistanceMax = 2.8;
 
   late final Ticker _ticker;
   final ValueNotifier<double> _timeMs = ValueNotifier<double>(0);
@@ -379,13 +379,13 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     if (timeMs < geometry.startMs) return 0.0;
 
     final double durationMs = geometry.durationMs;
-    final double riseDuration = math.max(850.0, durationMs);
+    final double riseDuration = math.max(1000.0, durationMs);
 
     final double elapsed = timeMs - geometry.startMs;
     final double progress = (elapsed / riseDuration).clamp(0.0, 1.0);
 
     // 柔
-    const Curve floatCurve = Cubic(0.2, 0.0, 0.25, 1.0);
+    const Curve floatCurve = Curves.easeOut;
     final double curveValue = floatCurve.transform(progress);
 
     // 基础向上浮动位移
