@@ -375,6 +375,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           highlightFactor: highlightFactor,
           // 只有主行参与上浮
           enableFloating: enableFloating && !isSecondaryLine,
+          glow: isSecondaryLine ? null : _lyricGlowStyle(colorScheme),
         ),
       );
 
@@ -467,6 +468,29 @@ class _LyricsWidgetState extends State<LyricsWidget>
     const int maxDistance = 5;
     final double normalizedDistance = (distance / maxDistance).clamp(0.0, 1.0);
     return normalizedDistance * blurStrength;
+  }
+
+  // 长音节辉光：字比背景亮就往白里晕，比背景暗就往黑里晕
+  LyricGlowStyle? _lyricGlowStyle(ColorScheme colorScheme) {
+    final double gap =
+        colorScheme.primary.computeLuminance() -
+        colorScheme.surface.computeLuminance();
+    if (gap > 0.15) {
+      return LyricGlowStyle(
+        color: Color.lerp(colorScheme.primary, Colors.white, 0.72)!,
+        peakAlpha: 0.42,
+        radiusEm: 0.15,
+        haloEm: 0.30,
+      );
+    }
+    if (gap < -0.15) {
+      return LyricGlowStyle(
+        color: Color.lerp(colorScheme.primary, Colors.black, 0.25)!,
+        peakAlpha: 0.18,
+        radiusEm: 0.09,
+      );
+    }
+    return null;
   }
 
   TextStyle _lyricTextStyle({
@@ -1390,7 +1414,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final springDesc = SpringDescription.withDampingRatio(
       mass: 1.0,
-      stiffness: 240.0,
+      stiffness: 220.0,
       ratio: 0.91,
     );
     const tolerance = Tolerance(distance: 0.1, velocity: 0.5);
@@ -1700,27 +1724,6 @@ class _LyricsClipper extends CustomClipper<Rect> {
   }
 }
 
-class LyricSpringCurve extends Curve {
-  final double omega;
-  final double zeta;
-
-  const LyricSpringCurve({this.omega = 12.0, this.zeta = 0.95});
-
-  @override
-  double transformInternal(double t) {
-    if (t <= 0.0) return 0.0;
-    if (t >= 1.0) return 1.0;
-
-    final double wd = omega * math.sqrt(1.0 - zeta * zeta);
-    final double envelope = math.exp(-zeta * omega * t);
-    final double phase =
-        math.cos(wd * t) +
-        (zeta / math.sqrt(1.0 - zeta * zeta)) * math.sin(wd * t);
-
-    return (1.0 - envelope * phase).clamp(0.0, 1.0);
-  }
-}
-
 // 弹性滚动里这一行长什么样的缓存条目
 class _ElasticRowCacheEntry {
   const _ElasticRowCacheEntry(this.hash, this.widget);
@@ -1728,30 +1731,3 @@ class _ElasticRowCacheEntry {
   final int hash;
   final Widget widget;
 }
-
-// class LyricSpringCurve extends Curve {
-//   final double stiffnessFactor;
-
-//   const LyricSpringCurve({this.stiffnessFactor = 1.0});
-
-//   @override
-//   double transformInternal(double t) {
-//     final double decay1 = -7.85 * stiffnessFactor;
-//     final double decay2 = -20.41 * stiffnessFactor;
-
-//     double getRaw(double time) {
-//       final double currentTime = time * 0.55;
-//       final double term1 = 1.625 * math.exp(decay1 * currentTime);
-//       final double term2 = 0.625 * math.exp(decay2 * currentTime);
-//       return 1.0 - term1 + term2;
-//     }
-
-//     final double startRaw = getRaw(0.0);
-//     final double endRaw = getRaw(1.0);
-
-//     final double normalized = (getRaw(t) - startRaw) / (endRaw - startRaw);
-
-//     final double fade = t * t * (3.0 - 2.0 * t);
-//     return normalized + fade * (1.0 - normalized);
-//   }
-// }
