@@ -11,6 +11,7 @@ class Song {
   final Uint8List? albumArt;
   final Duration? duration;
   final int? trackNumber;
+  final String? genre;
 
   Song({
     required this.title,
@@ -20,10 +21,16 @@ class Song {
     this.albumArt,
     this.duration,
     this.trackNumber,
+    this.genre,
   }) : normalizedPath = p.normalize(filePath);
 
   Map<String, dynamic> toJson() {
-    return {'title': title, 'artist': artist, 'filePath': filePath};
+    return {
+      'title': title,
+      'artist': artist,
+      'filePath': filePath,
+      'genre': genre,
+    };
   }
 
   factory Song.fromJson(Map<String, dynamic> json) {
@@ -31,6 +38,7 @@ class Song {
       title: json['title'],
       artist: json['artist'],
       filePath: json['filePath'],
+      genre: json['genre'] as String?,
     );
   }
 }
@@ -42,6 +50,11 @@ class SongMetadataCacheEntry {
   final String album;
   final int? durationMs;
   final int modifiedMs;
+  final String? genre;
+
+  // 是否已经读取过扩展标签
+  // 旧版本缓存没有这个字段，需要按 false 处理并在之后补读一次
+  final bool extraTagsLoaded;
 
   const SongMetadataCacheEntry({
     required this.title,
@@ -49,6 +62,8 @@ class SongMetadataCacheEntry {
     required this.album,
     required this.modifiedMs,
     this.durationMs,
+    this.genre,
+    this.extraTagsLoaded = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -58,6 +73,8 @@ class SongMetadataCacheEntry {
       'album': album,
       'durationMs': durationMs,
       'modifiedMs': modifiedMs,
+      'genre': genre,
+      'extraTagsLoaded': extraTagsLoaded,
     };
   }
 
@@ -68,6 +85,8 @@ class SongMetadataCacheEntry {
       album: json['album'] ?? '',
       durationMs: json['durationMs'],
       modifiedMs: json['modifiedMs'] ?? 0,
+      genre: json['genre'] as String?,
+      extraTagsLoaded: json['extraTagsLoaded'] ?? false,
     );
   }
 }

@@ -140,9 +140,9 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
   static const double _kFadeRatio = 0.16;
 
   // 主行上浮幅度：相对字号的比例，以及像素上下限
-  static const double _kFloatDistanceRatio = 0.075;
-  static const double _kFloatDistanceMin = 1.8;
-  static const double _kFloatDistanceMax = 3.5;
+  static const double _kFloatDistanceRatio = 0.07;
+  static const double _kFloatDistanceMin = 1.7;
+  static const double _kFloatDistanceMax = 3.3;
 
   // 长音节强调
   static const double _kEmphasisMinTokenMs = 1000.0;

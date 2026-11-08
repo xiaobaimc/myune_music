@@ -35,7 +35,7 @@ enum SortCriterion { title, artist, dateModified, file, random, trackNumber }
 
 enum PlayMode { sequence, shuffle, repeatOne }
 
-enum DetailViewContext { playlist, allSongs, artist, album }
+enum DetailViewContext { playlist, allSongs, artist, album, genre }
 
 class ReplayGainWriteSummary {
   final int total;
@@ -57,6 +57,13 @@ class _ReplayGainScanResult {
     required this.integratedLufs,
     required this.peak,
   });
+}
+
+class _GenreReadResult {
+  final String? genre;
+  final int modifiedMs;
+
+  const _GenreReadResult({required this.genre, required this.modifiedMs});
 }
 
 class EqualizerPreset {
@@ -97,6 +104,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 元数据缓存 ---
   final Map<String, SongMetadataCacheEntry> _songMetadataCache = {};
   Timer? _metadataCacheSaveTimer;
+
+  // --- 流派标签按需补读 ---
+  bool _isScanningGenres = false;
+  int _genreScanDone = 0;
+  int _genreScanTotal = 0;
+  bool get isScanningGenres => _isScanningGenres;
+  int get genreScanDone => _genreScanDone;
+  int get genreScanTotal => _genreScanTotal;
 
   // --- 封面加载队列 ---
   final Set<String> _visibleCoverPaths = {};
@@ -347,6 +362,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 存储从JSON加载的排序信息 ---
   Map<String, List<String>> _artistSortOrders = {};
   Map<String, List<String>> _albumSortOrders = {};
+  Map<String, List<String>> _genreSortOrders = {};
 
   // 播放队列相关
   List<Song>? _currentPlayingQueue; // 独立的播放队列，基于当前播放列表
@@ -430,9 +446,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> _loadAllData() async {
-    // 先加载歌手和专辑排序，避免初始化过程中被覆盖
+    // 先加载歌手、专辑和流派排序，避免初始化过程中被覆盖
     _artistSortOrders = await _playlistManager.loadArtistSortOrders();
     _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
+    _genreSortOrders = await _playlistManager.loadGenreSortOrders();
     await _loadSongMetadataCache();
 
     // 加载现有的播放列表
@@ -454,6 +471,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 获取规范化的路径
   String _normalizePath(String path) {
     return p.normalize(path);
+  }
+
+  // 流派标签可能包含多余空白，空字符串按“无流派”处理
+  String? _normalizeGenre(String? genre) {
+    final value = genre?.trim();
+    return (value == null || value.isEmpty) ? null : value;
   }
 
   // 加载歌曲元数据缓存
@@ -944,6 +967,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         duration: cached.durationMs != null
             ? Duration(milliseconds: cached.durationMs!)
             : null,
+        genre: cached.genre,
       );
     }
 
@@ -975,7 +999,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           needCover: false,
           needLyrics: false,
           needAudioProps: true,
-          needExtraTags: false,
+          needExtraTags: true,
           needTrackNumber: false,
         ),
       );
@@ -995,12 +1019,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
         duration = Duration(milliseconds: metadata.durationMs!.toInt());
       }
 
+      final genre = _normalizeGenre(metadata.genre);
       _songMetadataCache[cacheKey] = SongMetadataCacheEntry(
         title: title,
         artist: artist,
         album: album,
         durationMs: metadata.durationMs?.toInt(),
         modifiedMs: stat.modified.millisecondsSinceEpoch,
+        genre: genre,
+        extraTagsLoaded: true,
       );
       _scheduleMetadataCacheSave();
     } catch (e) {
@@ -1014,6 +1041,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       filePath: filePath,
       albumArt: null,
       duration: duration,
+      genre: _normalizeGenre(_songMetadataCache[cacheKey]?.genre),
     );
   }
 
@@ -1105,6 +1133,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
           album: cachedEntry.album,
           durationMs: cachedEntry.durationMs,
           modifiedMs: cachedEntry.modifiedMs,
+          genre: cachedEntry.genre,
+          extraTagsLoaded: cachedEntry.extraTagsLoaded,
         );
       }
 
@@ -1124,6 +1154,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         filePath: filePath,
         albumArt: cover,
         duration: duration,
+        genre: basicSong.genre,
       );
     } catch (e) {
       return basicSong;
@@ -1139,6 +1170,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       albumArt: cover,
       duration: song.duration,
       trackNumber: song.trackNumber,
+      genre: song.genre,
     );
   }
 
@@ -1250,6 +1282,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
         duration: entry.durationMs != null
             ? Duration(milliseconds: entry.durationMs!)
             : song.duration,
+        trackNumber: song.trackNumber,
+        genre: entry.genre,
       );
     }, notify: notify);
   }
@@ -1262,6 +1296,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       filePath: song.filePath,
       albumArt: null,
       duration: song.duration,
+      trackNumber: song.trackNumber,
+      genre: song.genre,
     );
   }
 
@@ -1297,7 +1333,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
             needCover: false,
             needLyrics: false,
             needAudioProps: true,
-            needExtraTags: false,
+            needExtraTags: true,
             needTrackNumber: false,
           ),
         );
@@ -1318,6 +1354,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
           album: album,
           durationMs: metadata.durationMs?.toInt(),
           modifiedMs: modifiedMs,
+          genre: _normalizeGenre(metadata.genre),
+          extraTagsLoaded: true,
         );
 
         _songMetadataCache[cacheKey] = entry;
@@ -1338,6 +1376,150 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     if (changed) {
       notifyListeners();
+    }
+  }
+
+  // 按需补读流派标签，供流派页使用
+  // 旧版本缓存没有 genre 字段，这里只在用户打开流派页时扫描一次并写入缓存
+  Future<void> ensureGenreTagsLoaded() async {
+    if (_isScanningGenres || !_allSongsLoaded) {
+      return;
+    }
+
+    final pending = <Song>[];
+    for (final song in _allSongs) {
+      final entry = _songMetadataCache[song.normalizedPath];
+      if (entry == null || !entry.extraTagsLoaded) {
+        pending.add(song);
+      }
+    }
+
+    if (pending.isEmpty) {
+      return;
+    }
+
+    _isScanningGenres = true;
+    _genreScanTotal = pending.length;
+    _genreScanDone = 0;
+    notifyListeners();
+
+    const batchSize = 6;
+    final notifyStopwatch = Stopwatch()..start();
+
+    try {
+      for (var i = 0; i < pending.length; i += batchSize) {
+        final end = (i + batchSize < pending.length)
+            ? i + batchSize
+            : pending.length;
+        final batch = pending.sublist(i, end);
+
+        final results = <String, _GenreReadResult?>{};
+        await Future.wait(
+          batch.map((song) async {
+            results[song.normalizedPath] = await _readGenreForSong(song);
+          }),
+        );
+
+        var changed = false;
+        for (final song in batch) {
+          final cacheKey = song.normalizedPath;
+          final previous = _songMetadataCache[cacheKey];
+          final result = results[cacheKey];
+          final genre = result?.genre;
+          final modifiedMs = result?.modifiedMs ?? 0;
+
+          if (previous == null) {
+            _songMetadataCache[cacheKey] = SongMetadataCacheEntry(
+              title: song.title,
+              artist: song.artist,
+              album: song.album,
+              durationMs: song.duration?.inMilliseconds,
+              modifiedMs: modifiedMs,
+              genre: genre,
+              extraTagsLoaded: true,
+            );
+          } else {
+            _songMetadataCache[cacheKey] = SongMetadataCacheEntry(
+              title: previous.title,
+              artist: previous.artist,
+              album: previous.album,
+              durationMs: previous.durationMs,
+              // 不在这里更新修改时间：文件若已变化，交给后台元数据校验去完整刷新
+              modifiedMs: previous.modifiedMs,
+              // 读取失败时保留已有流派，避免因为一次 IO 失败把标签清空
+              genre: result == null ? previous.genre : genre,
+              extraTagsLoaded: true,
+            );
+          }
+
+          changed |= _updateSongInCollections(song.filePath, (existing) {
+            final targetGenre = result == null ? existing.genre : genre;
+            // 流派没有变化时不替换 Song 对象，避免无意义地重建整个歌曲列表
+            if (existing.genre == targetGenre) {
+              return existing;
+            }
+            return Song(
+              title: existing.title,
+              artist: existing.artist,
+              album: existing.album,
+              filePath: existing.filePath,
+              albumArt: existing.albumArt,
+              duration: existing.duration,
+              trackNumber: existing.trackNumber,
+              genre: targetGenre,
+            );
+          }, notify: false);
+        }
+
+        _genreScanDone = end;
+        if (changed) {
+          _scheduleMetadataCacheSave();
+        }
+
+        // 批量扫描时按时间节流通知，避免流派页过于频繁地重建
+        if (notifyStopwatch.elapsedMilliseconds >= 250 ||
+            _genreScanDone == _genreScanTotal) {
+          notifyStopwatch.reset();
+          notifyListeners();
+        }
+      }
+    } finally {
+      _isScanningGenres = false;
+      _genreScanDone = _genreScanTotal;
+      _scheduleMetadataCacheSave();
+      notifyListeners();
+    }
+  }
+
+  Future<_GenreReadResult?> _readGenreForSong(Song song) async {
+    final normalizedPath = Uri.file(
+      song.filePath,
+    ).toFilePath(windows: Platform.isWindows);
+    final file = File(normalizedPath);
+
+    try {
+      final stat = await file.stat();
+      if (stat.type != FileSystemEntityType.file) {
+        return null;
+      }
+
+      final metadata = await readAudioInfo(
+        path: normalizedPath,
+        options: const AudioInfoOptions(
+          needCover: false,
+          needLyrics: false,
+          needAudioProps: false,
+          needExtraTags: true,
+          needTrackNumber: false,
+        ),
+      );
+
+      return _GenreReadResult(
+        genre: _normalizeGenre(metadata.genre),
+        modifiedMs: stat.modified.millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -4443,6 +4625,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setActiveGenreView(String genreName) {
+    _currentDetailViewContext = DetailViewContext.genre;
+    _activeDetailTitle = genreName;
+    _activeSongList = List<Song>.from(songsByGenre[genreName] ?? []);
+
+    // 应用持久化排序
+    final savedOrder = _genreSortOrders[genreName];
+    if (savedOrder != null) {
+      final songMap = {for (final song in _activeSongList) song.filePath: song};
+      _activeSongList = savedOrder
+          .map((path) => songMap[path])
+          .where((song) => song != null)
+          .cast<Song>()
+          .toList();
+    }
+
+    if (_isSearching) stopSearch();
+    notifyListeners();
+  }
+
   // 进入全部歌曲页面时调用
   void setActiveAllSongsView() {
     _currentDetailViewContext = DetailViewContext.allSongs;
@@ -4469,9 +4671,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     required SortCriterion criterion,
     required bool descending,
   }) async {
-    // 确保当前视图是歌手或专辑，否则直接返回
+    // 确保当前视图是歌手、专辑或流派，否则直接返回
     if (_currentDetailViewContext != DetailViewContext.artist &&
-        _currentDetailViewContext != DetailViewContext.album) {
+        _currentDetailViewContext != DetailViewContext.album &&
+        _currentDetailViewContext != DetailViewContext.genre) {
       return;
     }
 
@@ -4501,6 +4704,11 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _albumSortOrders[_activeDetailTitle] = sortedPaths;
 
       await _playlistManager.saveAlbumSortOrders(_albumSortOrders);
+    } else if (_currentDetailViewContext == DetailViewContext.genre) {
+      // 如果当前是流派视图，更新流派排序 Map
+      _genreSortOrders[_activeDetailTitle] = sortedPaths;
+
+      await _playlistManager.saveGenreSortOrders(_genreSortOrders);
     }
 
     notifyListeners();
@@ -4536,9 +4744,22 @@ class PlaylistContentNotifier extends ChangeNotifier {
       _artistSortOrders.remove(artistName);
     }
 
+    // 清理流派排序数据
+    final genresToRemove = <String>[];
+    _genreSortOrders.forEach((genreName, paths) {
+      paths.removeWhere((path) => !validPaths.contains(path));
+      if (paths.isEmpty) {
+        genresToRemove.add(genreName);
+      }
+    });
+    for (final genreName in genresToRemove) {
+      _genreSortOrders.remove(genreName);
+    }
+
     // 保存清理后的排序数据
     _playlistManager.saveAlbumSortOrders(_albumSortOrders);
     _playlistManager.saveArtistSortOrders(_artistSortOrders);
+    _playlistManager.saveGenreSortOrders(_genreSortOrders);
   }
 
   Future<void> playFromDynamicList(List<Song> songs, int startIndex) async {
@@ -4632,9 +4853,30 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return grouped;
   }
 
+  // 按流派分组；没有流派标签的歌曲不进入流派页
+  Map<String, List<Song>> get songsByGenre {
+    final Map<String, List<Song>> grouped = {};
+    for (final song in _allSongs) {
+      final genre = _normalizeGenre(song.genre);
+      if (genre == null) {
+        continue;
+      }
+      grouped.putIfAbsent(genre, () => []).add(song);
+    }
+    return grouped;
+  }
+
   // 用于歌手列表外部的缩略图显示，确保与歌手详情页内部的头图一致
   Song? getArtistCoverSong(String artistName, List<Song> songs) {
-    final savedOrder = _artistSortOrders[artistName];
+    return _getCoverSongForGroup(songs, _artistSortOrders[artistName]);
+  }
+
+  // 用于流派列表外部的缩略图显示，确保与流派详情页内部的头图一致
+  Song? getGenreCoverSong(String genreName, List<Song> songs) {
+    return _getCoverSongForGroup(songs, _genreSortOrders[genreName]);
+  }
+
+  Song? _getCoverSongForGroup(List<Song> songs, List<String>? savedOrder) {
     List<Song> orderedSongs;
 
     if (savedOrder != null && savedOrder.isNotEmpty) {
@@ -4665,11 +4907,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return orderedSongs.isNotEmpty ? orderedSongs.first : null;
   }
 
-  // 处理在歌手/专辑详情页中的拖动排序
+  // 处理在歌手/专辑/流派详情页中的拖动排序
   Future<void> reorderActiveSongList(int oldIndex, int newIndex) async {
-    // 安全检查，确保当前视图是歌手或专辑
+    // 安全检查，确保当前视图是歌手、专辑或流派
     if (_currentDetailViewContext != DetailViewContext.artist &&
-        _currentDetailViewContext != DetailViewContext.album) {
+        _currentDetailViewContext != DetailViewContext.album &&
+        _currentDetailViewContext != DetailViewContext.genre) {
       return;
     }
 
@@ -4687,6 +4930,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     } else if (_currentDetailViewContext == DetailViewContext.album) {
       _albumSortOrders[_activeDetailTitle] = newPathOrder;
       await _playlistManager.saveAlbumSortOrders(_albumSortOrders);
+    } else if (_currentDetailViewContext == DetailViewContext.genre) {
+      _genreSortOrders[_activeDetailTitle] = newPathOrder;
+      await _playlistManager.saveGenreSortOrders(_genreSortOrders);
     }
 
     notifyListeners();
@@ -4909,7 +5155,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
         break;
       case DetailViewContext.artist:
       case DetailViewContext.album:
-        // 对于歌手和专辑详情页，都从_activeSongList中搜索
+      case DetailViewContext.genre:
+        // 对于歌手、专辑和流派详情页，都从_activeSongList中搜索
         sourceList = _activeSongList;
         break;
     }

@@ -7,6 +7,7 @@ import '../page/pages/song_details.dart';
 import '../page/pages/all_songs.dart';
 import '../page/pages/album_list_page.dart';
 import '../page/pages/artist_list_page.dart';
+import '../page/pages/genre_list_page.dart';
 import '../page/pages/statistics_page.dart';
 import '../page/pages/audio_analysis_page.dart';
 
@@ -86,6 +87,14 @@ class _MainViewState extends State<MainView> {
         icon: Icons.album_outlined,
         selectedIcon: Icons.album,
         page: const AlbumListPage(),
+      ),
+      PageEntry(
+        visible: (label, hiddenPages) => !hiddenPages.contains(label),
+        label: '流派',
+        routeName: '/genres',
+        icon: Icons.category_outlined,
+        selectedIcon: Icons.category,
+        page: const GenreListPage(),
       ),
       PageEntry(
         visible: (label, hiddenPages) => !hiddenPages.contains(label),

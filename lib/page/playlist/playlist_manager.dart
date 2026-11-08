@@ -12,6 +12,7 @@ class PlaylistManager {
   static const String _allSongsOrderFileName = 'all_songs_order.json';
   static const String _artistSortOrderFileName = 'artist_sort_order.json';
   static const String _albumSortOrderFileName = 'album_sort_order.json';
+  static const String _genreSortOrderFileName = 'genre_sort_order.json';
   static const String _songMetadataCacheFileName = 'song_metadata_cache.json';
   static const String _migrationFlagKey = 'data_migrated_to_app_support';
 
@@ -292,6 +293,12 @@ class PlaylistManager {
     return File(p.join(path, _albumSortOrderFileName));
   }
 
+  // 获取流派排序文件的路径
+  Future<File> _getGenreSortOrderFile() async {
+    final path = await _getLocalPath();
+    return File(p.join(path, _genreSortOrderFileName));
+  }
+
   // 加载歌手的排序配置
   Future<Map<String, List<String>>> loadArtistSortOrders() async {
     try {
@@ -343,6 +350,33 @@ class PlaylistManager {
       await file.writeAsString(jsonEncode(orders));
     } catch (e) {
       // print('保存专辑排序失败: $e');
+    }
+  }
+
+  // 加载流派的排序配置
+  Future<Map<String, List<String>>> loadGenreSortOrders() async {
+    try {
+      final file = await _getGenreSortOrderFile();
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        final json = jsonDecode(contents) as Map<String, dynamic>;
+        return json.map(
+          (key, value) => MapEntry(key, List<String>.from(value)),
+        );
+      }
+    } catch (e) {
+      //
+    }
+    return {};
+  }
+
+  // 保存流派的排序配置
+  Future<void> saveGenreSortOrders(Map<String, List<String>> orders) async {
+    try {
+      final file = await _getGenreSortOrderFile();
+      await file.writeAsString(jsonEncode(orders));
+    } catch (e) {
+      //
     }
   }
 
