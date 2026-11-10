@@ -234,7 +234,7 @@ class NetworkTagReader {
       final hash = crypto.sha1.convert(utf8.encode(url)).toString();
 
       final client = http.Client();
-      IOSink? sink;
+      IOSink? opened;
       try {
         final request = http.Request('GET', Uri.parse(url))
           ..headers['Range'] = 'bytes=0-${_headBytes - 1}';
@@ -248,7 +248,9 @@ class NetworkTagReader {
         final declaredTotal =
             _totalFromRange(response.headers) ?? response.contentLength;
         final file = File(p.join(dir.path, '$hash.head'));
-        sink = file.openWrite();
+        // 不可空局部变量：`opened` 只用于异常时兜底关闭。
+        final sink = file.openWrite();
+        opened = sink;
         var received = 0;
         await for (final chunk in response.stream) {
           if (received + chunk.length > _headBytes) {
@@ -260,7 +262,7 @@ class NetworkTagReader {
           sink.add(chunk);
         }
         await sink.close();
-        sink = null;
+        opened = null;
         if (received == 0) {
           await _deleteQuietly(file.path);
           return null;
@@ -273,7 +275,7 @@ class NetworkTagReader {
         );
       } finally {
         try {
-          await sink?.close();
+          await opened?.close();
         } catch (_) {}
         client.close();
       }

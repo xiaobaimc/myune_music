@@ -103,7 +103,7 @@ class WebDavClient {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
           'WebDAV PROPFIND 失败（HTTP ${response.statusCode}）：'
-          '${_shortError(body)}',
+          '${_shortBody(body)}',
         );
       }
       return _parsePropfind(body, target);
@@ -164,14 +164,23 @@ class WebDavClient {
   /// 用于「诊断」与「长度补全」：服务端若支持 Range 会返回 206 与
   /// `Content-Range`，从中可直接得到真实总长度；若忽略 Range 则返回 200，
   /// 此时用 `Content-Length` 兜底，并标记为不支持 Range。
-  Future<RemoteProbeResult> probe(String href) async {
+  ///
+  /// [start] / [end] 可以指定探测的区间：诊断时用「文件中部的一个字节」
+  /// 来模拟拖动进度时的 seek，能直接看出上游 seek 是否可用、有多慢。
+  Future<RemoteProbeResult> probe(
+    String href, {
+    int? start,
+    int? end,
+  }) async {
     final client = http.Client();
     final stopwatch = Stopwatch()..start();
+    final from = start ?? 0;
+    final to = end ?? (start == null ? 0 : start);
     try {
       final target = uriFor(href);
       final request = http.Request('GET', target)
         ..headers.addAll(_authHeaders)
-        ..headers['Range'] = 'bytes=0-0';
+        ..headers['Range'] = 'bytes=$from-$to';
       final response = await client.send(request).timeout(
             const Duration(seconds: 20),
           );
@@ -342,7 +351,8 @@ class WebDavClient {
     return decoded.replaceAll(RegExp(r'/+$'), '');
   }
 
-  String _shortError(String body) {
+  /// 把 PROPFIND / GET 的正文压成一行可读的错误说明。
+  String _shortBody(String body) {
     final plain = body.replaceAll(RegExp(r'<[^>]+>'), ' ').trim();
     if (plain.isEmpty) return '服务端未返回正文';
     return plain.length > 120 ? '${plain.substring(0, 120)}…' : plain;

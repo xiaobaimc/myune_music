@@ -68,6 +68,38 @@ class NetworkProxyLog {
     unawaited(_flush());
   }
 
+  /// 提前把日志文件建好，让「查看日志」在还没产生任何请求时也能打开目录。
+  Future<String?> ensureReady() async {
+    final file = await _ensureFile();
+    return file?.path;
+  }
+
+  /// 读取日志末尾若干行，供界面直接展示。
+  Future<String> readTail({int maxLines = 400}) async {
+    try {
+      final file = await _ensureFile();
+      if (file == null || !await file.exists()) return '（还没有日志）';
+      final text = await file.readAsString();
+      final lines = text.split('\n');
+      if (lines.length <= maxLines) return text.trim();
+      return lines.sublist(lines.length - maxLines).join('\n').trim();
+    } catch (error) {
+      return '读取日志失败：$error';
+    }
+  }
+
+  /// 清空日志文件。
+  Future<void> clear() async {
+    try {
+      final file = await _ensureFile();
+      if (file == null) return;
+      _pending.clear();
+      await file.writeAsString('', mode: FileMode.write);
+    } catch (_) {
+      // 清理失败不影响主流程。
+    }
+  }
+
   Future<void> _flush() async {
     if (_flushing) return;
     _flushing = true;

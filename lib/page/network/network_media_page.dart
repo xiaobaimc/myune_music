@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../page/playlist/playlist_content_notifier.dart';
 import '../../page/playlist/playlist_models.dart';
 import '../../services/network/network_media_service.dart';
+import '../../services/network/network_proxy_log.dart';
 import '../../services/network/remote_entry.dart';
 import '../../services/network/remote_source.dart';
 import '../../services/network/remote_stream.dart';
@@ -418,12 +422,46 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
     }
   }
 
+  /// 诊断当前目录里的第一首音频（没有音频就诊断目录本身）。
+  Future<void> _diagnoseCurrent() async {
+    final source = _active;
+    if (source == null) {
+      _notification.info('请先在左侧选择一个网络源');
+      return;
+    }
+    final entries = _audioEntries;
+    if (entries.isEmpty) {
+      _notification.info('当前目录没有音频文件，请先进入有音乐的目录再诊断');
+      return;
+    }
+    await _diagnoseFile(entries.first);
+  }
+
+  Future<void> _diagnoseFile(RemoteEntry entry) async {
+    final source = _active;
+    if (source == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _DiagnoseDialog(
+        source: source,
+        path: entry.path,
+        title: entry.name,
+      ),
+    );
+  }
+
+  Future<void> _showLogs() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _NetworkLogDialog(),
+    );
+  }
+
   Future<void> _dispatch(
     List<Song> songs,
     int index, {
     bool? enqueue,
-  }) async {
-    if (songs.isEmpty) return;
+  }) async {    if (songs.isEmpty) return;
     final notifier = context.read<PlaylistContentNotifier>();
     final toQueue = enqueue ?? _enqueueMode;
     if (toQueue) {
@@ -653,6 +691,25 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
           ),
         ),
         const PopupMenuItem<String>(
+          value: 'diagnose',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.troubleshoot, size: 18),
+            title: Text('连接诊断…'),
+            subtitle: Text('测上游、中段 seek 与本机代理'),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'logs',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.receipt_long_outlined, size: 18),
+            title: Text('查看网络日志'),
+          ),
+        ),
+        const PopupMenuItem<String>(
           value: 'delete',
           child: ListTile(
             dense: true,
@@ -700,6 +757,12 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
         break;
       case 'edit':
         await _editSource();
+        break;
+      case 'diagnose':
+        await _diagnoseCurrent();
+        break;
+      case 'logs':
+        await _showLogs();
         break;
       case 'delete':
         await _deleteSource();
@@ -1181,6 +1244,8 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
                           await _addToPlaylist(<RemoteEntry>[entry]);
                         } else if (value == 'allSongs') {
                           await _addToAllSongs(<RemoteEntry>[entry]);
+                        } else if (value == 'diagnose') {
+                          await _diagnoseFile(entry);
                         }
                       },
                       itemBuilder: (_) =>
@@ -1192,6 +1257,11 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
                             PopupMenuItem<String>(
                               value: 'allSongs',
                               child: Text('加入「全部歌曲」'),
+                            ),
+                            PopupMenuDivider(),
+                            PopupMenuItem<String>(
+                              value: 'diagnose',
+                              child: Text('诊断此文件…'),
                             ),
                           ],
                     ),
@@ -1232,5 +1302,174 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
         ],
       ),
     );
+  }
+}
+
+/// 网络诊断对话框：跑一遍「上游 / 中段 seek / 本机代理」探测并把报告贴出来。
+///
+/// 网络播放失败时 mpv 只会给一句 `loading failed` 或
+/// `Immediate exit requested`，看不出是鉴权、太慢还是不支持 Range。
+/// 这个对话框就是为了把这三种情况区分开，报告可以一键复制发出去。
+class _DiagnoseDialog extends StatefulWidget {
+  const _DiagnoseDialog({
+    required this.source,
+    required this.path,
+    required this.title,
+  });
+
+  final RemoteSource source;
+  final String path;
+  final String title;
+
+  @override
+  State<_DiagnoseDialog> createState() => _DiagnoseDialogState();
+}
+
+class _DiagnoseDialogState extends State<_DiagnoseDialog> {
+  late final Future<String> _report = NetworkMediaService.diagnose(
+    widget.source,
+    widget.path,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: <Widget>[
+          const Icon(Icons.troubleshoot, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '诊断：${widget.title}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 560,
+        height: 380,
+        child: FutureBuilder<String>(
+          future: _report,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    CircularProgressIndicator(),
+                    SizedBox(height: 14),
+                    Text('正在探测上游与代理，稍等几秒…'),
+                  ],
+                ),
+              );
+            }
+            final text = snapshot.data ?? '诊断失败：${snapshot.error}';
+            return SingleChildScrollView(
+              child: SelectableText(
+                text,
+                style: const TextStyle(fontSize: 12.5, height: 1.65),
+              ),
+            );
+          },
+        ),
+      ),
+      actions: <Widget>[
+        TextButton.icon(
+          onPressed: () async {
+            final text = await _report;
+            await Clipboard.setData(ClipboardData(text: text));
+          },
+          icon: const Icon(Icons.copy, size: 16),
+          label: const Text('复制报告'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+}
+
+/// 网络代理日志查看器。日志写盘是异步的，这里读的是文件尾部若干行。
+class _NetworkLogDialog extends StatefulWidget {
+  const _NetworkLogDialog();
+
+  @override
+  State<_NetworkLogDialog> createState() => _NetworkLogDialogState();
+}
+
+class _NetworkLogDialogState extends State<_NetworkLogDialog> {
+  late final Future<String> _text = NetworkProxyLog.instance.readTail();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: <Widget>[
+          Icon(Icons.receipt_long_outlined, size: 20),
+          SizedBox(width: 8),
+          Text('网络日志'),
+        ],
+      ),
+      content: SizedBox(
+        width: 640,
+        height: 400,
+        child: FutureBuilder<String>(
+          future: _text,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final text = snapshot.data ?? '读取失败';
+            return SingleChildScrollView(
+              child: SelectableText(
+                text,
+                style: const TextStyle(fontSize: 11, height: 1.5),
+              ),
+            );
+          },
+        ),
+      ),
+      actions: <Widget>[
+        TextButton.icon(
+          onPressed: () async {
+            final text = await _text;
+            await Clipboard.setData(ClipboardData(text: text));
+          },
+          icon: const Icon(Icons.copy, size: 16),
+          label: const Text('复制日志'),
+        ),
+        TextButton.icon(
+          onPressed: () async {
+            final dir = NetworkProxyLog.instance.directory;
+            if (dir == null) return;
+            await _openFolder(dir);
+          },
+          icon: const Icon(Icons.folder_open, size: 16),
+          label: const Text('打开文件夹'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+
+  static Future<void> _openFolder(String dir) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer.exe', <String>[dir]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', <String>[dir]);
+      } else {
+        await Process.run('xdg-open', <String>[dir]);
+      }
+    } catch (_) {
+      // 打不开资源管理器时忽略，用户仍可复制路径。
+    }
   }
 }

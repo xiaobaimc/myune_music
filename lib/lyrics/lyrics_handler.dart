@@ -297,7 +297,7 @@ class LyricsHandler {
       if (!NetworkTagReader.enabled) return;
       try {
         final info = await NetworkTagReader.read(songFilePath).timeout(
-          const Duration(seconds: 8),
+          const Duration(seconds: 5),
           onTimeout: () => null,
         );
         final lyrics = info?.lyrics;

@@ -340,7 +340,7 @@ class NetworkMediaService {
     int maxBytes,
   ) async {
     final client = http.Client();
-    IOSink? sink;
+    IOSink? opened;
     try {
       final response = await client
           .send(http.Request('GET', Uri.parse(url)))
@@ -354,24 +354,27 @@ class NetworkMediaService {
         await response.stream.drain<void>();
         return false;
       }
-      sink = file.openWrite();
+      // 用不可空局部变量写盘：`sink` 会被置空以标记「已关闭」，
+      // 那样的可空变量在循环体里拿不到类型提升。
+      final sink = file.openWrite();
+      opened = sink;
       var received = 0;
       await for (final chunk in response.stream) {
         received += chunk.length;
         if (received > maxBytes) {
           await sink.close();
-          sink = null;
+          opened = null;
           if (await file.exists()) await file.delete();
           return false;
         }
         sink.add(chunk);
       }
       await sink.close();
-      sink = null;
+      opened = null;
       return received > 0;
     } catch (_) {
       try {
-        await sink?.close();
+        await opened?.close();
       } catch (_) {}
       try {
         if (await file.exists()) await file.delete();
@@ -408,7 +411,7 @@ class NetworkMediaService {
         message: '$error',
       );
     }
-    buffer.writeln('① 直连上游');
+    buffer.writeln('① 直连上游（取 1 字节响应头）');
     buffer.writeln(
       '   结果：${probe.ok ? '正常' : '失败'}'
       '（状态 ${probe.statusCode}，首包 ${probe.elapsedMs} ms）',
@@ -423,7 +426,48 @@ class NetworkMediaService {
     buffer.writeln('   内容类型：${probe.contentType ?? '未声明'}');
     buffer.writeln('');
 
-    buffer.writeln('② 本机流代理');
+    // ② 模拟拖动进度：直接向上游要「文件正中间」的两个字节。
+    // 这一步是判断「播到一半卡住 / Immediate exit requested」的关键：
+    // 很多网盘桥能顺序读，但 seek 要么不支持，要么要重新走一次网盘 API，
+    // 慢到 mpv 超时后主动中断连接。
+    final total = probe.totalLength;
+    if (probe.ok && total != null && total > 4 * 1024 * 1024) {
+      final mid = total ~/ 2;
+      RemoteProbeResult seek;
+      try {
+        seek = source.type == RemoteSourceType.webdav
+            ? await WebDavClient(source).probe(path, start: mid, end: mid + 1)
+            : await FtpClient(source).probe(path);
+      } catch (error) {
+        seek = RemoteProbeResult(
+          ok: false,
+          statusCode: 0,
+          elapsedMs: 0,
+          message: '$error',
+        );
+      }
+      buffer.writeln('② 模拟拖动进度（直接向服务端要第 $mid 字节附近）');
+      buffer.writeln(
+        '   结果：${seek.ok ? '正常' : '失败'}'
+        '（状态 ${seek.statusCode}，耗时 ${seek.elapsedMs} ms）',
+      );
+      if (seek.message.isNotEmpty) {
+        buffer.writeln('   原因：${seek.message}');
+      }
+      if (!seek.ok) {
+        buffer.writeln('   ⚠ 服务端不支持从中段取数据，拖动进度会失败');
+      } else if (seek.elapsedMs > 8000) {
+        buffer.writeln('   ⚠ 中段取数据太慢，播放器会因超时主动中断连接');
+      } else if (seek.elapsedMs > 3000) {
+        buffer.writeln('   ⚠ 中段取数据偏慢，拖动进度后可能要等几秒');
+      }
+      buffer.writeln('');
+    } else if (probe.ok) {
+      buffer.writeln('② 模拟拖动进度：文件较小或长度未知，跳过');
+      buffer.writeln('');
+    }
+
+    buffer.writeln('③ 本机流代理');
     final ready = await ensureProxy();
     if (!ready) {
       buffer.writeln('   代理未启动：端口 18765-18774 全部被占用，请重启应用');
