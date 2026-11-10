@@ -127,6 +127,40 @@ class FtpClient {
     }
   }
 
+  /// 探测：登录 + SIZE + 只读一个数据块就断开。
+  Future<RemoteProbeResult> probe(String remotePath) async {
+    final stopwatch = Stopwatch()..start();
+    _FtpSession? session;
+    try {
+      session = await _connect();
+      final total = await session.control.size(remotePath);
+      final data = await session.openDataConnection();
+      await session.control.send('RETR $remotePath');
+      await data.first.timeout(const Duration(seconds: 15));
+      stopwatch.stop();
+      return RemoteProbeResult(
+        ok: true,
+        statusCode: 226,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        totalLength: total,
+        supportsRange: true,
+        contentType: guessContentType(
+          remoteEntryName(remotePath, isDirectory: false),
+        ),
+      );
+    } catch (error) {
+      stopwatch.stop();
+      return RemoteProbeResult(
+        ok: false,
+        statusCode: 0,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        message: '$error',
+      );
+    } finally {
+      await session?.close();
+    }
+  }
+
   List<RemoteEntry> _parseList(String text, String dirPath) {
     final entries = <RemoteEntry>[];
     final seen = <String>{};

@@ -12,6 +12,9 @@ import '../setting/settings_provider.dart';
 import '../../widgets/custom_background_layer.dart';
 import 'network_source_editor.dart';
 
+/// 递归扫描完成后的去向。
+enum _ScanAction { play, queue, playlist, allSongs }
+
 /// 「网络媒体」页：WebDAV / FTP 网络驱动器的浏览与播放入口。
 ///
 /// 设计要点：
@@ -322,6 +325,99 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
     );
   }
 
+  /// 把一批网络媒体加入某个已有歌单（弹窗选择）。
+  Future<void> _addToPlaylist(List<RemoteEntry> entries, {String? album}) async {
+    if (_active == null) return;
+    if (entries.isEmpty) {
+      _notification.error('当前目录没有可添加的音频文件');
+      return;
+    }
+    if (!await _ensureProxy()) return;
+    if (!mounted) return;
+
+    final notifier = context.read<PlaylistContentNotifier>();
+    final candidates = notifier.writablePlaylists;
+    if (candidates.isEmpty) {
+      _notification.info('还没有可用的歌单，请先到歌单页新建一个');
+      return;
+    }
+
+    final picked = await showDialog<Playlist>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('把 ${entries.length} 首音频加入歌单'),
+        children: <Widget>[
+          for (final playlist in candidates)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(playlist),
+              child: Row(
+                children: <Widget>[
+                  const Icon(Icons.queue_music, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      playlist.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '${playlist.songFilePaths.length} 首',
+                    style: Theme.of(dialogContext).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    final paths = entries
+        .map((entry) => _songOf(entry, album: album).filePath)
+        .toList();
+    final added = await notifier.addSongsToPlaylistById(picked.id, paths);
+    if (added == 0) {
+      _notification.info('这些歌曲已经在歌单「${picked.name}」里了');
+    } else {
+      _notification.info('已加入 ${added} 首到歌单「${picked.name}」');
+    }
+  }
+
+  /// 把一批网络媒体加入「全部歌曲」（内部落到「网络媒体收藏」歌单）。
+  Future<void> _addToAllSongs(
+    List<RemoteEntry> entries, {
+    String? album,
+  }) async {
+    if (_active == null) return;
+    if (entries.isEmpty) {
+      _notification.error('当前目录没有可添加的音频文件');
+      return;
+    }
+    if (!await _ensureProxy()) return;
+    if (!mounted) return;
+    final notifier = context.read<PlaylistContentNotifier>();
+    final paths = entries
+        .map((entry) => _songOf(entry, album: album).filePath)
+        .toList();
+    final added = await notifier.addNetworkSongsToAllSongs(paths);
+    if (added == 0) {
+      _notification.info('这些歌曲已经在「全部歌曲」里了');
+    } else {
+      _notification.info('已把 $added 首加入全部歌曲（歌单「网络媒体收藏」）');
+    }
+  }
+
   Future<void> _dispatch(
     List<Song> songs,
     int index, {
@@ -337,8 +433,8 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
     }
   }
 
-  /// 递归扫描当前目录下所有子目录里的音频，一次性播放或加入队列。
-  Future<void> _scanAndDispatch({required bool enqueue}) async {
+  /// 递归扫描当前目录下所有子目录里的音频，一次性播放 / 加队列 / 存歌单。
+  Future<void> _scanAndDispatch(_ScanAction action) async {
     final source = _active;
     if (source == null) return;
     if (!await _ensureProxy()) return;
@@ -388,13 +484,40 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
     final songs = result.entries
         .map((entry) => _songOf(entry, album: album))
         .toList(growable: false);
-    await _dispatch(songs, 0, enqueue: enqueue);
+
+    switch (action) {
+      case _ScanAction.play:
+        await _dispatch(songs, 0, enqueue: false);
+        break;
+      case _ScanAction.queue:
+        await _dispatch(songs, 0, enqueue: true);
+        break;
+      case _ScanAction.playlist:
+        await _addToPlaylist(result.entries, album: album);
+        break;
+      case _ScanAction.allSongs:
+        await _addToAllSongs(result.entries, album: album);
+        break;
+    }
 
     final buffer = StringBuffer(
       '已扫描 ${result.directories} 个目录，找到 ${result.entries.length} 首音频',
     );
     if (result.truncated) buffer.write('（已达上限，结果可能不完整）');
-    buffer.write(enqueue ? '，已加入播放队列' : '，已开始播放');
+    switch (action) {
+      case _ScanAction.play:
+        buffer.write('，已开始播放');
+        break;
+      case _ScanAction.queue:
+        buffer.write('，已加入播放队列');
+        break;
+      case _ScanAction.playlist:
+        buffer.write('，请选择要保存的歌单');
+        break;
+      case _ScanAction.allSongs:
+        buffer.write('，已加入「全部歌曲」');
+        break;
+    }
     _notification.info(buffer.toString());
   }
 
@@ -446,6 +569,26 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
             title: Text('全部加入播放队列'),
           ),
         ),
+        const PopupMenuItem<String>(
+          value: 'savePlaylist',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.queue_music, size: 18),
+            title: Text('全部加入歌单…'),
+            subtitle: Text('把当前目录的音频存进已有歌单'),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'saveAllSongs',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.library_music_outlined, size: 18),
+            title: Text('全部加入「全部歌曲」'),
+            subtitle: Text('自动落到「网络媒体收藏」歌单'),
+          ),
+        ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'scanPlay',
@@ -464,6 +607,26 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.library_add_check_outlined, size: 18),
             title: Text('递归扫描并加入队列'),
+            subtitle: Text('含所有子目录'),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'scanPlaylist',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.playlist_add_check, size: 18),
+            title: Text('递归扫描并加入歌单…'),
+            subtitle: Text('一次把整棵目录树存进歌单'),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'scanAllSongs',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.cloud_download_outlined, size: 18),
+            title: Text('递归扫描并加入「全部歌曲」'),
             subtitle: Text('含所有子目录'),
           ),
         ),
@@ -514,11 +677,23 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
       case 'queue':
         await _addAllToQueue();
         break;
+      case 'savePlaylist':
+        await _addToPlaylist(_audioEntries);
+        break;
+      case 'saveAllSongs':
+        await _addToAllSongs(_audioEntries);
+        break;
       case 'scanPlay':
-        await _scanAndDispatch(enqueue: false);
+        await _scanAndDispatch(_ScanAction.play);
         break;
       case 'scanQueue':
-        await _scanAndDispatch(enqueue: true);
+        await _scanAndDispatch(_ScanAction.queue);
+        break;
+      case 'scanPlaylist':
+        await _scanAndDispatch(_ScanAction.playlist);
+        break;
+      case 'scanAllSongs':
+        await _scanAndDispatch(_ScanAction.allSongs);
         break;
       case 'click':
         setState(() => _enqueueMode = !_enqueueMode);
@@ -996,6 +1171,29 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
                       icon: const Icon(Icons.play_arrow, size: 18),
                       visualDensity: VisualDensity.compact,
                       onPressed: () => _playEntry(entry),
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: '更多',
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.more_vert, size: 18),
+                      onSelected: (value) async {
+                        if (value == 'playlist') {
+                          await _addToPlaylist(<RemoteEntry>[entry]);
+                        } else if (value == 'allSongs') {
+                          await _addToAllSongs(<RemoteEntry>[entry]);
+                        }
+                      },
+                      itemBuilder: (_) =>
+                          const <PopupMenuEntry<String>>[
+                            PopupMenuItem<String>(
+                              value: 'playlist',
+                              child: Text('加入歌单…'),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'allSongs',
+                              child: Text('加入「全部歌曲」'),
+                            ),
+                          ],
                     ),
                   ],
                 ),

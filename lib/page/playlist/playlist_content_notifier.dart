@@ -29,6 +29,7 @@ import '../../services/search_service.dart';
 import '../../services/search_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../services/network/remote_media_registry.dart';
+import '../../services/network/network_tag_reader.dart';
 import '../../utils/search_debouncer.dart';
 import '../../lyrics/lyrics_handler.dart';
 
@@ -960,7 +961,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // File.exists() / readAudioInfo() 而显示「文件不存在」。
     // 本地文件路径不受影响，仍走原来的完整元数据链路。
     final registered = RemoteMediaRegistry.lookup(filePath);
-    if (registered != null) return registered;
+    if (registered != null) return _mergeNetworkTags(registered);
     // 兜底：极少数无法解码的网络标识（例如 nas: 裸标识）也绝不能落到
     // 本地文件逻辑，否则会显示「文件不存在 (解析失败)」。
     if (RemoteMediaRegistry.isNetwork(filePath)) {
@@ -972,7 +973,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
           filePath: filePath,
         ),
       );
-      return RemoteMediaRegistry.lookup(normalized.filePath) ?? normalized;
+      return _mergeNetworkTags(
+        RemoteMediaRegistry.lookup(normalized.filePath) ?? normalized,
+      );
     }
 
     final cacheKey = _normalizePath(filePath);
@@ -1066,6 +1069,86 @@ class PlaylistContentNotifier extends ChangeNotifier {
     );
   }
 
+  // --- 网络媒体内嵌标签（预加载） ---
+
+  DateTime _lastNetworkTagNotify = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 把已经预加载到的内嵌标签合并进网络媒体的 Song。
+  ///
+  /// 这里刻意只读内存缓存、不 await 网络请求：列表一次要解析上千首，逐首
+  /// 等下载会把界面卡住，也会把整个网盘曲库（每首几百 KB 的标签区）全拉
+  /// 一遍。真正的读取由封面工作线程在「行可见时」触发，流量与用户实际看
+  /// 到的内容成正比。
+  Song _mergeNetworkTags(Song song) {
+    if (!NetworkTagReader.enabled) return song;
+    if (!RemoteMediaRegistry.isNetwork(song.filePath)) return song;
+    final info = NetworkTagReader.cached(song.filePath);
+    if (info == null) return song;
+    return _applyTagInfo(song, info);
+  }
+
+  /// 用标签信息覆盖 Song 的字段（标签里没有的字段保留原值）。
+  Song _applyTagInfo(Song song, NetworkTagInfo info) {
+    final cover = info.cover;
+    final merged = Song(
+      title: info.title ?? song.title,
+      artist: info.artist ?? song.artist,
+      album: info.album ?? song.album,
+      filePath: song.filePath,
+      albumArt: cover ?? song.albumArt,
+      duration: info.durationMs != null
+          ? Duration(milliseconds: info.durationMs!)
+          : song.duration,
+      trackNumber: info.trackNumber ?? song.trackNumber,
+      genre: info.genre ?? song.genre,
+    );
+    RemoteMediaRegistry.register(song.filePath, merged);
+    if (cover != null) {
+      RemoteMediaRegistry.registerArtwork(song.filePath, cover);
+    }
+    return merged;
+  }
+
+  /// 某首歌的标签读完之后，把结果回填进已加载的列表。
+  ///
+  /// 节流到 1.2 秒一次，避免滚动列表时每读一首就整页重建一次。
+  void _onNetworkTagReady() {
+    final now = DateTime.now();
+    if (now.difference(_lastNetworkTagNotify).inMilliseconds < 1200) return;
+    _lastNetworkTagNotify = now;
+    _sweepNetworkTagsIntoSongs();
+    notifyListeners();
+  }
+
+  /// 把新读到的标签回填进已经加载的歌曲列表（就地替换，不重建整个列表）。
+  void _sweepNetworkTagsIntoSongs() {
+    void sweep(List<Song> songs) {
+      for (var i = 0; i < songs.length; i++) {
+        final song = songs[i];
+        if (!RemoteMediaRegistry.isNetwork(song.filePath)) continue;
+        final info = NetworkTagReader.cached(song.filePath);
+        if (info == null) continue;
+        songs[i] = _applyTagInfo(song, info);
+        final cover = info.cover;
+        if (cover != null) {
+          final key = _normalizePath(song.filePath);
+          _coverlessPaths.remove(key);
+          _evictableCoverPaths.remove(key);
+          _coverStore.put(key, cover);
+        }
+      }
+    }
+
+    sweep(_currentPlaylistSongs);
+    sweep(_allSongs);
+    for (final playlist in _playlists) {
+      final songs = playlist.songs;
+      if (songs == null) continue;
+      if (identical(songs, _currentPlaylistSongs)) continue;
+      sweep(songs);
+    }
+  }
+
   Future<AudioInfo?> _readTrackNumberForSort(String filePath) async {
     final normalizedPath = Uri.file(
       filePath,
@@ -1105,6 +1188,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       if (basicSong.albumArt != null && basicSong.albumArt!.isNotEmpty) {
         return basicSong;
       }
+      // 播放时后台补一次内嵌标签（不阻塞出声），读到后再回填标题 / 封面。
+      unawaited(_refreshNetworkSongTags(filePath));
       Uint8List? art;
       try {
         art = await RemoteMediaRegistry.artworkFor(filePath).timeout(
@@ -1221,6 +1306,44 @@ class PlaylistContentNotifier extends ChangeNotifier {
       trackNumber: song.trackNumber,
       genre: song.genre,
     );
+  }
+
+  /// 播放网络媒体时，后台把内嵌标签读完并回填当前歌曲信息。
+  ///
+  /// 刻意不阻塞播放：先用文件名 / 网盘目录信息出声，读到真实标签后再刷新
+  /// 界面和系统媒体会话，用户不会为了一个封面等上几秒。
+  Future<void> _refreshNetworkSongTags(String url) async {
+    if (!NetworkTagReader.enabled) return;
+    if (NetworkTagReader.cached(url) != null) return;
+    try {
+      final info = await NetworkTagReader.read(url);
+      if (info == null || !info.hasAny) return;
+      _sweepNetworkTagsIntoSongs();
+      final current = _currentSong;
+      if (current == null || current.filePath != url) {
+        notifyListeners();
+        return;
+      }
+      final merged = _applyTagInfo(current, info);
+      _currentSong = merged;
+      notifyListeners();
+      try {
+        await _audioService.player.setMediaSession(
+          MediaSession(
+            appName: 'MyuneMusic',
+            title: merged.title,
+            artist: merged.artist,
+            album: merged.album,
+            artwork: _sessionArtwork(merged.albumArt),
+            autoApplyPlaylistNavigation: false,
+          ),
+        );
+      } catch (_) {
+        // 系统媒体会话更新失败不影响播放。
+      }
+    } catch (_) {
+      // 读不到标签时保持原有信息即可。
+    }
   }
 
   // 为系统媒体会话构建封面
@@ -1689,11 +1812,24 @@ class PlaylistContentNotifier extends ChangeNotifier {
         continue;
       }
       final filePath = cacheKey;
-      // 网络媒体的封面不在本地文件里，改从代理 URL 里编码的封面地址下载
-      // （鉴权由本机流代理补齐），否则这一支会一直读不到封面。
+      // 网络媒体的封面不在本地文件里：优先用内嵌标签里的真实专辑封面，
+      // 读不到再退回代理 URL 里编码的网盘目录封面（鉴权由本机流代理补齐）。
+      // 读标签的同时也把标题 / 歌手 / 时长 / 内嵌歌词缓存下来，等于顺手
+      // 完成了「滚动到哪就预加载到哪」。
       if (RemoteMediaRegistry.isNetwork(filePath)) {
         try {
-          final bytes = await RemoteMediaRegistry.artworkFor(filePath);
+          Uint8List? bytes = NetworkTagReader.cached(filePath)?.cover;
+          if (bytes == null || bytes.isEmpty) {
+            final info = await NetworkTagReader.read(filePath).timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => null,
+            );
+            bytes = info?.cover;
+            if (info != null && info.hasAny) _onNetworkTagReady();
+          }
+          if (bytes == null || bytes.isEmpty) {
+            bytes = await RemoteMediaRegistry.artworkFor(filePath);
+          }
           if (bytes != null && bytes.isNotEmpty) {
             _coverlessPaths.remove(cacheKey);
             _evictableCoverPaths.remove(cacheKey);
@@ -4526,6 +4662,38 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     return newPaths.length;
   }
+
+  /// 内置的「网络媒体收藏」歌单 id。
+  ///
+  /// 「全部歌曲」是由所有歌单聚合出来的虚拟列表，本身没有可追加的存储，
+  /// 因此「加入全部歌曲」实际落到这个真实落盘的容器歌单上：加进来之后
+  /// 既会出现在左侧歌单里，也会出现在「全部歌曲」里，重启后仍然保留。
+  static const String networkCollectionPlaylistId = '__network_media__';
+  static const String networkCollectionPlaylistName = '网络媒体收藏';
+
+  /// 把网络媒体加入「全部歌曲」（内部落到「网络媒体收藏」歌单）。
+  /// 返回实际新增的歌曲数量。
+  Future<int> addNetworkSongsToAllSongs(List<String> songPaths) async {
+    if (songPaths.isEmpty) return 0;
+    final index = _playlists.indexWhere(
+      (playlist) => playlist.id == networkCollectionPlaylistId,
+    );
+    if (index < 0) {
+      _playlists.add(
+        Playlist(
+          id: networkCollectionPlaylistId,
+          name: networkCollectionPlaylistName,
+        ),
+      );
+      notifyListeners();
+      await _savePlaylists();
+    }
+    return addSongsToPlaylistById(networkCollectionPlaylistId, songPaths);
+  }
+
+  /// 可接收网络媒体的歌单（文件夹型歌单不能手动加歌，直接排除）。
+  List<Playlist> get writablePlaylists =>
+      _playlists.where((playlist) => !playlist.isFolderBased).toList();
 
   /// 批量为多个歌单添加歌曲，仅执行一次保存和更新
   Future<int> addSongsToPlaylists(Map<String, List<String>> songsMap) async {

@@ -11,6 +11,7 @@ import '../page/setting/settings_provider.dart';
 import '../src/rust/api/audio_info.dart';
 import '../services/notification_service.dart';
 import '../services/network/remote_media_registry.dart';
+import '../services/network/network_tag_reader.dart';
 
 import 'decryptor/krc_decryptor.dart';
 import 'decryptor/lyric_encryption_detector.dart';
@@ -119,6 +120,10 @@ class LyricsHandler {
     // base64 token 当成文件名显示。这里直接跳过所有本地文件类歌词来源，
     // 只保留在线歌词（若用户启用），彻底消除误报。
     if (RemoteMediaRegistry.isNetwork(songFilePath)) {
+      // 网盘里的音频经常把 LRC 内嵌在标签里，先试着读出来；读不到再走在线
+      // 歌词。这样既有「原版就有」的在线歌词，也能用上文件自带的精确歌词。
+      await _loadEmbeddedLyrics(songFilePath);
+      if (_currentLyrics.isNotEmpty) return;
       if (_settingsProvider.enableOnlineLyrics && song != null) {
         try {
           unawaited(
@@ -286,6 +291,25 @@ class LyricsHandler {
 
   // 加载内嵌歌词
   Future<void> _loadEmbeddedLyrics(String songFilePath) async {
+    // 网络媒体：filePath 是本机代理 URL，不能交给 File.exists()。
+    // 先让标签读取器把文件（或文件头）落到临时目录并解析出内嵌歌词。
+    if (RemoteMediaRegistry.isNetwork(songFilePath)) {
+      if (!NetworkTagReader.enabled) return;
+      try {
+        final info = await NetworkTagReader.read(songFilePath).timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => null,
+        );
+        final lyrics = info?.lyrics;
+        if (lyrics != null && lyrics.trim().isNotEmpty) {
+          _currentLyrics = _parseLrcContent(lyrics.split(RegExp(r'\r?\n')));
+          _notifyListeners();
+        }
+      } catch (_) {
+        // 读不到内嵌歌词时不提示错误，交给在线歌词。
+      }
+      return;
+    }
     try {
       final normalizedPath = Uri.file(
         songFilePath,

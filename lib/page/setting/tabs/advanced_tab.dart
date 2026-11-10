@@ -109,6 +109,25 @@ class AdvancedTab extends StatelessWidget {
             context.read<SettingsProvider>().setMinimizeToTray(value);
           },
         ),
+        // 读取网络媒体内嵌标签
+        SwitchListTile(
+          title: const Row(
+            children: [
+              Text('读取网络媒体内嵌标签'),
+              SizedBox(width: 4),
+              InfoIcon(
+                '网络媒体（WebDAV / FTP）的歌曲没有本地文件，默认只能显示文件名解析出的标题与目录封面
+启用后会先只下载文件头（约 2 MB）读取内嵌的标题、封面、时长与内嵌歌词，头部读不出时才完整下载
+单文件上限 48 MB，缓存目录上限 400 MB，超出自动清理
+列表滚动到哪读到哪，不会一进歌单就把整个曲库全拉一遍',
+              ),
+            ],
+          ),
+          value: settings.enableNetworkTagReading,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setEnableNetworkTagReading(value);
+          },
+        ),
         // 忽略某些播放错误
         SwitchListTile(
           title: const Row(

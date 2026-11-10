@@ -159,6 +159,91 @@ class WebDavClient {
     }
   }
 
+  /// 只取响应头探测一个远端文件，不下载正文。
+  ///
+  /// 用于「诊断」与「长度补全」：服务端若支持 Range 会返回 206 与
+  /// `Content-Range`，从中可直接得到真实总长度；若忽略 Range 则返回 200，
+  /// 此时用 `Content-Length` 兜底，并标记为不支持 Range。
+  Future<RemoteProbeResult> probe(String href) async {
+    final client = http.Client();
+    final stopwatch = Stopwatch()..start();
+    try {
+      final target = uriFor(href);
+      final request = http.Request('GET', target)
+        ..headers.addAll(_authHeaders)
+        ..headers['Range'] = 'bytes=0-0';
+      final response = await client.send(request).timeout(
+            const Duration(seconds: 20),
+          );
+      stopwatch.stop();
+      final contentRange = response.headers['content-range'];
+      final contentType = response.headers['content-type'];
+      int? total;
+      var supportsRange = false;
+      if (response.statusCode == 206) {
+        supportsRange = true;
+        final match = RegExp(
+          r'bytes\s+(\d+)-(\d+)/(\d+|\*)',
+          caseSensitive: false,
+        ).firstMatch(contentRange ?? '');
+        final totalText = match?.group(3);
+        if (totalText != null && totalText != '*') {
+          total = int.tryParse(totalText);
+        }
+      } else if (response.statusCode >= 200 && response.statusCode < 300) {
+        final length = response.contentLength;
+        if (length != null && length >= 0) total = length;
+      }
+      final ok = response.statusCode >= 200 && response.statusCode < 300;
+      return RemoteProbeResult(
+        ok: ok,
+        statusCode: response.statusCode,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        totalLength: total,
+        supportsRange: supportsRange,
+        contentType: contentType,
+        message: ok ? '' : _shortError(response.statusCode, contentRange),
+      );
+    } catch (error) {
+      stopwatch.stop();
+      return RemoteProbeResult(
+        ok: false,
+        statusCode: 0,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        message: '$error',
+      );
+    } finally {
+      // 探测阶段不读正文，直接断开，避免把整个文件拉下来。
+      client.close();
+    }
+  }
+
+  /// 只取总长度，供代理在「上游不给长度」时补全 Content-Length。
+  Future<int?> contentLength(String href) async {
+    final result = await probe(href);
+    return result.totalLength;
+  }
+
+  String _shortError(int statusCode, String? contentRange) {
+    switch (statusCode) {
+      case 401:
+        return '鉴权失败（HTTP 401），请检查用户名 / 密码';
+      case 403:
+        return '无访问权限（HTTP 403）';
+      case 404:
+        return '文件不存在（HTTP 404），路径可能已变更';
+      case 405:
+        return '服务端不接受该请求方法（HTTP 405）';
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        return '服务端异常（HTTP $statusCode），可能是上游网盘限流或超时';
+      default:
+        return 'HTTP $statusCode${contentRange == null ? '' : '（$contentRange）'}';
+    }
+  }
+
   /// 判断一个 `<response>` 块是否代表目录。
   ///
   /// 老版本只认 `<d:collection/>` 自闭合标签，导致群晖 / Nextcloud / 绿联 /

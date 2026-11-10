@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../../lyrics/lyric_source.dart';
+import '../../services/network/network_tag_reader.dart';
 
 // 自定义背景遮罩样式
 enum BackgroundMaskStyle { none, solid, glass }
@@ -50,6 +51,7 @@ class SettingsProvider with ChangeNotifier {
   static const _audioDeviceDescKey = 'audio_device_desc';
   static const _audioDeviceIsAutoKey = 'audio_device_is_auto';
   static const _ignorePlaybackErrorsKey = 'ignorePlaybackErrors';
+  static const _enableNetworkTagReadingKey = 'enableNetworkTagReading';
   static const _lyricSourceOrderKey = 'lyricSourceOrder'; // 歌词来源优先级顺序
   static const _autoAdjustLyricLayoutKey =
       'autoAdjustLyricLayout'; // 自动调节歌词字体与间距设置的 key
@@ -92,6 +94,7 @@ class SettingsProvider with ChangeNotifier {
   String? _audioDeviceName; // 音频设备名称
   String? _audioDeviceDesc; // 音频设备描述
   bool _ignorePlaybackErrors = false; // 默认不忽略播放错误
+  bool _enableNetworkTagReading = true; // 网络媒体默认读取内嵌标签 / 封面 / 歌词
   List<String> _lyricSourceOrder = LyricSource.defaultOrderIds; // 歌词来源优先级顺序
   bool _autoAdjustLyricLayout = false; // 默认不自动调节歌词布局
   bool _enableLyricElasticScroll = false;
@@ -160,6 +163,12 @@ class SettingsProvider with ChangeNotifier {
   String? get audioDeviceName => _audioDeviceName;
   String? get audioDeviceDesc => _audioDeviceDesc;
   bool get ignorePlaybackErrors => _ignorePlaybackErrors;
+
+  /// 是否把网络媒体的远端文件缓存到本地临时文件以读取内嵌标签。
+  ///
+  /// 远端文件没有本地路径，Rust 标签解析器读不到，只能先下载一份。
+  /// 关闭后网络歌曲只显示浏览页解析出的标题 / 歌手 / 目录封面。
+  bool get enableNetworkTagReading => _enableNetworkTagReading;
 
   // 歌词来源优先级顺序
   List<String> get lyricSourceOrder => List.unmodifiable(_lyricSourceOrder);
@@ -250,6 +259,9 @@ class SettingsProvider with ChangeNotifier {
     _audioDeviceName = prefs.getString(_audioDeviceNameKey);
     _audioDeviceDesc = prefs.getString(_audioDeviceDescKey);
     _ignorePlaybackErrors = prefs.getBool(_ignorePlaybackErrorsKey) ?? false;
+    _enableNetworkTagReading =
+        prefs.getBool(_enableNetworkTagReadingKey) ?? true;
+    NetworkTagReader.enabled = _enableNetworkTagReading;
     _autoAdjustLyricLayout = prefs.getBool(_autoAdjustLyricLayoutKey) ?? false;
     _enableLyricElasticScroll =
         prefs.getBool(_enableLyricElasticScrollKey) ?? false;
@@ -524,6 +536,14 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_ignorePlaybackErrorsKey, value);
+  }
+
+  void setEnableNetworkTagReading(bool value) async {
+    _enableNetworkTagReading = value;
+    NetworkTagReader.enabled = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableNetworkTagReadingKey, value);
   }
 
   void setAutoHidePlayPageComponents(bool value) async {

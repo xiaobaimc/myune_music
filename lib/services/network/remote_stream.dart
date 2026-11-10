@@ -305,3 +305,42 @@ String remoteEntryName(String href, {required bool isDirectory}) {
   if (name.isNotEmpty) return name;
   return isDirectory ? '目录' : '文件';
 }
+
+/// 远端文件的连通性探测结果。
+///
+/// 用于「诊断」功能：只取响应头，不下载正文，用来判断到底是
+/// 鉴权失败、路径不对、服务端不支持 Range，还是首字节太慢。
+class RemoteProbeResult {
+  const RemoteProbeResult({
+    required this.ok,
+    required this.statusCode,
+    required this.elapsedMs,
+    this.totalLength,
+    this.supportsRange = false,
+    this.contentType,
+    this.message = '',
+  });
+
+  final bool ok;
+  final int statusCode;
+  final int elapsedMs;
+  final int? totalLength;
+
+  /// 服务端是否真的按 Range 返回 206（否则 seek 会退化为整段下载）。
+  final bool supportsRange;
+  final String? contentType;
+
+  /// 失败时的可读说明。
+  final String message;
+
+  String get lengthLabel {
+    final bytes = totalLength;
+    if (bytes == null || bytes <= 0) return '未知';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+}

@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'ftp_client.dart';
+import 'network_proxy_log.dart';
 import 'remote_source.dart';
 import 'remote_stream.dart';
 import 'webdav_client.dart';
@@ -243,12 +244,55 @@ class LocalStreamProxy {
     }
     final path = target['p']?.toString() ?? '';
     if (path.isEmpty) throw StateError('远程文件路径为空');
-    // 以配置里的协议为唯一可信来源；URL 中的 proto 字段只作元数据，
-    // 避免别名 / 旧数据把 WebDAV 请求错发到 FTP 端口。
-    if (source.type == RemoteSourceType.webdav) {
-      return WebDavClient(source).open(path, start: start, end: end);
+
+    // 上游是「网盘 → WebDAV」这类自建桥时，首包经常被限流或超时。
+    // 这里对「拿响应头」阶段做 3 次短重试，避免一次抖动就让 mpv 直接
+    // 报 loading failed / Immediate exit requested。
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        // 以配置里的协议为唯一可信来源；URL 中的 proto 字段只作元数据，
+        // 避免别名 / 旧数据把 WebDAV 请求错发到 FTP 端口。
+        if (source.type == RemoteSourceType.webdav) {
+          return await WebDavClient(source).open(path, start: start, end: end);
+        }
+        return await FtpClient(source).open(path, start: start, end: end);
+      } catch (error) {
+        lastError = error;
+        NetworkProxyLog.instance.write(
+          'upstream open failed attempt=${attempt + 1}/3 '
+          'proto=${source.type.name} range=${formatRangeHeader(start, end)} '
+          'err=$error',
+        );
+        if (attempt < 2) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 250 * (attempt + 1)),
+          );
+        }
+      }
     }
-    return FtpClient(source).open(path, start: start, end: end);
+    throw lastError ?? StateError('上游打开失败');
+  }
+
+  /// 上游不返回总长度时，单独探测一次。
+  ///
+  /// 网盘桥常见 `Transfer-Encoding: chunked`，没有 `Content-Length`，
+  /// 这样 mpv 拿不到总时长也无法 seek。用一次 `Range: bytes=0-0`
+  /// 换回 `Content-Range` 里的总长度，代理就能补上 `Content-Length`。
+  Future<int?> _probeTotal(Map<String, dynamic> target) async {
+    final source =
+        RemoteSourceStore.instance.byId(target['s']?.toString() ?? '');
+    final path = target['p']?.toString() ?? '';
+    if (source == null || path.isEmpty) return null;
+    try {
+      final probe = source.type == RemoteSourceType.webdav
+          ? await WebDavClient(source).probe(path)
+          : await FtpClient(source).probe(path);
+      return probe.totalLength;
+    } catch (error) {
+      NetworkProxyLog.instance.write('probe total length failed: $error');
+      return null;
+    }
   }
 
   Future<void> _handle(HttpRequest request) async {
@@ -308,7 +352,17 @@ class LocalStreamProxy {
 
       final int? effectiveStart = sequentialFallback ? null : start;
       final int? effectiveEnd = sequentialFallback ? null : end;
-      final total = result.totalLength;
+      var total = result.totalLength;
+      if (total == null) {
+        // 上游没给长度：补探一次，让 mpv 能算出时长并支持 seek。
+        total = await _probeTotal(target).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => null,
+        );
+        if (total != null) {
+          NetworkProxyLog.instance.write('total length probed=$total');
+        }
+      }
 
       // 上游忽略了 Range（返回完整文件、起点为 0）而客户端请求了非零起点：
       // 在代理侧真正跳过起点之前的字节，再按终点截断，得到合法 206。
@@ -371,6 +425,14 @@ class LocalStreamProxy {
         response.headers.contentLength = total - result.servedStart;
       }
 
+      NetworkProxyLog.instance.write(
+        'serve status=${response.statusCode} src=${target['s']} '
+        'range=${rangeHeader ?? '-'} total=$total '
+        'start=${result.servedStart} end=$servedEnd '
+        'len=${response.headers.contentLength} '
+        'ctype=${result.contentType}',
+      );
+
       if (request.method == 'HEAD') {
         await response.close();
         await result.close?.call();
@@ -388,6 +450,9 @@ class LocalStreamProxy {
     } catch (error, stack) {
       // 静默返回 502 会让 mpv 只报 loading failed，无法定位是鉴权、协议
       // 还是媒体标识的问题，这里写出诊断日志。
+      NetworkProxyLog.instance.write(
+        'proxy error ${request.method} ${request.uri} -> $error',
+      );
       developer.log(
         '流代理请求失败：${request.method} ${request.uri} -> $error',
         name: 'MyuneStreamProxy',

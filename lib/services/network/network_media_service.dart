@@ -1,12 +1,21 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../page/playlist/playlist_models.dart';
 import 'ftp_client.dart';
 import 'local_stream_proxy.dart';
+import 'network_proxy_log.dart';
 import 'remote_entry.dart';
 import 'remote_media_registry.dart';
 import 'remote_source.dart';
+import 'remote_stream.dart';
 import 'webdav_client.dart';
 
 /// 网络媒体功能的统一门面：应用启动、目录枚举、把远端条目变成可播放的 Song。
@@ -223,6 +232,246 @@ class NetworkMediaService {
       RemoteMediaRegistry.registerArtwork(url, albumArt);
     }
     return song;
+  }
+
+  // --- 内嵌标签缓存（预加载） ---
+
+  /// 单个文件允许缓存的上限。超过就跳过标签读取，避免为了一个封面
+  /// 把几十上百 MB 的无损文件整个拉下来。
+  static const int tagCacheMaxBytes = 48 * 1024 * 1024;
+
+  /// 把远端文件缓存到本地临时目录，供 Rust 标签解析器读取内嵌封面 /
+  /// 时长 / 内嵌歌词。同一 URL 只下载一次，之后直接复用缓存文件。
+  ///
+  /// 返回本地文件路径；不可用（非网络媒体 / 超过上限 / 下载失败）时返回 null。
+  static Future<String?> tagCachePath(
+    String url, {
+    int maxBytes = tagCacheMaxBytes,
+  }) async {
+    if (!RemoteMediaRegistry.isNetwork(url)) return null;
+    try {
+      final root = await getTemporaryDirectory();
+      final dir = Directory(p.join(root.path, 'myune_net_cache'));
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final hash = crypto.sha1.convert(utf8.encode(url)).toString();
+      final file = File(p.join(dir.path, '$hash${_extensionOf(url)}'));
+      if (await file.exists() && await file.length() > 0) {
+        return file.path;
+      }
+      final ok = await _downloadTo(url, file, maxBytes);
+      if (!ok) return null;
+      NetworkProxyLog.instance.write(
+        'tag cache ready ${p.basename(file.path)} size=${await file.length()}',
+      );
+      unawaited(pruneTagCache());
+      return file.path;
+    } catch (error) {
+      NetworkProxyLog.instance.write('tag cache failed: $error');
+      return null;
+    }
+  }
+
+  /// 缓存目录的总大小上限。
+  ///
+  /// 每首读不到头部标签的曲子都会在这里留一份完整副本，长期使用会把临时
+  /// 目录撑到几十 GB。超过上限后按「最久未修改」删除，让缓存自然滚动。
+  static const int tagCacheMaxTotalBytes = 400 * 1024 * 1024;
+
+  static Future<void> pruneTagCache({
+    int maxTotalBytes = tagCacheMaxTotalBytes,
+  }) async {
+    try {
+      final root = await getTemporaryDirectory();
+      final dir = Directory(p.join(root.path, 'myune_net_cache'));
+      if (!await dir.exists()) return;
+      final files = <File>[];
+      var total = 0;
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        try {
+          total += await entity.length();
+          files.add(entity);
+        } catch (_) {
+          // 文件刚好被删掉时跳过。
+        }
+      }
+      if (total <= maxTotalBytes) return;
+      final stats = <MapEntry<File, DateTime>>[];
+      for (final file in files) {
+        try {
+          stats.add(MapEntry(file, (await file.stat()).modified));
+        } catch (_) {}
+      }
+      stats.sort((a, b) => a.value.compareTo(b.value));
+      for (final entry in stats) {
+        if (total <= maxTotalBytes) break;
+        try {
+          final size = await entry.key.length();
+          await entry.key.delete();
+          total -= size;
+        } catch (_) {}
+      }
+    } catch (_) {
+      // 清理失败不影响主流程。
+    }
+  }
+
+  static String _extensionOf(String url) {
+    try {
+      final segments = Uri.parse(url).pathSegments;
+      if (segments.isEmpty) return '.bin';
+      final name = segments.last;
+      final dot = name.lastIndexOf('.');
+      if (dot < 0) return '.bin';
+      final ext = name.substring(dot + 1).toLowerCase();
+      if (ext.isEmpty || ext.length > 5) return '.bin';
+      if (!RegExp(r'^[a-z0-9]+$').hasMatch(ext)) return '.bin';
+      return '.$ext';
+    } catch (_) {
+      return '.bin';
+    }
+  }
+
+  static Future<bool> _downloadTo(
+    String url,
+    File file,
+    int maxBytes,
+  ) async {
+    final client = http.Client();
+    IOSink? sink;
+    try {
+      final response = await client
+          .send(http.Request('GET', Uri.parse(url)))
+          .timeout(const Duration(seconds: 25));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.stream.drain<void>();
+        return false;
+      }
+      final declared = response.contentLength;
+      if (declared != null && declared > maxBytes) {
+        await response.stream.drain<void>();
+        return false;
+      }
+      sink = file.openWrite();
+      var received = 0;
+      await for (final chunk in response.stream) {
+        received += chunk.length;
+        if (received > maxBytes) {
+          await sink.close();
+          sink = null;
+          if (await file.exists()) await file.delete();
+          return false;
+        }
+        sink.add(chunk);
+      }
+      await sink.close();
+      sink = null;
+      return received > 0;
+    } catch (_) {
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+      return false;
+    } finally {
+      client.close();
+    }
+  }
+
+  // --- 诊断 ---
+
+  /// 生成一份可读的连接诊断报告。
+  ///
+  /// 用来区分「上游拒绝 / 太慢 / 不支持 Range」与「本机代理链路异常」，
+  /// 比 mpv 的 loading failed、Immediate exit requested 具体得多。
+  static Future<String> diagnose(RemoteSource source, String path) async {
+    final buffer = StringBuffer();
+    buffer.writeln('网络源：${source.name}（${remoteSourceTypeLabel(source.type)}）');
+    buffer.writeln('地址：${source.displaySubtitle}');
+    buffer.writeln('路径：$path');
+    buffer.writeln('');
+
+    RemoteProbeResult probe;
+    try {
+      probe = source.type == RemoteSourceType.webdav
+          ? await WebDavClient(source).probe(path)
+          : await FtpClient(source).probe(path);
+    } catch (error) {
+      probe = RemoteProbeResult(
+        ok: false,
+        statusCode: 0,
+        elapsedMs: 0,
+        message: '$error',
+      );
+    }
+    buffer.writeln('① 直连上游');
+    buffer.writeln(
+      '   结果：${probe.ok ? '正常' : '失败'}'
+      '（状态 ${probe.statusCode}，首包 ${probe.elapsedMs} ms）',
+    );
+    if (probe.message.isNotEmpty) {
+      buffer.writeln('   原因：${probe.message}');
+    }
+    buffer.writeln('   文件大小：${probe.lengthLabel}');
+    buffer.writeln(
+      '   支持 Range：${probe.supportsRange ? '是（可拖动进度）' : '否（拖动会整段重下）'}',
+    );
+    buffer.writeln('   内容类型：${probe.contentType ?? '未声明'}');
+    buffer.writeln('');
+
+    buffer.writeln('② 本机流代理');
+    final ready = await ensureProxy();
+    if (!ready) {
+      buffer.writeln('   代理未启动：端口 18765-18774 全部被占用，请重启应用');
+    } else {
+      final stopwatch = Stopwatch()..start();
+      http.Client? client;
+      try {
+        final url = LocalStreamProxy.instance.urlForNas(
+          source.id,
+          path,
+          title: '诊断',
+          proto: source.type == RemoteSourceType.ftp ? 'ftp' : 'webdav',
+        );
+        client = http.Client();
+        final request = http.Request('GET', Uri.parse(url))
+          ..headers['Range'] = 'bytes=0-1';
+        final response = await client
+            .send(request)
+            .timeout(const Duration(seconds: 30));
+        stopwatch.stop();
+        final first = await response.stream.first.timeout(
+          const Duration(seconds: 20),
+        );
+        buffer.writeln(
+          '   结果：HTTP ${response.statusCode}，'
+          '首块 ${stopwatch.elapsedMilliseconds} ms，收到 ${first.length} 字节',
+        );
+        buffer.writeln('   Content-Length：${response.contentLength ?? '未声明'}');
+        buffer.writeln(
+          '   Content-Range：${response.headers['content-range'] ?? '无'}',
+        );
+        if (response.statusCode != 200 && response.statusCode != 206) {
+          buffer.writeln('   说明：代理无法从上游取到数据，请看下方日志');
+        }
+      } catch (error) {
+        stopwatch.stop();
+        buffer.writeln('   失败：$error（耗时 ${stopwatch.elapsedMilliseconds} ms）');
+      } finally {
+        client?.close();
+      }
+    }
+
+    final logPath = NetworkProxyLog.instance.path;
+    if (logPath != null) {
+      buffer.writeln('');
+      buffer.writeln('日志文件：$logPath');
+    }
+    return buffer.toString();
   }
 
   static bool get proxyReady => LocalStreamProxy.instance.isRunning;
