@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../page/playlist/playlist_models.dart';
 import 'ftp_client.dart';
+import 'google_drive_client.dart';
 import 'local_stream_proxy.dart';
 import 'network_proxy_log.dart';
 import 'remote_entry.dart';
@@ -40,10 +41,11 @@ class NetworkMediaService {
     String path,
   ) async {
     final target = path.trim().isEmpty ? _rootOf(source) : path;
-    if (source.type == RemoteSourceType.webdav) {
-      return WebDavClient(source).list(target);
-    }
-    return FtpClient(source).list(target);
+    return switch (source.type) {
+      RemoteSourceType.webdav => WebDavClient(source).list(target),
+      RemoteSourceType.ftp => FtpClient(source).list(target),
+      RemoteSourceType.googleDrive => GoogleDriveClient(source).list(target),
+    };
   }
 
   /// 连接自检：能列出根目录即视为可用。返回根目录条目数量。
@@ -55,9 +57,25 @@ class NetworkMediaService {
   static String rootOf(RemoteSource source) => _rootOf(source);
 
   static String _rootOf(RemoteSource source) {
-    return source.type == RemoteSourceType.webdav
-        ? source.webdavBaseUri.toString()
-        : source.ftpRoot;
+    return switch (source.type) {
+      RemoteSourceType.webdav => source.webdavBaseUri.toString(),
+      RemoteSourceType.ftp => source.ftpRoot,
+      RemoteSourceType.googleDrive => GoogleDriveClient.pathOf(
+        source.rootFolderId.trim().isEmpty
+            ? 'root'
+            : source.rootFolderId.trim(),
+        'My music',
+      ),
+    };
+  }
+
+  /// 生成代理 URL 时写入的协议元数据（实际客户端仍以 source.type 为准）。
+  static String _protoOf(RemoteSource source) {
+    return switch (source.type) {
+      RemoteSourceType.ftp => 'ftp',
+      RemoteSourceType.googleDrive => 'gdrive',
+      RemoteSourceType.webdav => 'webdav',
+    };
   }
 
   /// 递归扫描一个远端目录，只收集音频文件。
@@ -166,7 +184,7 @@ class NetworkMediaService {
         source.id,
         cover.path,
         title: cover.name,
-        proto: source.type == RemoteSourceType.ftp ? 'ftp' : 'webdav',
+        proto: _protoOf(source),
       );
     } catch (_) {
       return null;
@@ -214,7 +232,7 @@ class NetworkMediaService {
       album: resolvedAlbum,
       durationSeconds: durationSeconds,
       artworkUrl: artworkUrl,
-      proto: source.type == RemoteSourceType.ftp ? 'ftp' : 'webdav',
+      proto: _protoOf(source),
       mediaId: 'nas:${source.id}:${entry.path.hashCode}',
     );
     final song = Song(
@@ -387,6 +405,24 @@ class NetworkMediaService {
 
   // --- 诊断 ---
 
+  static Future<RemoteProbeResult> _probe(
+    RemoteSource source,
+    String path, {
+    int? start,
+    int? end,
+  }) {
+    return switch (source.type) {
+      RemoteSourceType.webdav =>
+        WebDavClient(source).probe(path, start: start, end: end),
+      RemoteSourceType.ftp => FtpClient(source).probe(path),
+      RemoteSourceType.googleDrive => GoogleDriveClient(source).probe(
+        path,
+        start: start,
+        end: end,
+      ),
+    };
+  }
+
   /// 生成一份可读的连接诊断报告。
   ///
   /// 用来区分「上游拒绝 / 太慢 / 不支持 Range」与「本机代理链路异常」，
@@ -400,9 +436,7 @@ class NetworkMediaService {
 
     RemoteProbeResult probe;
     try {
-      probe = source.type == RemoteSourceType.webdav
-          ? await WebDavClient(source).probe(path)
-          : await FtpClient(source).probe(path);
+      probe = await _probe(source, path);
     } catch (error) {
       probe = RemoteProbeResult(
         ok: false,
@@ -435,9 +469,9 @@ class NetworkMediaService {
       final mid = total ~/ 2;
       RemoteProbeResult seek;
       try {
-        seek = source.type == RemoteSourceType.webdav
-            ? await WebDavClient(source).probe(path, start: mid, end: mid + 1)
-            : await FtpClient(source).probe(path);
+        seek = source.type == RemoteSourceType.ftp
+            ? await FtpClient(source).probe(path)
+            : await _probe(source, path, start: mid, end: mid + 1);
       } catch (error) {
         seek = RemoteProbeResult(
           ok: false,
@@ -479,7 +513,7 @@ class NetworkMediaService {
           source.id,
           path,
           title: '诊断',
-          proto: source.type == RemoteSourceType.ftp ? 'ftp' : 'webdav',
+          proto: _protoOf(source),
         );
         client = http.Client();
         final request = http.Request('GET', Uri.parse(url))

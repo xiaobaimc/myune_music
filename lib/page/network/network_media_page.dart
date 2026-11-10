@@ -909,9 +909,14 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
                             child: Row(
                               children: <Widget>[
                                 Icon(
-                                  source.type == RemoteSourceType.webdav
-                                      ? Icons.cloud_outlined
-                                      : Icons.dns_outlined,
+                                  switch (source.type) {
+                                    RemoteSourceType.webdav =>
+                                      Icons.cloud_outlined,
+                                    RemoteSourceType.ftp =>
+                                      Icons.dns_outlined,
+                                    RemoteSourceType.googleDrive =>
+                                      Icons.drive_folder_upload_outlined,
+                                  },
                                   size: 18,
                                   color: selected
                                       ? colorScheme.onSecondaryContainer

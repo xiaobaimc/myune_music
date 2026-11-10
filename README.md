@@ -176,7 +176,7 @@ sudo apt install keybinder-3.0
 
 ---
 
-## ☁️ 网络媒体（WebDAV / FTP）
+## ☁️ 网络媒体（WebDAV / FTP / Google Drive）
 
 左侧导航「网络媒体」可以直接挂载 NAS / 网盘上的音乐库，不需要先把文件拷到本地。
 
@@ -186,14 +186,45 @@ sudo apt install keybinder-3.0
 | --- | --- |
 | **WebDAV** | 群晖 WebDAV Server、Nextcloud / ownCloud、坚果云、绿联、极空间等；支持 HTTP / HTTPS 与 Basic 认证 |
 | **FTP** | 标准被动模式（PASV）+ 二进制传输；支持匿名与账号密码登录 |
+| **Google Drive** | **原生直连**官方 Drive API v3，不经过任何第三方 WebDAV 桥；支持「我的云端硬盘」和共享云端硬盘、快捷方式、HTTP Range 拖动进度 |
 
 > 暂不支持 FTPS / SFTP；FTP 为明文协议，公网使用请改用 WebDAV over HTTPS。
+> Google Drive 只会列出可下载的二进制文件，Google 文档 / 表格 / 幻灯片没有音频内容，会自动被音频过滤器排除。
 
-### 使用方式
+### 使用方式（WebDAV / FTP）
 
-1. 进入「网络媒体」→「添加网络源」，填写地址、端口、根路径与账号；
+1. 进入「网络媒体」→「添加网络源」，选择 **WebDAV** 或 **FTP**，填写地址、端口、根路径与账号；
 2. 点「测试连接」确认可访问后保存；
 3. 选中网络源即可浏览目录。列表**只显示文件夹与音频文件**，网盘里的视频、图片、文档不会混进来。
+
+### 使用方式（Google Drive 原生）
+
+全部在应用内的原生设置界面完成，不需要打开网页、不需要命令行、不需要装 rclone：
+
+1. 进入「网络媒体」→「添加网络源」，把顶部类型切到 **Google Drive**；
+2. 点 **「从本机文件导入凭据」**，程序会读取
+   `文档/myune_music/google_drive.json`；也可以直接在界面里手填下面四个字段；
+3. 填 **根文件夹 ID**（可选，留空则打开整个「我的云端硬盘」）；
+4. 点「测试连接」→ 显示「根目录有 N 个条目」后保存。
+
+凭据文件的格式（字段名固定，只放在本机）：
+
+```json
+{
+  "clientId": "你的 OAuth client_id",
+  "clientSecret": "你的 OAuth client_secret",
+  "refreshToken": "你的 refresh_token",
+  "rootFolderId": "可选的根文件夹 ID"
+}
+```
+
+> **安全说明**：`refresh_token` 等同于该 Google 账号 Drive 的长期读写权限。它只保存在本机
+> `shared_preferences`，不会随程序分发、不会写进日志、不会提交到仓库，也不会出现在任何
+> 代码或构建产物里。请勿外发或截图。若怀疑泄露，请到 Google 账号的
+> 「安全性 → 第三方应用访问权限」里撤销该授权并重新生成。
+
+> 与「自己搭一个 Google Drive → WebDAV 桥」相比，原生直连少一跳：实测首包在 1 秒内，
+> 且 Drive API 本身返回 `206 + Content-Range`，拖动进度不再依赖桥接服务是否正确实现 Range。
 
 ### 播放与队列
 
@@ -237,7 +268,13 @@ sudo apt install keybinder-3.0
   `文档/myune_music/logs/network.log`；`NetworkMediaService.diagnose()` 能直接区分「上游拒绝 / 太慢 /
   不支持 Range」和「本机代理异常」；
 * **队列可恢复**：代理端口若被占用会顺延，播放前会按原 token 改写为当前端口，历史队列不会失效；
-* 网络源配置（含密码）只保存在本机 `shared_preferences`，不会写进日志。
+* **Google Drive 链路**：`refresh_token → access_token`（只在内存缓存、提前 2 分钟过期、并发刷新合并）
+  → `files.list` 分页列目录（`supportsAllDrives` / `includeItemsFromAllDrives` 覆盖共享盘，
+  并解析 `shortcutDetails` 快捷方式）→ `files.get?alt=media` 流式下载，带 `Range: bytes=a-b`
+  时上游直接返回 `206`；总长度还能用 `files.get?fields=size` 兜底补全；
+* **协议判定以配置为准**：代理 URL 里的 `proto` 只作元数据，实际用哪个客户端一律以
+  `RemoteSource.type` 为准，避免旧队列里的别名把 Drive 请求错发到 WebDAV / FTP 端口；
+* 网络源配置（含密码与 Google 凭据）只保存在本机 `shared_preferences`，不会写进日志。
 
 ---
 

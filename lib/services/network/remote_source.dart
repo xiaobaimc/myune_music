@@ -8,17 +8,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 用户口述的「名称以 web 开头的协议」按网络硬盘场景解释为 WebDAV
 /// （Web Distributed Authoring and Versioning），这是 NAS / 共享网盘最常用
 /// 的 HTTP 文件协议；另一种按用户要求支持 FTP。
-enum RemoteSourceType { webdav, ftp }
+enum RemoteSourceType { webdav, ftp, googleDrive }
 
 String remoteSourceTypeLabel(RemoteSourceType type) {
   return switch (type) {
     RemoteSourceType.webdav => 'WebDAV',
     RemoteSourceType.ftp => 'FTP',
+    RemoteSourceType.googleDrive => 'Google Drive',
   };
 }
 
 RemoteSourceType remoteSourceTypeFromName(String? name) {
-  return name == 'ftp' ? RemoteSourceType.ftp : RemoteSourceType.webdav;
+  return switch (name) {
+    'ftp' => RemoteSourceType.ftp,
+    'googleDrive' || 'gdrive' || 'drive' => RemoteSourceType.googleDrive,
+    _ => RemoteSourceType.webdav,
+  };
 }
 
 /// 一条网络音乐源连接配置。密码仅保存在本机 shared_preferences，
@@ -34,6 +39,11 @@ class RemoteSource {
     this.username = '',
     this.password = '',
     this.useTls = false,
+    // Google Drive 原生接入的 OAuth 凭据，仅保存在本机 shared_preferences。
+    this.clientId = '',
+    this.clientSecret = '',
+    this.refreshToken = '',
+    this.rootFolderId = '',
   });
 
   final String id;
@@ -46,10 +56,25 @@ class RemoteSource {
   final String password;
   final bool useTls;
 
+  /// Google Drive OAuth 客户端 ID。
+  final String clientId;
+
+  /// Google Drive OAuth 客户端密钥。
+  final String clientSecret;
+
+  /// Google Drive 长期刷新令牌（等同于账号的 Drive 读写权限）。
+  final String refreshToken;
+
+  /// Google Drive 根文件夹 ID（留空为整个「我的云端硬盘」）。
+  final String rootFolderId;
+
+  bool get isGoogleDrive => type == RemoteSourceType.googleDrive;
+
   static int defaultPort(RemoteSourceType type, bool useTls) {
     return switch (type) {
       RemoteSourceType.webdav => useTls ? 443 : 80,
       RemoteSourceType.ftp => 21,
+      RemoteSourceType.googleDrive => 443,
     };
   }
 
@@ -77,6 +102,12 @@ class RemoteSource {
   }
 
   String get displaySubtitle {
+    if (isGoogleDrive) {
+      final id = rootFolderId.trim();
+      return id.isEmpty
+          ? 'Google Drive · 我的云端硬盘'
+          : 'Google Drive · 文件夹 ${id.length > 12 ? '${id.substring(0, 12)}…' : id}';
+    }
     final scheme = type == RemoteSourceType.webdav
         ? (useTls ? 'https' : 'http')
         : 'ftp';
@@ -92,6 +123,10 @@ class RemoteSource {
     String? username,
     String? password,
     bool? useTls,
+    String? clientId,
+    String? clientSecret,
+    String? refreshToken,
+    String? rootFolderId,
   }) {
     return RemoteSource(
       id: id,
@@ -103,6 +138,10 @@ class RemoteSource {
       username: username ?? this.username,
       password: password ?? this.password,
       useTls: useTls ?? this.useTls,
+      clientId: clientId ?? this.clientId,
+      clientSecret: clientSecret ?? this.clientSecret,
+      refreshToken: refreshToken ?? this.refreshToken,
+      rootFolderId: rootFolderId ?? this.rootFolderId,
     );
   }
 
@@ -116,6 +155,10 @@ class RemoteSource {
         'username': username,
         'password': password,
         'useTls': useTls,
+        'clientId': clientId,
+        'clientSecret': clientSecret,
+        'refreshToken': refreshToken,
+        'rootFolderId': rootFolderId,
       };
 
   factory RemoteSource.fromJson(Map<String, dynamic> json) {
@@ -132,6 +175,10 @@ class RemoteSource {
       username: (json['username'] as String?) ?? '',
       password: (json['password'] as String?) ?? '',
       useTls: useTls,
+      clientId: (json['clientId'] as String?) ?? '',
+      clientSecret: (json['clientSecret'] as String?) ?? '',
+      refreshToken: (json['refreshToken'] as String?) ?? '',
+      rootFolderId: (json['rootFolderId'] as String?) ?? '',
     );
   }
 }
@@ -160,7 +207,9 @@ class RemoteSourceStore {
         final decoded = jsonDecode(item);
         if (decoded is Map<String, dynamic>) {
           final source = RemoteSource.fromJson(decoded);
-          if (source.id.isNotEmpty && source.host.isNotEmpty) {
+          final hasEndpoint = source.host.isNotEmpty ||
+              (source.isGoogleDrive && source.refreshToken.isNotEmpty);
+          if (source.id.isNotEmpty && hasEndpoint) {
             _sources.add(source);
           }
         }

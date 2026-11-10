@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'ftp_client.dart';
+import 'google_drive_client.dart';
 import 'network_proxy_log.dart';
 import 'remote_source.dart';
 import 'remote_stream.dart';
@@ -188,6 +189,9 @@ class LocalStreamProxy {
       case 'webdav':
       case 'dav':
       case 'ftp':
+      case 'gdrive':
+      case 'drive':
+      case 'googledrive':
       case 'http':
       case 'https':
       case 'network':
@@ -217,6 +221,10 @@ class LocalStreamProxy {
     final proto = (t['proto'] ?? '').toString().toLowerCase().trim();
     if (proto == 'ftp' || proto == 'ftps') {
       t['proto'] = 'ftp';
+    } else if (proto == 'gdrive' ||
+        proto == 'drive' ||
+        proto == 'googledrive') {
+      t['proto'] = 'gdrive';
     } else {
       t['proto'] = 'webdav';
     }
@@ -265,14 +273,27 @@ class LocalStreamProxy {
       try {
         // 以配置里的协议为唯一可信来源；URL 中的 proto 字段只作元数据，
         // 避免别名 / 旧数据把 WebDAV 请求错发到 FTP 端口。
-        if (source.type == RemoteSourceType.webdav) {
-          return await WebDavClient(
-            source,
-          ).open(path, start: start, end: end, headerTimeout: remaining);
-        }
-        return await FtpClient(
-          source,
-        ).open(path, start: start, end: end, headerTimeout: remaining);
+        final opener = switch (source.type) {
+          RemoteSourceType.webdav => WebDavClient(source).open(
+            path,
+            start: start,
+            end: end,
+            headerTimeout: remaining,
+          ),
+          RemoteSourceType.ftp => FtpClient(source).open(
+            path,
+            start: start,
+            end: end,
+            headerTimeout: remaining,
+          ),
+          RemoteSourceType.googleDrive => GoogleDriveClient(source).open(
+            path,
+            start: start,
+            end: end,
+            headerTimeout: remaining,
+          ),
+        };
+        return await opener;
       } catch (error) {
         lastError = error;
         NetworkProxyLog.instance.write(
@@ -302,9 +323,35 @@ class LocalStreamProxy {
     final path = target['p']?.toString() ?? '';
     if (source == null || path.isEmpty) return null;
     try {
-      final probe = source.type == RemoteSourceType.webdav
-          ? await WebDavClient(source).probe(path)
-          : await FtpClient(source).probe(path);
+      RemoteProbeResult probe;
+      switch (source.type) {
+        case RemoteSourceType.webdav:
+          probe = await WebDavClient(source).probe(path);
+          break;
+        case RemoteSourceType.ftp:
+          probe = await FtpClient(source).probe(path);
+          break;
+        case RemoteSourceType.googleDrive:
+          {
+            final client = GoogleDriveClient(source);
+            probe = await client.probe(path);
+            if (probe.totalLength == null) {
+              final size = await client.contentLength(path);
+              if (size != null) {
+                probe = RemoteProbeResult(
+                  ok: probe.ok,
+                  statusCode: probe.statusCode,
+                  elapsedMs: probe.elapsedMs,
+                  totalLength: size,
+                  supportsRange: probe.supportsRange,
+                  contentType: probe.contentType,
+                  message: probe.message,
+                );
+              }
+            }
+          }
+          break;
+      }
       return probe.totalLength;
     } catch (error) {
       NetworkProxyLog.instance.write('probe total length failed: $error');

@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../services/network/network_media_service.dart';
@@ -35,6 +40,10 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
   late final TextEditingController _rootPath;
   late final TextEditingController _username;
   late final TextEditingController _password;
+  late final TextEditingController _clientId;
+  late final TextEditingController _clientSecret;
+  late final TextEditingController _refreshToken;
+  late final TextEditingController _rootFolderId;
 
   late RemoteSourceType _type;
   late bool _useTls;
@@ -59,6 +68,10 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
     _rootPath = TextEditingController(text: source?.rootPath ?? '/');
     _username = TextEditingController(text: source?.username ?? '');
     _password = TextEditingController(text: source?.password ?? '');
+    _clientId = TextEditingController(text: source?.clientId ?? '');
+    _clientSecret = TextEditingController(text: source?.clientSecret ?? '');
+    _refreshToken = TextEditingController(text: source?.refreshToken ?? '');
+    _rootFolderId = TextEditingController(text: source?.rootFolderId ?? '');
   }
 
   @override
@@ -69,6 +82,10 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
     _rootPath.dispose();
     _username.dispose();
     _password.dispose();
+    _clientId.dispose();
+    _clientSecret.dispose();
+    _refreshToken.dispose();
+    _rootFolderId.dispose();
     super.dispose();
   }
 
@@ -78,6 +95,10 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
       if (type == RemoteSourceType.ftp) {
         _useTls = false;
         _port.text = RemoteSource.defaultPort(type, false).toString();
+      } else if (type == RemoteSourceType.googleDrive) {
+        _useTls = true;
+        _port.text = '443';
+        if (_name.text.trim().isEmpty) _name.text = 'Google Drive';
       } else {
         _port.text = RemoteSource.defaultPort(type, _useTls).toString();
       }
@@ -86,6 +107,35 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
   }
 
   RemoteSource? _build({bool requireHost = true}) {
+    // Google Drive 走官方 API，没有服务器地址 / 端口 / 账号密码，
+    // 只需要 OAuth 三件套与可选的根文件夹 ID。
+    if (_type == RemoteSourceType.googleDrive) {
+      final clientId = _clientId.text.trim();
+      final clientSecret = _clientSecret.text.trim();
+      final refreshToken = _refreshToken.text.trim();
+      if (clientId.isEmpty || clientSecret.isEmpty || refreshToken.isEmpty) {
+        setState(() {
+          _testOk = false;
+          _testMessage = '请填写 OAuth 凭据（client_id / client_secret / '
+              'refresh_token），或点「从本机文件导入」';
+        });
+        return null;
+      }
+      final name = _name.text.trim();
+      return RemoteSource(
+        id: widget.existing?.id ?? const Uuid().v4(),
+        name: name.isEmpty ? 'Google Drive' : name,
+        type: RemoteSourceType.googleDrive,
+        host: 'www.googleapis.com',
+        port: 443,
+        rootPath: '/',
+        useTls: true,
+        clientId: clientId,
+        clientSecret: clientSecret,
+        refreshToken: refreshToken,
+        rootFolderId: _rootFolderId.text.trim(),
+      );
+    }
     final host = _host.text.trim();
     if (requireHost && host.isEmpty) {
       setState(() {
@@ -110,6 +160,46 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
       password: _password.text,
       useTls: _useTls,
     );
+  }
+
+  /// 从本机文件一键导入 Google Drive 凭据。
+  ///
+  /// 文件位于 `<文档>/myune_music/google_drive.json`，由用户自己放在本机，
+  /// 不随程序分发、不写进日志、更不会提交到仓库。这样超长的
+  /// refresh_token 不用手抄，也不会出现在任何代码里。
+  Future<void> _importFromFile() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final file = File(
+        p.join(docs.path, 'myune_music', 'google_drive.json'),
+      );
+      if (!await file.exists()) {
+        setState(() {
+          _testOk = false;
+          _testMessage = '未找到本机凭据文件：${file.path}';
+        });
+        return;
+      }
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) {
+        throw StateError('文件内容不是 JSON 对象');
+      }
+      String text(String key) => (decoded[key] ?? '').toString().trim();
+      setState(() {
+        _clientId.text = text('clientId');
+        _clientSecret.text = text('clientSecret');
+        _refreshToken.text = text('refreshToken');
+        _rootFolderId.text = text('rootFolderId');
+        if (_name.text.trim().isEmpty) _name.text = 'Google Drive';
+        _testOk = true;
+        _testMessage = '已从本机文件导入凭据（不会上传，也不会写进日志）';
+      });
+    } catch (error) {
+      setState(() {
+        _testOk = false;
+        _testMessage = '导入失败：$error';
+      });
+    }
   }
 
   Future<void> _test() async {
@@ -143,13 +233,98 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
     Navigator.of(context).pop(source);
   }
 
+  /// Google Drive 原生接入的凭据字段（应用内原生界面，不依赖网页 / 命令行）。
+  List<Widget> _driveFields(ColorScheme scheme) {
+    return <Widget>[
+      const SizedBox(height: 12),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: _importFromFile,
+          icon: const Icon(Icons.file_open_outlined, size: 16),
+          label: const Text('从本机文件导入凭据'),
+        ),
+      ),
+      const SizedBox(height: 10),
+      TextField(
+        controller: _clientId,
+        decoration: const InputDecoration(
+          labelText: 'OAuth client_id',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      const SizedBox(height: 10),
+      TextField(
+        controller: _clientSecret,
+        obscureText: _obscurePassword,
+        decoration: InputDecoration(
+          labelText: 'OAuth client_secret',
+          border: const OutlineInputBorder(),
+          isDense: true,
+          suffixIcon: IconButton(
+            tooltip: _obscurePassword ? '显示' : '隐藏',
+            icon: Icon(
+              _obscurePassword
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              size: 18,
+            ),
+            onPressed: () =>
+                setState(() => _obscurePassword = !_obscurePassword),
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      TextField(
+        controller: _refreshToken,
+        obscureText: _obscurePassword,
+        maxLines: 2,
+        decoration: const InputDecoration(
+          labelText: 'refresh_token',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      const SizedBox(height: 10),
+      TextField(
+        controller: _rootFolderId,
+        decoration: const InputDecoration(
+          labelText: '根文件夹 ID（留空为整个云端硬盘）',
+          hintText: '例如：1AbCdEfGhIjKlMnOpQrStUvWxYz012345',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '安全提示：refresh_token 等同于该 Google 账号 Drive 的永久读写权限。'
+          '它只保存在本机设置里，不会随程序分发、不会写进日志、也不会提交到仓库；'
+          '请勿外发或截图。',
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.5,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDrive = _type == RemoteSourceType.googleDrive;
     return AlertDialog(
       title: Text(widget.existing == null ? '添加网络源' : '编辑网络源'),
       content: SizedBox(
-        width: 460,
+        width: 520,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -166,6 +341,11 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
                     value: RemoteSourceType.ftp,
                     label: Text('FTP'),
                     icon: Icon(Icons.dns_outlined),
+                  ),
+                  ButtonSegment<RemoteSourceType>(
+                    value: RemoteSourceType.googleDrive,
+                    label: Text('Google Drive'),
+                    icon: Icon(Icons.drive_folder_upload_outlined),
                   ),
                 ],
                 selected: <RemoteSourceType>{_type},
@@ -184,6 +364,8 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
                   isDense: true,
                 ),
               ),
+              if (isDrive) ..._driveFields(scheme),
+              if (!isDrive) ...<Widget>[
               const SizedBox(height: 12),
               Row(
                 children: <Widget>[
@@ -283,6 +465,7 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
                   },
                 ),
               ],
+              ],
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -298,8 +481,12 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
                       ? 'WebDAV 需要服务端已开启 WebDAV 服务；'
                           '群晖在「套件中心 → WebDAV Server」，'
                           '根路径通常为 /，端口 5005（HTTP）/ 5006（HTTPS）。'
-                      : 'FTP 使用被动模式（PASV）与二进制传输；'
-                          '只支持明文 FTP，暂不支持 FTPS / SFTP。',
+                      : _type == RemoteSourceType.googleDrive
+                          ? 'Google Drive 走官方 Drive API v3，原生支持拖动进度；'
+                              '凭据只保存在本机，不随程序分发、不写日志。'
+                              '根文件夹 ID 留空则打开整个「我的云端硬盘」。'
+                          : 'FTP 使用被动模式（PASV）与二进制传输；'
+                              '只支持明文 FTP，暂不支持 FTPS / SFTP。',
                   style: TextStyle(
                     fontSize: 11,
                     height: 1.5,
