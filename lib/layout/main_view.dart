@@ -10,6 +10,7 @@ import '../page/pages/artist_list_page.dart';
 import '../page/pages/genre_list_page.dart';
 import '../page/pages/statistics_page.dart';
 import '../page/pages/audio_analysis_page.dart';
+import '../page/network/network_media_page.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
 import '../page/setting/settings_provider.dart';
@@ -119,6 +120,15 @@ class _MainViewState extends State<MainView> {
         icon: Icons.graphic_eq_outlined,
         selectedIcon: Icons.graphic_eq,
         page: const AudioAnalysisPage(),
+      ),
+      PageEntry(
+        // 网络媒体是新功能入口，始终显示（与歌单 / 设置一样不参与隐藏页设置）。
+        visible: (label, hiddenPages) => true,
+        label: '网络媒体',
+        routeName: '/network',
+        icon: Icons.cloud_outlined,
+        selectedIcon: Icons.cloud,
+        page: const NetworkMediaPage(),
       ),
       PageEntry(
         visible: (label, hiddenPages) => true, // 设置始终显示

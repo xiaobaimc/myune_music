@@ -28,6 +28,7 @@ import '../../services/global_hotkey_manager.dart';
 import '../../services/search_service.dart';
 import '../../services/search_index_store.dart';
 import '../../services/notification_service.dart';
+import '../../services/network/remote_media_registry.dart';
 import '../../utils/search_debouncer.dart';
 import '../../lyrics/lyrics_handler.dart';
 
@@ -954,6 +955,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // 解析单个歌曲文件的元数据
   Future<Song> _parseSongMetadata(String filePath) async {
+    // 网络媒体（WebDAV / FTP）的 filePath 是本机流代理 URL，不是本地文件。
+    // 直接查注册表拿到浏览页构造好的标题 / 歌手 / 时长，避免误走
+    // File.exists() / readAudioInfo() 而显示「文件不存在」。
+    // 本地文件路径不受影响，仍走原来的完整元数据链路。
+    final registered = RemoteMediaRegistry.lookup(filePath);
+    if (registered != null) return registered;
+    // 兜底：极少数无法解码的网络标识（例如 nas: 裸标识）也绝不能落到
+    // 本地文件逻辑，否则会显示「文件不存在 (解析失败)」。
+    if (RemoteMediaRegistry.isNetwork(filePath)) {
+      final normalized = RemoteMediaRegistry.normalizeSong(
+        Song(
+          title: p.basenameWithoutExtension(filePath),
+          artist: '网络媒体',
+          album: '网络媒体',
+          filePath: filePath,
+        ),
+      );
+      return RemoteMediaRegistry.lookup(normalized.filePath) ?? normalized;
+    }
+
     final cacheKey = _normalizePath(filePath);
     final cached = _songMetadataCache[cacheKey];
 
@@ -1077,6 +1098,34 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<Song> _prepareSongForPlayback(String filePath) async {
     // 首先获取基础元数据
     final Song basicSong = await _parseSongMetadata(filePath);
+    // 网络流没有本地文件可读，也不该把 http:// 交给 Rust 读标签。以前这里
+    // 直接返回 basicSong（albumArt 恒为 null），导致网络媒体永远没有封面。
+    // 现在按需从 URL 里编码的封面地址下载并回填，本地文件仍走下面的完整链路。
+    if (RemoteMediaRegistry.isNetwork(filePath)) {
+      if (basicSong.albumArt != null && basicSong.albumArt!.isNotEmpty) {
+        return basicSong;
+      }
+      Uint8List? art;
+      try {
+        art = await RemoteMediaRegistry.artworkFor(filePath).timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => null,
+        );
+      } catch (_) {
+        return basicSong;
+      }
+      if (art == null || art.isEmpty) return basicSong;
+      return Song(
+        title: basicSong.title,
+        artist: basicSong.artist,
+        album: basicSong.album,
+        filePath: basicSong.filePath,
+        albumArt: art,
+        duration: basicSong.duration,
+        trackNumber: basicSong.trackNumber,
+        genre: basicSong.genre,
+      );
+    }
     final cacheKey = _normalizePath(filePath);
 
     if (basicSong.albumArt != null) {
@@ -1305,6 +1354,14 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> _verifySongMetadataInBackground(
     Iterable<String> filePaths,
   ) async {
+    // 网络媒体的 filePath 是本机代理 URL，不能做本地 stat / readAudioInfo。
+    // 否则后台校验会把动态播放队列里的网络歌曲错误标记为「文件不存在」，
+    // 也会让封面 / 元数据缓存里出现一堆无效 URL key。
+    filePaths = filePaths
+        .where((path) => !RemoteMediaRegistry.isNetwork(path))
+        .toList(growable: false);
+    if (filePaths.isEmpty) return;
+
     // 延迟执行以避免与前台操作竞争资源
     await Future.delayed(const Duration(milliseconds: 300));
 
@@ -1632,6 +1689,25 @@ class PlaylistContentNotifier extends ChangeNotifier {
         continue;
       }
       final filePath = cacheKey;
+      // 网络媒体的封面不在本地文件里，改从代理 URL 里编码的封面地址下载
+      // （鉴权由本机流代理补齐），否则这一支会一直读不到封面。
+      if (RemoteMediaRegistry.isNetwork(filePath)) {
+        try {
+          final bytes = await RemoteMediaRegistry.artworkFor(filePath);
+          if (bytes != null && bytes.isNotEmpty) {
+            _coverlessPaths.remove(cacheKey);
+            _evictableCoverPaths.remove(cacheKey);
+            _coverStore.put(cacheKey, bytes);
+          } else {
+            _coverlessPaths.add(cacheKey);
+          }
+        } catch (_) {
+          // 网络封面失败不影响列表显示。
+        } finally {
+          _pendingCoverRequests.remove(cacheKey);
+        }
+        continue;
+      }
       try {
         final normalizedPath = Uri.file(
           filePath,
@@ -2923,7 +2999,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
       final newNextPath = _peekNextPath();
       if (newNextPath != null) {
-        await _audioService.player.add(Media(newNextPath));
+        await _audioService.player.add(
+          Media(RemoteMediaRegistry.normalizePlayablePath(newNextPath)),
+        );
       }
 
       notifyListeners();
@@ -3226,6 +3304,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // 批量添加歌曲到当前播放队列
   Future<void> addSongsToPlayingQueue(List<Song> songs) async {
     if (songs.isEmpty) return;
+
+    // 网络媒体的 URL 里编码了本机代理端口，重启后端口可能顺延。
+    // 统一收敛到当前端口，避免队列里的旧 URL 连不上。
+    songs = songs.map(RemoteMediaRegistry.normalizeSong).toList();
 
     // 如果没有正在播放的歌单，创建一个临时播放列表
     if (_playingPlaylist == null) {
@@ -3696,11 +3778,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
         // 将歌曲加载到播放器中，但不自动播放
         try {
-          // 检查文件是否存在
+          // 检查文件是否存在。网络媒体的 filePath 是本机代理 URL，
+          // 不存在本地文件，直接按可用处理，否则重启后队列会被清空。
           final songFile = File(songFilePath);
-          if (await songFile.exists()) {
+          if (RemoteMediaRegistry.isNetwork(songFilePath) ||
+              await songFile.exists()) {
             await _audioService.player.open(
-              Media(songFilePath),
+              Media(
+                RemoteMediaRegistry.normalizePlayablePath(songFilePath),
+              ),
               play: false, // 不自动播放
             );
 
@@ -4767,6 +4853,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (startIndex < 0 || startIndex >= songs.length) {
       return;
     }
+
+    // 网络媒体的 URL 里编码了本机代理端口，重启后端口可能顺延；
+    // 播放前统一收敛到当前端口，本地路径不受影响。
+    songs = songs.map(RemoteMediaRegistry.normalizeSong).toList();
 
     final dynamicPlaylist = Playlist(
       // 使用时间戳确保ID的唯一性，避免与现有歌单冲突

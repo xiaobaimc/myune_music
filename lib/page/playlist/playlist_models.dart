@@ -1,6 +1,8 @@
-import 'package:uuid/uuid.dart';
+import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 
 class Song {
   final String title;
@@ -22,23 +24,61 @@ class Song {
     this.duration,
     this.trackNumber,
     this.genre,
-  }) : normalizedPath = p.normalize(filePath);
+  }) : normalizedPath = _normalizeForCache(filePath);
+
+  /// 网络媒体（WebDAV / FTP）的 filePath 是本机流代理 URL，不能被 `p.normalize`
+  /// 当成文件路径处理（它会把 `http://` 的斜杠折叠成反斜杠，破坏 URL 语义）。
+  /// 这类地址本身就是唯一标识，直接原样返回；本地路径仍走原来的归一化。
+  static String _normalizeForCache(String filePath) {
+    if (filePath.contains('://')) return filePath;
+    return p.normalize(filePath);
+  }
+
+  /// 封面写入 JSON，让播放队列 / 歌单里的网络媒体在应用重启后仍能直接显示
+  /// 封面（网络流没有本地文件可读）。设置上限避免偏好存储被超大图撑爆。
+  static const int _maxPersistedArtworkBytes = 512 * 1024;
 
   Map<String, dynamic> toJson() {
-    return {
+    return <String, dynamic>{
       'title': title,
       'artist': artist,
+      'album': album,
       'filePath': filePath,
       'genre': genre,
+      if (duration != null) 'durationMs': duration!.inMilliseconds,
+      if (trackNumber != null) 'trackNumber': trackNumber,
+      if (albumArt != null &&
+          albumArt!.isNotEmpty &&
+          albumArt!.length <= _maxPersistedArtworkBytes)
+        'albumArt': base64Encode(albumArt!),
     };
   }
 
   factory Song.fromJson(Map<String, dynamic> json) {
+    Uint8List? art;
+    final rawArt = json['albumArt'];
+    if (rawArt is String && rawArt.isNotEmpty) {
+      try {
+        art = base64Decode(rawArt);
+      } catch (_) {
+        art = null;
+      }
+    }
+    final rawDuration = json['durationMs'];
+    final durationMs =
+        rawDuration is num ? rawDuration.toInt() : int.tryParse('$rawDuration');
+    final rawTrack = json['trackNumber'];
     return Song(
-      title: json['title'],
-      artist: json['artist'],
-      filePath: json['filePath'],
+      title: (json['title'] ?? '未知歌曲').toString(),
+      artist: (json['artist'] ?? '未知歌手').toString(),
+      album: (json['album'] ?? '未知专辑').toString(),
+      filePath: (json['filePath'] ?? '').toString(),
       genre: json['genre'] as String?,
+      albumArt: art,
+      duration: (durationMs != null && durationMs > 0)
+          ? Duration(milliseconds: durationMs)
+          : null,
+      trackNumber: rawTrack is num ? rawTrack.toInt() : null,
     );
   }
 }

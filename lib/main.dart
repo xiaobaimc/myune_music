@@ -36,6 +36,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'page/statistics_page/statistics_manager.dart';
 import 'layout/navigation_notifier.dart';
 import 'services/license_service.dart';
+import 'services/network/network_media_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +72,10 @@ void main() async {
   MpvAudioKit.ensureInitialized();
 
   await RustLib.init();
+
+  // 网络媒体（WebDAV / FTP）：加载网络源配置并启动本机流代理。
+  // 代理启动失败不阻断本地音乐播放，网络媒体页会在用到时再给出提示。
+  await NetworkMediaService.initialize();
 
   // 初始化系统托盘
   await trayManager.setIcon('assets/images/icon/tray_icon.ico');

@@ -10,6 +10,7 @@ import '../page/playlist/playlist_models.dart';
 import '../page/setting/settings_provider.dart';
 import '../src/rust/api/audio_info.dart';
 import '../services/notification_service.dart';
+import '../services/network/remote_media_registry.dart';
 
 import 'decryptor/krc_decryptor.dart';
 import 'decryptor/lyric_encryption_detector.dart';
@@ -112,6 +113,26 @@ class LyricsHandler {
 
     final order = _settingsProvider.lyricSourceOrder;
     final song = _getCurrentSong();
+
+    // 网络媒体（WebDAV / FTP）的 filePath 是本机流代理 URL，不是本地文件。
+    // 旧逻辑会对它做 File.exists() 并弹「歌曲文件不存在：...」，同时把
+    // base64 token 当成文件名显示。这里直接跳过所有本地文件类歌词来源，
+    // 只保留在线歌词（若用户启用），彻底消除误报。
+    if (RemoteMediaRegistry.isNetwork(songFilePath)) {
+      if (_settingsProvider.enableOnlineLyrics && song != null) {
+        try {
+          unawaited(
+            _loadOnlineLyricsPipeline(
+              song,
+              preferredSource: _preferredOnlineSource(),
+            ),
+          );
+        } catch (_) {
+          // 在线歌词失败不影响播放。
+        }
+      }
+      return;
+    }
 
     // 按用户设置的优先级依次尝试各个歌词来源
     for (var i = 0; i < order.length; i++) {

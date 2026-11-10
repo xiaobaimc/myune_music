@@ -1,0 +1,72 @@
+name: Build Windows (Cloud)
+
+# 全部编译在 GitHub 云端完成，本地不需要 Flutter / Rust / VS 工具链。
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feat/**'
+      - 'master'
+    paths-ignore:
+      - '**.md'
+      - 'screenshot/**'
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'rust -> target'
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 静态检查只作为诊断信息输出，不阻断构建（最终以真实编译结果为准）。
+      - name: Analyze (diagnostic)
+        continue-on-error: true
+        run: flutter analyze --no-pub
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $src = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path $src)) { throw "未找到构建产物目录：$src" }
+          $dst = 'myune_music_windows_x64.zip'
+          Compress-Archive -Path "$src/*" -DestinationPath $dst -Force
+          Get-Item $dst | Select-Object Name, Length
+          Get-ChildItem $src | Select-Object Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: myune-music-windows-x64
+          path: myune_music_windows_x64.zip
+          if-no-files-found: error
+          retention-days: 30

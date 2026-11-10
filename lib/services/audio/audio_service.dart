@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 
+import '../network/remote_media_registry.dart';
+
 // class FakePlayerStream implements PlayerStream {
 //   @override
 //   Stream<Duration> get position => const Stream<Duration>.empty();
@@ -100,7 +102,13 @@ class AudioService {
     await setRate(rate);
     await applyEqualizer(gains: eqGains, frequencies: eqFrequencies);
 
-    await _player.open(Media(filePath), play: true);
+    // 网络媒体的 URL 里编码了本机代理端口。应用重启后代理可能顺延到另一个
+    // 端口，恢复的播放队列里保存的仍是旧 URL；交给 mpv 前统一改写，
+    // 避免连不上旧端口报 loading failed。本地路径原样返回，零开销。
+    await _player.open(
+      Media(RemoteMediaRegistry.normalizePlayablePath(filePath)),
+      play: true,
+    );
   }
 
   // 启用无缝播放模式：设置 Gapless.yes + 开启 prefetch
@@ -143,9 +151,11 @@ class AudioService {
     await setRate(rate);
     await applyEqualizer(gains: eqGains, frequencies: eqFrequencies);
 
-    final tracks = [Media(currentPath)];
+    final tracks = <Media>[
+      Media(RemoteMediaRegistry.normalizePlayablePath(currentPath)),
+    ];
     if (nextPath != null) {
-      tracks.add(Media(nextPath));
+      tracks.add(Media(RemoteMediaRegistry.normalizePlayablePath(nextPath)));
     }
     await _player.openAll(tracks, play: true);
   }
@@ -160,7 +170,9 @@ class AudioService {
       }
       // 追加新的预备项
       if (nextPath != null) {
-        await _player.add(Media(nextPath));
+        await _player.add(
+          Media(RemoteMediaRegistry.normalizePlayablePath(nextPath)),
+        );
       }
     } catch (e) {
       //
