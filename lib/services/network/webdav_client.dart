@@ -113,10 +113,16 @@ class WebDavClient {
   }
 
   /// 打开一个远端文件。start/end 是闭区间，null 表示从头 / 到尾。
+  ///
+  /// [headerTimeout] 只约束「拿到响应头」这一段：自建的「网盘 → WebDAV」
+  /// 桥在开始推流前往往要先向网盘申请下载地址，首包可能要好几十秒。
+  /// 这个值必须小于播放器自己的网络超时（mpv 默认 60 秒），否则播放器
+  /// 会先放弃，表现为 `loading failed` / `Immediate exit requested`。
   Future<RemoteStreamResult> open(
     String href, {
     int? start,
     int? end,
+    Duration headerTimeout = const Duration(seconds: 25),
   }) async {
     final client = http.Client();
     try {
@@ -125,9 +131,7 @@ class WebDavClient {
         ..headers.addAll(_authHeaders);
       final range = formatRangeHeader(start, end);
       if (range.isNotEmpty) request.headers['Range'] = range;
-      final response = await client.send(request).timeout(
-            const Duration(seconds: 25),
-          );
+      final response = await client.send(request).timeout(headerTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.stream.drain<void>();
         throw Exception('WebDAV GET 失败（HTTP ${response.statusCode}）');

@@ -85,6 +85,7 @@ class FtpClient {
     String remotePath, {
     int? start,
     int? end,
+    Duration headerTimeout = const Duration(seconds: 25),
   }) async {
     final session = await _connect();
     try {

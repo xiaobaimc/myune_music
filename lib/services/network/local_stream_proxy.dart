@@ -232,6 +232,15 @@ class LocalStreamProxy {
     throw StateError('未知的流目标类型：$kind（target=$target）');
   }
 
+  /// 拿到上游响应头的总预算。
+  ///
+  /// 自建的「Google Drive → WebDAV」桥在开始推流前往往要先向网盘申请下载
+  /// 地址，首包几十秒很常见。原来的 25 秒会先于播放器放弃，mpv 只会报
+  /// `loading failed` / `Immediate exit requested`（实测日志里失败时刻正好
+  /// 是发起后 25.0 秒）。这里放宽到 45 秒，仍低于 mpv 默认 60 秒的网络超时，
+  /// 这样「慢」还有机会救回来，「死」也能让播放器自己报错。
+  static const Duration _openBudget = Duration(seconds: 45);
+
   Future<RemoteStreamResult> _openNas(
     Map<String, dynamic> target, {
     int? start,
@@ -246,21 +255,29 @@ class LocalStreamProxy {
     if (path.isEmpty) throw StateError('远程文件路径为空');
 
     // 上游是「网盘 → WebDAV」这类自建桥时，首包经常被限流或超时。
-    // 这里对「拿响应头」阶段做 3 次短重试，避免一次抖动就让 mpv 直接
-    // 报 loading failed / Immediate exit requested。
+    // 这里在总预算内做几次重试，避免一次抖动就让 mpv 直接报
+    // loading failed / Immediate exit requested。
     Object? lastError;
+    final stopwatch = Stopwatch()..start();
     for (var attempt = 0; attempt < 3; attempt++) {
+      final remaining = _openBudget - stopwatch.elapsed;
+      if (remaining <= const Duration(seconds: 2)) break;
       try {
         // 以配置里的协议为唯一可信来源；URL 中的 proto 字段只作元数据，
         // 避免别名 / 旧数据把 WebDAV 请求错发到 FTP 端口。
         if (source.type == RemoteSourceType.webdav) {
-          return await WebDavClient(source).open(path, start: start, end: end);
+          return await WebDavClient(
+            source,
+          ).open(path, start: start, end: end, headerTimeout: remaining);
         }
-        return await FtpClient(source).open(path, start: start, end: end);
+        return await FtpClient(
+          source,
+        ).open(path, start: start, end: end, headerTimeout: remaining);
       } catch (error) {
         lastError = error;
         NetworkProxyLog.instance.write(
           'upstream open failed attempt=${attempt + 1}/3 '
+          'elapsed=${stopwatch.elapsedMilliseconds}ms '
           'proto=${source.type.name} range=${formatRangeHeader(start, end)} '
           'err=$error',
         );
@@ -412,9 +429,13 @@ class LocalStreamProxy {
           // 非法 Content-Type 交给 mpv 自己嗅探。
         }
       }
+      int? declaredLength;
       if (total != null && servedEnd != null) {
         final length = servedEnd - result.servedStart + 1;
-        if (length >= 0) response.headers.contentLength = length;
+        if (length >= 0) {
+          response.headers.contentLength = length;
+          declaredLength = length;
+        }
         if (isPartial) {
           response.headers.set(
             'Content-Range',
@@ -422,14 +443,15 @@ class LocalStreamProxy {
           );
         }
       } else if (total != null) {
-        response.headers.contentLength = total - result.servedStart;
+        declaredLength = total - result.servedStart;
+        response.headers.contentLength = declaredLength;
       }
 
       NetworkProxyLog.instance.write(
         'serve status=${response.statusCode} src=${target['s']} '
         'range=${rangeHeader ?? '-'} total=$total '
         'start=${result.servedStart} end=$servedEnd '
-        'len=${response.headers.contentLength} '
+        'len=${declaredLength ?? '-'} '
         'ctype=${result.contentType}',
       );
 
@@ -441,7 +463,26 @@ class LocalStreamProxy {
       }
 
       try {
-        await response.addStream(result.bytes);
+        // 统计实际发出的字节数：mpv 报
+        // `http: Error reading HTTP response: Immediate exit requested` 时，
+        // 到底是「上游中途断流」还是「播放器自己主动断开」，靠这两个数字
+        // 就能一眼分开——前者 sent < expected，后者 sent 与 expected 无关。
+        var sent = 0;
+        await response.addStream(
+          result.bytes.map((chunk) {
+            sent += chunk.length;
+            return chunk;
+          }),
+        );
+        final expected = declaredLength;
+        NetworkProxyLog.instance.write(
+          'stream done sent=$sent expected=${expected ?? '-'} '
+          '${expected != null && sent != expected ? '⚠ 上游提前结束' : ''}',
+        );
+      } catch (error) {
+        NetworkProxyLog.instance.write(
+          'stream aborted by client or upstream: $error',
+        );
       } finally {
         await response.close();
         await result.close?.call();
