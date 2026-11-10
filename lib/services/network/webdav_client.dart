@@ -159,7 +159,7 @@ class WebDavClient {
     }
   }
 
-  /// 判断一个 <response> 块是否代表目录。
+  /// 判断一个 `<response>` 块是否代表目录。
   ///
   /// 老版本只认 `<d:collection/>` 自闭合标签，导致群晖 / Nextcloud / 绿联 /
   /// 极空间等 NAS 返回的 `<D:collection></D:collection>`、带命名空间属性或
