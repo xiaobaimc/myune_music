@@ -265,7 +265,7 @@ class GoogleDriveClient {
       final token = await _accessToken();
       final fileId = fileIdOf(path);
       final from = start ?? 0;
-      final to = end ?? (start == null ? 0 : start);
+      final to = end ?? from;
       final client = http.Client();
       try {
         final request = http.Request(

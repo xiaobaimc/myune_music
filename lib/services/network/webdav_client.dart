@@ -179,7 +179,7 @@ class WebDavClient {
     final client = http.Client();
     final stopwatch = Stopwatch()..start();
     final from = start ?? 0;
-    final to = end ?? (start == null ? 0 : start);
+    final to = end ?? from;
     try {
       final target = uriFor(href);
       final request = http.Request('GET', target)

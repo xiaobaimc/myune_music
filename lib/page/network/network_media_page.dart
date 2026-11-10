@@ -394,7 +394,7 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
     if (added == 0) {
       _notification.info('这些歌曲已经在歌单「${picked.name}」里了');
     } else {
-      _notification.info('已加入 ${added} 首到歌单「${picked.name}」');
+      _notification.info('已加入 $added 首到歌单「${picked.name}」');
     }
   }
 
