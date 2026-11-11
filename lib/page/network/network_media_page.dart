@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../page/playlist/playlist_content_notifier.dart';
 import '../../page/playlist/playlist_models.dart';
+import '../../services/network/google_drive_auth.dart';
+import '../../services/network/google_drive_client.dart';
 import '../../services/network/network_media_service.dart';
 import '../../services/network/network_proxy_log.dart';
 import '../../services/network/network_tag_reader.dart';
@@ -55,6 +59,9 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
   bool _cancelScan = false;
   int _scanFound = 0;
   int _scanDirs = 0;
+
+  bool _uploading = false;
+  bool _cancelUpload = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -642,6 +649,322 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
 
   // --- 顶部操作 ---
 
+  // --- Google Drive 写入操作（上传 / 新建 / 重命名 / 移入回收站） ---
+
+  /// 只有 Google Drive 源支持写入；WebDAV / FTP 目前仍为只读浏览。
+  GoogleDriveClient? get _driveClient {
+    final source = _active;
+    if (source == null || !source.isGoogleDrive) return null;
+    return GoogleDriveClient(source);
+  }
+
+  bool get _canWrite => _active?.isGoogleDrive ?? false;
+
+  /// 文件选择器只放行常见音频格式，避免把 `mp+` 之类带特殊字符的扩展名
+  /// 交给 Windows 原生对话框（部分系统会直接报错）。
+  static const List<String> _uploadExtensions = <String>[
+    'mp3', 'flac', 'wav', 'wave', 'm4a', 'm4b', 'aac', 'alac',
+    'ogg', 'oga', 'opus', 'ape', 'wma', 'aiff', 'aif', 'mp2',
+    'mka', 'tak', 'tta', 'wv', 'dsf', 'dff', 'dsd', 'mpga',
+  ];
+
+  Future<String?> _askText({
+    required String title,
+    required String label,
+    String initial = '',
+    String confirm = '确定',
+  }) async {
+    final controller = TextEditingController(text: initial);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onSubmitted: (value) =>
+              Navigator.of(dialogContext).pop(value.trim()),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: Text(confirm),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  /// 选择本机音频并上传到当前目录。逐个串行、按 4 MB 分块，显示进度且可取消。
+  Future<void> _uploadAudioFiles() async {
+    final client = _driveClient;
+    if (client == null || _uploading) return;
+    final picked = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: _uploadExtensions,
+      dialogTitle: '选择要上传到 Google Drive 的音频文件',
+    );
+    if (picked == null || !mounted) return;
+    final paths = picked.files
+        .map((file) => file.path)
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+    if (paths.isEmpty || !mounted) return;
+
+    final message = ValueNotifier<String>('准备上传…');
+    final percent = ValueNotifier<int>(0);
+    BuildContext? progressContext;
+    var cancelled = false;
+    var dialogClosed = false;
+    var success = 0;
+    final failures = <String>[];
+
+    void closeProgress() {
+      if (dialogClosed) return;
+      dialogClosed = true;
+      final ctx = progressContext;
+      if (ctx != null && ctx.mounted) Navigator.of(ctx).pop();
+    }
+
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          progressContext = ctx;
+          return AlertDialog(
+            title: const Text('上传本地音频到 Google Drive'),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  ValueListenableBuilder<String>(
+                    valueListenable: message,
+                    builder: (_, value, __) => Text(
+                      value,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ValueListenableBuilder<int>(
+                    valueListenable: percent,
+                    builder: (_, value, __) => LinearProgressIndicator(
+                      value: value / 100,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '上传到当前目录，可点「取消」中止；'
+                    '大文件按 4 MB 分块续传，不会一次读进内存。',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  cancelled = true;
+                  dialogClosed = true;
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('取消'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    setState(() {
+      _uploading = true;
+      _cancelUpload = false;
+    });
+    try {
+      for (var i = 0; i < paths.length; i++) {
+        if (cancelled || _cancelUpload) break;
+        final path = paths[i];
+        final fileName = p.basename(path);
+        message.value = '正在上传 ${i + 1}/${paths.length}：$fileName';
+        percent.value = 0;
+        try {
+          await client.uploadFile(
+            _currentPath,
+            path,
+            onProgress: (sent, total) {
+              percent.value = total <= 0 ? 0 : (sent * 100 ~/ total);
+              message.value =
+                  '正在上传 ${i + 1}/${paths.length}：$fileName '
+                  '（${(sent / 1024 / 1024).toStringAsFixed(1)} / '
+                  '${(total / 1024 / 1024).toStringAsFixed(1)} MB）';
+            },
+            isCancelled: () async => cancelled || _cancelUpload,
+          );
+          success++;
+        } catch (error) {
+          if (cancelled || _cancelUpload) break;
+          failures.add('$fileName：$error');
+        }
+      }
+    } finally {
+      closeProgress();
+      message.dispose();
+      percent.dispose();
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+          _cancelUpload = false;
+        });
+      }
+    }
+    if (!mounted) return;
+    await _loadDirectory();
+    if (failures.isEmpty) {
+      _notification.info(
+        cancelled
+            ? '已取消上传，成功上传 $success 个文件'
+            : '已上传 $success 个音频到当前目录',
+      );
+    } else {
+      _notification.error(
+        '成功 $success 个，失败 ${failures.length} 个：${failures.first}',
+      );
+    }
+  }
+
+  Future<void> _createFolderHere() async {
+    final client = _driveClient;
+    if (client == null) return;
+    final name = await _askText(
+      title: '在当前目录新建文件夹',
+      label: '文件夹名称',
+      confirm: '创建',
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    try {
+      await client.createFolder(_currentPath, name.trim());
+      await _loadDirectory();
+      if (mounted) _notification.info('已新建文件夹「${name.trim()}」');
+    } catch (error) {
+      if (mounted) _notification.error('新建文件夹失败：$error');
+    }
+  }
+
+  Future<void> _renameEntry(RemoteEntry entry) async {
+    final client = _driveClient;
+    if (client == null) return;
+    final name = await _askText(
+      title: '重命名',
+      label: '新名称',
+      initial: entry.name,
+      confirm: '保存',
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    if (name.trim() == entry.name) return;
+    try {
+      await client.renameEntry(entry.path, name.trim());
+      await _loadDirectory();
+      if (mounted) _notification.info('已重命名为「${name.trim()}」');
+    } catch (error) {
+      if (mounted) _notification.error('重命名失败：$error');
+    }
+  }
+
+  Future<void> _deleteEntry(RemoteEntry entry) async {
+    final client = _driveClient;
+    if (client == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('移入 Google Drive 回收站'),
+        content: Text(
+          '确定要把「${entry.name}」${entry.isDirectory ? '（文件夹及其内容）' : ''}'
+          '移入回收站吗？\n\n这不是永久删除，之后仍可在 Google Drive 网页端的'
+          '「回收站」里恢复。',
+          style: const TextStyle(fontSize: 12, height: 1.6),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('移入回收站'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await client.deleteEntry(entry.path);
+      await _loadDirectory();
+      if (mounted) {
+        _notification.info('已把「${entry.name}」移入 Google Drive 回收站');
+      }
+    } catch (error) {
+      if (mounted) _notification.error('删除失败：$error');
+    }
+  }
+
+  /// 显示当前授权账号，方便确认「网页登录的是哪个 Google 账号」。
+  Future<void> _showDriveAccount() async {
+    final client = _driveClient;
+    if (client == null) return;
+    try {
+      final user = await client.about();
+      if (!mounted) return;
+      final email = user.$1;
+      final name = user.$2;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Google Drive 账号'),
+          content: SizedBox(
+            width: 360,
+            child: SelectableText(
+              '账号：${email.isNotEmpty ? email : '未返回邮箱'}\n'
+              '名称：${name.isNotEmpty ? name : '未返回'}\n'
+              '授权范围：${GoogleDriveAuth.scope}\n\n'
+              '该范围允许本应用读取、上传、新建、重命名与删除 Drive 文件；'
+              '凭据只保存在本机。',
+              style: const TextStyle(fontSize: 12, height: 1.6),
+            ),
+          ),
+          actions: <Widget>[
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) _notification.error('读取账号信息失败：$error');
+    }
+  }
+
   Future<void> _openMenu() async {
     final choice = await showMenu<String>(
       context: context,
@@ -759,6 +1082,37 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
             subtitle: Text('封面 / 标题 / 时长 / 歌词，读完即缓存'),
           ),
         ),
+        if (_canWrite) ...<PopupMenuEntry<String>>[
+          const PopupMenuDivider(),
+          const PopupMenuItem<String>(
+            value: 'upload',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.upload_file_outlined, size: 18),
+              title: Text('上传本地音频到当前目录'),
+              subtitle: Text('多选、分块续传、带进度'),
+            ),
+          ),
+          const PopupMenuItem<String>(
+            value: 'newFolder',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.create_new_folder_outlined, size: 18),
+              title: Text('在当前目录新建文件夹'),
+            ),
+          ),
+          const PopupMenuItem<String>(
+            value: 'account',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.account_circle_outlined, size: 18),
+              title: Text('查看当前 Google 账号 / 授权范围'),
+            ),
+          ),
+        ],
         const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'click',
@@ -845,6 +1199,15 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
         break;
       case 'prefetch':
         await _prefetchCurrentDirectory();
+        break;
+      case 'upload':
+        await _uploadAudioFiles();
+        break;
+      case 'newFolder':
+        await _createFolderHere();
+        break;
+      case 'account':
+        await _showDriveAccount();
         break;
       case 'click':
         setState(() => _enqueueMode = !_enqueueMode);
@@ -1314,10 +1677,38 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
                   ),
                 ),
           trailing: entry.isDirectory
-              ? Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: colorScheme.onSurfaceVariant,
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (_canWrite)
+                      PopupMenuButton<String>(
+                        tooltip: '更多',
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.more_vert, size: 18),
+                        onSelected: (value) async {
+                          if (value == 'rename') {
+                            await _renameEntry(entry);
+                          } else if (value == 'delete') {
+                            await _deleteEntry(entry);
+                          }
+                        },
+                        itemBuilder: (_) => const <PopupMenuEntry<String>>[
+                          PopupMenuItem<String>(
+                            value: 'rename',
+                            child: Text('重命名文件夹…'),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Text('移入回收站…'),
+                          ),
+                        ],
+                      ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ],
                 )
               : Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1345,24 +1736,38 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
                           await _addToAllSongs(<RemoteEntry>[entry]);
                         } else if (value == 'diagnose') {
                           await _diagnoseFile(entry);
+                        } else if (value == 'rename') {
+                          await _renameEntry(entry);
+                        } else if (value == 'delete') {
+                          await _deleteEntry(entry);
                         }
                       },
-                      itemBuilder: (_) =>
-                          const <PopupMenuEntry<String>>[
-                            PopupMenuItem<String>(
-                              value: 'playlist',
-                              child: Text('加入歌单…'),
-                            ),
-                            PopupMenuItem<String>(
-                              value: 'allSongs',
-                              child: Text('加入「全部歌曲」'),
-                            ),
-                            PopupMenuDivider(),
-                            PopupMenuItem<String>(
-                              value: 'diagnose',
-                              child: Text('诊断此文件…'),
-                            ),
-                          ],
+                      itemBuilder: (_) => <PopupMenuEntry<String>>[
+                        const PopupMenuItem<String>(
+                          value: 'playlist',
+                          child: Text('加入歌单…'),
+                        ),
+                        const PopupMenuItem<String>(
+                          value: 'allSongs',
+                          child: Text('加入「全部歌曲」'),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem<String>(
+                          value: 'diagnose',
+                          child: Text('诊断此文件…'),
+                        ),
+                        if (_canWrite) ...<PopupMenuEntry<String>>[
+                          const PopupMenuDivider(),
+                          const PopupMenuItem<String>(
+                            value: 'rename',
+                            child: Text('重命名…'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Text('移入回收站…'),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),

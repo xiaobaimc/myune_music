@@ -199,13 +199,20 @@ sudo apt install keybinder-3.0
 
 ### 使用方式（Google Drive 原生）
 
-全部在应用内的原生设置界面完成，不需要打开网页、不需要命令行、不需要装 rclone：
+登录与文件夹选择全部在应用内完成（授权那一步会临时打开系统浏览器）：
 
 1. 进入「网络媒体」→「添加网络源」，把顶部类型切到 **Google Drive**；
-2. 点 **「从本机文件导入凭据」**，程序会读取
-   `文档/myune_music/google_drive.json`；也可以直接在界面里手填下面四个字段；
-3. 填 **根文件夹 ID**（可选，留空则打开整个「我的云端硬盘」）；
+2. 点 **「网页登录 Google 账号」**：系统浏览器打开 Google 授权页 → 登录 → 点「允许」→
+   浏览器显示「授权成功」后自动回到应用，`refresh_token` 已经自动填好并存到本机；
+3. 点「文件夹 ID」右侧的 **「浏览…」**，在弹出的 Drive 文件夹树里一层层点进去，
+   点「使用此文件夹」即可设为默认读取目录（留空表示整个「我的云端硬盘」）；
 4. 点「测试连接」→ 显示「根目录有 N 个条目」后保存。
+
+网页登录前需要一对 OAuth 客户端凭据：点「从本机文件导入凭据」可读取
+`文档/myune_music/google_drive.json` 里的 `clientId` / `clientSecret`，
+或在「手动填写 / 导入凭据（高级）」里直接填。这两个值由你自己在
+Google Cloud Console 创建，仓库和程序里**不会内置任何真实凭据**。
+仍可沿用旧方式：完全手填三件套 + 文件夹 ID，不经过浏览器。
 
 凭据文件的格式（字段名固定，只放在本机）：
 
@@ -225,6 +232,51 @@ sudo apt install keybinder-3.0
 
 > 与「自己搭一个 Google Drive → WebDAV 桥」相比，原生直连少一跳：实测首包在 1 秒内，
 > 且 Drive API 本身返回 `206 + Content-Range`，拖动进度不再依赖桥接服务是否正确实现 Range。
+
+### 网页登录（OAuth loopback）说明
+
+网页登录采用 Google 官方为桌面应用推荐的 **Loopback IP address 流程**：
+
+```
+本机临时 HTTP 服务 127.0.0.1:53682（占用则顺延到 53693）
+   ↓ 用系统浏览器打开 accounts.google.com/o/oauth2/v2/auth
+   ↓ 参数：access_type=offline、prompt=consent、state=随机值（防伪造回调）
+用户在网页里登录并同意
+   ↓ Google 把 code 重定向回 http://127.0.0.1:53682/
+   ↓ 校验 state → 用 code + client_id/client_secret 换 token
+拿到 access_token + refresh_token → 写入本机设置与 google_drive.json → 关闭临时服务
+```
+
+几个需要注意的点：
+
+* **权限范围**：`https://www.googleapis.com/auth/drive`（完整 Drive 读写），这样才能上传、
+  新建、重命名与删除。它是 Google 的「受限范围」，未做 OAuth 验证的应用会显示
+  「此应用未经验证」，把账号加进该 OAuth 客户端的**测试用户**即可继续。
+* **重定向 URI**：客户端类型为「桌面应用」时 Google 允许任意 loopback 端口，无需登记；
+  若用的是「Web 应用」类型，需要在 Cloud Console 把
+  `http://127.0.0.1:53682/`（以及顺延端口）加入「已获授权的重定向 URI」，
+  否则会报 `redirect_uri_mismatch`。界面里的登录说明也写了这一条。
+* **凭据不进仓库**：`client_id` / `client_secret` / `refresh_token` 只存在本机
+  `shared_preferences` 与 `文档/myune_music/google_drive.json`，不写日志、不随程序分发。
+* 登录超时 5 分钟，可随时点进度框「取消」；临时 HTTP 服务在结束时一定会关闭。
+* 「更多 → 查看当前 Google 账号 / 授权范围」可以确认当前连的是哪个账号。
+
+### 文件管理（上传 / 新建 / 重命名 / 删除）
+
+写入操作目前只开放给 **Google Drive 源**（WebDAV / FTP 仍为只读浏览）：
+
+| 入口 | 行为 |
+| --- | --- |
+| 更多 → **上传本地音频到当前目录** | 多选本机音频，串行上传到当前目录；按 4 MB（256 KB 整数倍）分块 resumable PUT，带实时进度与「取消」，不会把大文件整首读进内存 |
+| 更多 → **在当前目录新建文件夹** | 输入名称后创建，创建完自动刷新列表 |
+| 文件 / 文件夹行尾 ⋮ → **重命名** | 调 `files.update`（PATCH）改名 |
+| 文件 / 文件夹行尾 ⋮ → **移入回收站** | 调 `files.delete`，**不是永久删除**，可在 Google Drive 网页端「回收站」恢复；删除前有二次确认 |
+| 选文件夹弹窗 → **新建文件夹** | 在浏览目录树时直接建新文件夹，立刻可作为默认读取目录 |
+
+上传用的是 Drive API v3 的 `uploadType=resumable`：先 POST metadata 拿到会话 URL，
+再按块 PUT 并带 `Content-Range: bytes start-end/total`，中间返回 `308 Resume Incomplete`，
+最后一块返回 `200/201` 即完成。文件选择器只放行常见音频扩展名，
+避免把视频 / 文档误传进音乐库。
 
 ### 播放与队列
 

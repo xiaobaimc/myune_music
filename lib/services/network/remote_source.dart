@@ -44,6 +44,7 @@ class RemoteSource {
     this.clientSecret = '',
     this.refreshToken = '',
     this.rootFolderId = '',
+    this.rootFolderName = '',
   });
 
   final String id;
@@ -67,6 +68,9 @@ class RemoteSource {
 
   /// Google Drive 根文件夹 ID（留空为整个「我的云端硬盘」）。
   final String rootFolderId;
+
+  /// 根文件夹的可读名称，仅用于界面显示（由图形化文件夹选择器回填）。
+  final String rootFolderName;
 
   bool get isGoogleDrive => type == RemoteSourceType.googleDrive;
 
@@ -104,9 +108,11 @@ class RemoteSource {
   String get displaySubtitle {
     if (isGoogleDrive) {
       final id = rootFolderId.trim();
-      return id.isEmpty
-          ? 'Google Drive · 我的云端硬盘'
-          : 'Google Drive · 文件夹 ${id.length > 12 ? '${id.substring(0, 12)}…' : id}';
+      if (id.isEmpty) return 'Google Drive · 我的云端硬盘';
+      final label = rootFolderName.trim().isEmpty
+          ? (id.length > 12 ? '${id.substring(0, 12)}…' : id)
+          : rootFolderName.trim();
+      return 'Google Drive · 文件夹 $label';
     }
     final scheme = type == RemoteSourceType.webdav
         ? (useTls ? 'https' : 'http')
@@ -127,6 +133,7 @@ class RemoteSource {
     String? clientSecret,
     String? refreshToken,
     String? rootFolderId,
+    String? rootFolderName,
   }) {
     return RemoteSource(
       id: id,
@@ -142,6 +149,7 @@ class RemoteSource {
       clientSecret: clientSecret ?? this.clientSecret,
       refreshToken: refreshToken ?? this.refreshToken,
       rootFolderId: rootFolderId ?? this.rootFolderId,
+      rootFolderName: rootFolderName ?? this.rootFolderName,
     );
   }
 
@@ -159,6 +167,7 @@ class RemoteSource {
         'clientSecret': clientSecret,
         'refreshToken': refreshToken,
         'rootFolderId': rootFolderId,
+        'rootFolderName': rootFolderName,
       };
 
   factory RemoteSource.fromJson(Map<String, dynamic> json) {
@@ -179,6 +188,7 @@ class RemoteSource {
       clientSecret: (json['clientSecret'] as String?) ?? '',
       refreshToken: (json['refreshToken'] as String?) ?? '',
       rootFolderId: (json['rootFolderId'] as String?) ?? '',
+      rootFolderName: (json['rootFolderName'] as String?) ?? '',
     );
   }
 }
