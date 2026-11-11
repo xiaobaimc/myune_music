@@ -89,15 +89,16 @@ class NetworkHeaderTagParser {
 
       if (type == 0 && body.length >= 18) {
         // STREAMINFO：20 bit 采样率 + 36 bit 总采样数，可算出精确时长。
-        sampleRate =
+        final int sr =
             (body[10] << 12) | (body[11] << 4) | (body[12] >> 4);
+        sampleRate = sr;
         final totalSamples = ((body[13] & 0x0F) << 32) |
             (body[14] << 24) |
             (body[15] << 16) |
             (body[16] << 8) |
             body[17];
-        if (sampleRate! > 0 && totalSamples > 0) {
-          durationMs = (totalSamples * 1000 ~/ sampleRate!);
+        if (sr > 0 && totalSamples > 0) {
+          durationMs = totalSamples * 1000 ~/ sr;
         }
       } else if (type == 4) {
         // VORBIS_COMMENT（小端，UTF-8 的 KEY=VALUE 列表）

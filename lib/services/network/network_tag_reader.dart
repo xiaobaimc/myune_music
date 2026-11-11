@@ -197,7 +197,7 @@ class NetworkTagReader {
       trackNumber: header?.trackNumber ?? lofty?.trackNumber,
       cover: cover,
       lyrics: lyrics,
-      partial: false,
+      partial: header == null && (lofty?.partial ?? false),
     );
     NetworkProxyLog.instance.write(
       'tag read ok ext=${head.extension} head=${head.bytes.length}B '
