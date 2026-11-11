@@ -1337,9 +1337,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
     try {
       // 不能因为「缓存里已有标签」就提前返回：标签往往是列表滚动时预加载的，
       // 那时还没有当前播放歌曲，封面必须在这里回填到 _currentSong 才会
-      // 出现在播放页。缓存命中时直接用，未命中才发起一次读取。
-      final info =
-          NetworkTagReader.cached(url) ?? await NetworkTagReader.read(url);
+      // 出现在播放页。read() 会依次查内存、磁盘（含封面），都没有才联网，
+      // 所以磁盘命中时这一步不会产生流量。
+      final info = await NetworkTagReader.read(url);
       if (info == null || !info.hasAny) return;
       _sweepNetworkTagsIntoSongs();
 

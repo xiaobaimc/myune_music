@@ -50,6 +50,43 @@ class NetworkTagInfo {
   /// 是否读到了「有用的东西」。只有读到时才写进缓存，避免把一次失败
   /// （例如上游临时 502）永久记成「这首歌没有标签」。
   bool get hasAny => hasTitle || hasCover || hasLyrics;
+
+  /// 落盘用的轻量表示。封面体积大，单独写成二进制文件，不进 JSON。
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    if (title != null) 'title': title,
+    if (artist != null) 'artist': artist,
+    if (album != null) 'album': album,
+    if (genre != null) 'genre': genre,
+    if (durationMs != null) 'durationMs': durationMs,
+    if (trackNumber != null) 'trackNumber': trackNumber,
+    if (lyrics != null) 'lyrics': lyrics,
+    if (partial) 'partial': true,
+    'updatedAt': DateTime.now().millisecondsSinceEpoch,
+  };
+
+  static NetworkTagInfo? fromJson(Map<String, dynamic> json) {
+    int? asInt(Object? value) {
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString().trim() ?? '');
+    }
+
+    String? asText(Object? value) {
+      final text = value?.toString().trim();
+      return (text == null || text.isEmpty) ? null : text;
+    }
+
+    final info = NetworkTagInfo(
+      title: asText(json['title']),
+      artist: asText(json['artist']),
+      album: asText(json['album']),
+      genre: asText(json['genre']),
+      durationMs: asInt(json['durationMs']),
+      trackNumber: asInt(json['trackNumber']),
+      lyrics: asText(json['lyrics']),
+      partial: json['partial'] == true,
+    );
+    return info.hasAny ? info : null;
+  }
 }
 
 /// 网络媒体的内嵌标签读取器（预加载用）。
@@ -80,12 +117,74 @@ class NetworkTagReader {
   /// 记忆化上限。超过后整体清空，比做 LRU 简单且够用。
   static const int _maxEntries = 1500;
 
+  /// 磁盘缓存目录（位于 `文档/myune_music/tag_cache/`）。
+  static const String _diskDirName = 'tag_cache';
+  static const String _jsonSuffix = '.json';
+  static const String _coverSuffix = '.cover';
+
+  /// 磁盘条目 / 体积上限，超出后按最后修改时间淘汰最旧的。
+  static const int _diskMaxEntries = 3000;
+  static const int _diskMaxBytes = 512 * 1024 * 1024;
+
   static final Map<String, NetworkTagInfo> _cache = <String, NetworkTagInfo>{};
   static final Map<String, Future<NetworkTagInfo?>> _inflight =
       <String, Future<NetworkTagInfo?>>{};
 
+  /// 磁盘索引：`sha1(stableKey) -> 元数据（不含封面）`。
+  ///
+  /// 启动时一次性读入，之后 [cached] 同步命中，列表首帧就有标题 / 时长 /
+  /// 内嵌歌词；封面按需从同名 `.cover` 文件补，不必重新联网。
+  static final Map<String, NetworkTagInfo> _diskIndex =
+      <String, NetworkTagInfo>{};
+
+  static Directory? _diskDir;
+  static bool _diskReady = false;
+
+  /// 应用启动时调用一次：把磁盘上的标签索引读进内存。
+  ///
+  /// 只读 JSON（封面是单独文件、按需加载），几百首歌也就几百 KB，代价可以忽略。
+  static Future<void> initialize() async {
+    if (_diskReady) return;
+    _diskReady = true;
+    final dir = await _diskDirectory();
+    if (dir == null) return;
+    var loaded = 0;
+    try {
+      await for (final entity in dir.list()) {
+        if (entity is! File || !entity.path.endsWith(_jsonSuffix)) continue;
+        try {
+          final raw = await entity.readAsString();
+          final decoded = jsonDecode(raw);
+          if (decoded is! Map) continue;
+          final info = NetworkTagInfo.fromJson(
+            Map<String, dynamic>.from(decoded),
+          );
+          if (info == null) continue;
+          _diskIndex[p.basenameWithoutExtension(entity.path)] = info;
+          loaded++;
+        } catch (_) {
+          // 单个文件损坏就跳过，不影响其它条目。
+        }
+      }
+      NetworkProxyLog.instance.write('tag cache loaded $loaded entries');
+    } catch (error) {
+      NetworkProxyLog.instance.write('tag cache load failed: $error');
+    }
+  }
+
   /// 已经读到过的标签（同步返回，供列表构建时零成本合并）。
-  static NetworkTagInfo? cached(String url) => _cache[url];
+  ///
+  /// 内存没命中时查磁盘索引——这就是「重启后不用重新联网」的关键。
+  static NetworkTagInfo? cached(String url) {
+    final hit = _cache[url];
+    if (hit != null) return hit;
+    final key = _stableKey(url);
+    if (key == null) return null;
+    final disk = _diskIndex[_hash(key)];
+    if (disk == null) return null;
+    _cache[url] = disk;
+    return disk;
+  }
 
   /// 读取指定网络媒体的内嵌标签。读不到返回 null，不抛异常。
   static Future<NetworkTagInfo?> read(String url) {
@@ -94,10 +193,22 @@ class NetworkTagReader {
       return Future<NetworkTagInfo?>.value();
     }
     final hit = _cache[url];
-    if (hit != null) return Future<NetworkTagInfo?>.value(hit);
+    if (hit != null) {
+      if (hit.hasCover) return Future<NetworkTagInfo?>.value(hit);
+      // 磁盘索引里的条目不含封面：从磁盘补一次，避免为了封面重新联网。
+      final pendingCover = _inflight[url];
+      if (pendingCover != null) return pendingCover;
+      final future = _hydrateCover(url, hit).whenComplete(
+        () => _inflight.remove(url),
+      );
+      _inflight[url] = future;
+      return future;
+    }
     final pending = _inflight[url];
     if (pending != null) return pending;
-    final future = _readUncached(url);
+    final future = _readUncached(url).whenComplete(
+      () => _inflight.remove(url),
+    );
     _inflight[url] = future;
     return future;
   }
@@ -218,7 +329,145 @@ class NetworkTagReader {
   static NetworkTagInfo _remember(String url, NetworkTagInfo info) {
     if (_cache.length >= _maxEntries) _cache.clear();
     _cache[url] = info;
+    // 落盘是「顺手」动作：失败只写日志，绝不影响本次解析结果。
+    unawaited(_saveToDisk(url, info));
     return info;
+  }
+
+  /// 稳定 key：网络源 id + 媒体 id（取不到时用远端路径）。
+  ///
+  /// 刻意不用代理 URL：代理端口会在 18765-18774 之间漂移，用完整 URL 做 key
+  /// 会让每次换端口都全部失效。
+  static String? _stableKey(String url) {
+    final target = RemoteMediaRegistry.decodeTarget(url);
+    if (target == null) return null;
+    final source = (target['s'] ?? '').toString().trim();
+    final mediaId = (target['id'] ?? '').toString().trim();
+    final path = (target['p'] ?? '').toString().trim();
+    final identity = mediaId.isNotEmpty ? mediaId : path;
+    if (identity.isEmpty) return null;
+    return '${source.isEmpty ? '-' : source}|$identity';
+  }
+
+  static String _hash(String key) =>
+      crypto.sha1.convert(utf8.encode(key)).toString();
+
+  static Future<Directory?> _diskDirectory() async {
+    if (_diskDir != null) return _diskDir;
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final dir = Directory(p.join(docs.path, 'myune_music', _diskDirName));
+      if (!await dir.exists()) await dir.create(recursive: true);
+      _diskDir = dir;
+      return dir;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _saveToDisk(String url, NetworkTagInfo info) async {
+    final key = _stableKey(url);
+    if (key == null) return;
+    final dir = await _diskDirectory();
+    if (dir == null) return;
+    final hash = _hash(key);
+    try {
+      final jsonFile = File(p.join(dir.path, '$hash$_jsonSuffix'));
+      await jsonFile.writeAsString(jsonEncode(info.toJson()), flush: true);
+      if (info.hasCover) {
+        final coverFile = File(p.join(dir.path, '$hash$_coverSuffix'));
+        await coverFile.writeAsBytes(info.cover!, flush: true);
+      }
+      _diskIndex[hash] = info;
+      unawaited(_trimDisk(dir));
+    } catch (error) {
+      NetworkProxyLog.instance.write('tag cache save failed: $error');
+    }
+  }
+
+  static Future<Uint8List?> _readCoverFile(String key) async {
+    final dir = await _diskDirectory();
+    if (dir == null) return null;
+    try {
+      final file = File(p.join(dir.path, '${_hash(key)}$_coverSuffix'));
+      if (!await file.exists()) return null;
+      final bytes = await file.readAsBytes();
+      return bytes.isEmpty ? null : bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 内存条目来自磁盘索引（不含封面）时，从磁盘补一次封面。
+  static Future<NetworkTagInfo?> _hydrateCover(
+    String url,
+    NetworkTagInfo base,
+  ) async {
+    try {
+      final key = _stableKey(url);
+      if (key == null) return base;
+      final cover = await _readCoverFile(key);
+      if (cover == null) return base;
+      final merged = NetworkTagInfo(
+        title: base.title,
+        artist: base.artist,
+        album: base.album,
+        genre: base.genre,
+        durationMs: base.durationMs,
+        trackNumber: base.trackNumber,
+        cover: cover,
+        lyrics: base.lyrics,
+        partial: base.partial,
+      );
+      _cache[url] = merged;
+      return merged;
+    } finally {
+      _inflight.remove(url);
+    }
+  }
+
+  /// 超过条目数或体积上限时，按最后修改时间删最旧的。
+  static Future<void> _trimDisk(Directory dir) async {
+    try {
+      final files = await dir.list().whereType<File>().toList();
+      if (files.isEmpty) return;
+      var totalBytes = 0;
+      var jsonCount = 0;
+      final stats = <MapEntry<File, int>>[];
+      for (final file in files) {
+        final stat = await file.stat();
+        totalBytes += stat.size;
+        if (file.path.endsWith(_jsonSuffix)) jsonCount++;
+        stats.add(MapEntry(file, stat.modified.millisecondsSinceEpoch));
+      }
+      if (jsonCount <= _diskMaxEntries && totalBytes <= _diskMaxBytes) return;
+      stats.sort((a, b) => a.value.compareTo(b.value));
+      for (final entry in stats) {
+        if (jsonCount <= _diskMaxEntries && totalBytes <= _diskMaxBytes) break;
+        final file = entry.key;
+        final isJson = file.path.endsWith(_jsonSuffix);
+        final base = p.basenameWithoutExtension(file.path);
+        try {
+          final size = await file.length();
+          await file.delete();
+          totalBytes -= size;
+          if (isJson) {
+            jsonCount--;
+            _diskIndex.remove(base);
+          }
+          // JSON 和封面成对存在，删一个就把另一个也带走。
+          final partner = File(
+            p.join(dir.path, '$base${isJson ? _coverSuffix : _jsonSuffix}'),
+          );
+          if (await partner.exists()) {
+            final partnerSize = await partner.length();
+            await partner.delete();
+            totalBytes -= partnerSize;
+            if (!isJson) jsonCount--;
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   static Future<NetworkTagInfo?> _parse(

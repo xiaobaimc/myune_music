@@ -37,6 +37,7 @@ import 'page/statistics_page/statistics_manager.dart';
 import 'layout/navigation_notifier.dart';
 import 'services/license_service.dart';
 import 'services/network/network_media_service.dart';
+import 'services/network/network_tag_reader.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,6 +77,10 @@ void main() async {
   // 网络媒体（WebDAV / FTP）：加载网络源配置并启动本机流代理。
   // 代理启动失败不阻断本地音乐播放，网络媒体页会在用到时再给出提示。
   await NetworkMediaService.initialize();
+
+  // 网络媒体标签 / 封面缓存：把上次运行读到的标题、时长、歌词、封面
+  // 从磁盘索引载入内存。这样重启后列表直接命中缓存，不必每首歌重新拉 2MB 头。
+  await NetworkTagReader.initialize();
 
   // 初始化系统托盘
   await trayManager.setIcon('assets/images/icon/tray_icon.ico');
