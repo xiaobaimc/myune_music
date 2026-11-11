@@ -228,7 +228,7 @@ class NetworkTagReader {
         if (cover != null && cover.isNotEmpty) {
           // 极少数文件只有封面、没有标题/歌词时 fromJson 会返回 null，
           // 这里仍然保留它的封面，不能把这类条目整个丢掉。
-          info = (info ?? NetworkTagInfo()).withCover(cover);
+          info = (info ?? const NetworkTagInfo()).withCover(cover);
         }
       }
       if (info == null) return null;

@@ -281,6 +281,9 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
   Future<void> _signInWithBrowser() async {
     if (_signingIn) return;
     await _ensureClientCredentials();
+    // 凭据可能来自异步读取的本机文件；跨 async gap 后再用 BuildContext
+    // 必须确认 State 仍在树里，否则弹窗会挂在已经销毁的 context 上。
+    if (!mounted) return;
     final id = _clientId.text.trim();
     final secret = _clientSecret.text.trim();
     if (id.isEmpty || secret.isEmpty) {
@@ -433,6 +436,8 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
       return;
     }
     await _ensureClientCredentials();
+    // 同上：异步读凭据之后、打开文件夹选择器之前先确认仍然挂载。
+    if (!mounted) return;
     setState(() => _pickingFolder = true);
     try {
       final temp = RemoteSource(
