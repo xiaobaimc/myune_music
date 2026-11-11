@@ -468,10 +468,50 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _restorePlaybackState();
     // 恢复无缝播放设置
     updateGaplessMode(_settingsProvider.enableGaplessPlayback);
+    // 把磁盘缓存里已有的网络媒体封面回填到列表 / 当前歌曲。
+    // 以前每次重启都必须手动点一次「一键读取本目录封面」才会显示封面。
+    unawaited(_primeNetworkCoversFromDisk());
+  }
+
+  /// 启动时把磁盘标签缓存（含 `.cover` 二进制）回填到已加载的歌曲。
+  ///
+  /// 纯本地读取，不发起任何网络请求。`main()` 里已经 `await` 过
+  /// [NetworkTagReader.initialize]，这里再调一次是幂等兜底（例如外部直接
+  /// 构造本 Notifier 的场景）。延迟一帧执行，避免在 Provider 创建期间
+  /// 触发 notifyListeners / 封面仓库的 path 通知。
+  Future<void> _primeNetworkCoversFromDisk() async {
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await NetworkTagReader.initialize();
+      _sweepNetworkTagsIntoSongs();
+      final current = _currentSong;
+      if (current != null && RemoteMediaRegistry.isNetwork(current.filePath)) {
+        final info = NetworkTagReader.cached(current.filePath);
+        if (info != null && info.hasAny) {
+          final merged = _applyTagInfo(current, info);
+          _currentSong = merged;
+          if (merged.albumArt != null && merged.albumArt!.isNotEmpty) {
+            _coverStore.put(merged.normalizedPath, merged.albumArt!);
+            _coverlessPaths.remove(merged.normalizedPath);
+          }
+        }
+      }
+      notifyListeners();
+    } catch (_) {
+      // 缓存回填失败不影响正常播放。
+    }
   }
 
   // 获取规范化的路径
   String _normalizePath(String path) {
+    // 网络媒体的 filePath 是本机流代理 URL 或 `nas:` 裸标识，不是本地路径。
+    // Windows 上 path.normalize 会把 `http://` 的斜杠折叠成反斜杠，破坏 URL；
+    // 破坏后封面工作线程无法再识别它是网络媒体，会误走本地文件读取分支而
+    // 永远拿不到封面。这里与 Song._normalizeForCache 保持一致：网络地址
+    // 本身就是唯一标识，原样返回。
+    if (RemoteMediaRegistry.isNetwork(path) || path.contains('://')) {
+      return path;
+    }
     return p.normalize(path);
   }
 
@@ -1759,6 +1799,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 缓存已命中：订阅该路径的 widget 在写入时就已经收到通知，这里什么都不用做
     if (_coverStore.contains(cacheKey)) {
       return;
+    }
+
+    // 网络媒体：磁盘标签缓存里已经有封面时直接播种，列表首帧就能显示，
+    // 不必等封面工作线程排队（重启后磁盘缓存本来就是完整的）。
+    // 命中写入会通知该路径的订阅者，SongCoverBuilder 会立即重绘。
+    if (RemoteMediaRegistry.isNetwork(cacheKey)) {
+      final cachedCover = NetworkTagReader.cached(cacheKey)?.cover;
+      if (cachedCover != null && cachedCover.isNotEmpty) {
+        _coverStore.put(cacheKey, cachedCover);
+        _coverlessPaths.remove(cacheKey);
+        _evictableCoverPaths.remove(cacheKey);
+        return;
+      }
     }
 
     // 已知没有内嵌封面：不必再读一次磁盘

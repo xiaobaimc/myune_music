@@ -501,7 +501,7 @@ _networkHeaderTagParser.parse()│     ▼
 
 - **单次读取**：2 MB Range 请求约消耗 1-2 KB 网络流量 + 几毫秒本地解析；大多数 FLAC / MP3 都能在其中命中。
 - **封面落盘**：每张封面约 50-600 KB，3000 首上限理论占用约 1.5 GB，但 512 MB 软上限会自动 LRU 淘汰最久未访问的条目。
-- **启动代价**：`initialize()` 遍历 tag_cache 目录里的 JSON 文件，正常用户 1000 条以内约几十毫秒，可以忽略不计。
+- **启动代价**：`initialize()` 分批并发（每批 8 个）读取 `tag_cache` 里的 JSON **和 `.cover` 二进制**，128 MB 以内会在启动阶段全部补回内存；本机 102 首 / 38 MB 实测为纯本地 IO，不产生任何网络请求。超过 128 MB 的部分仍走按需读取。
 
 ### 已知限制
 
@@ -521,7 +521,85 @@ _networkHeaderTagParser.parse()│     ▼
 
 以上任一条不符合预期，请把 `network.log` 的最后 50 行（`tail -n 50 <path>/logs/network.log`）贴出来以便定位。
 
+> 注：上面第 2 条在 `6b4b363` / `ac03d98` 版本里**实际不成立**，是本次修复要解决的问题，详见下一节。
 
+## 🔁 启动后封面不自动显示（必须手动点「一键读取」）修复记录
+
+### 问题现象
+
+用户实测反馈：**每次刚进软件，所有网络媒体的封面都是空白；必须手动点一次「一键读取本目录封面」（重新读一遍缓存），封面才会全部出现**。点完之后当前会话一直正常，但重启又回到空白。
+
+### 根因（两个缺陷叠加）
+
+1. **磁盘封面没有在启动时补回内存索引**
+   `NetworkTagReader.initialize()` 只扫描 `tag_cache/*.json` 并重建 `_diskIndex`。而 `NetworkTagInfo.toJson()` 刻意不序列化 `cover`（封面单独存 `<hash>.cover` 二进制文件，避免 JSON 被几百 KB 图片撑爆）。于是重启后 `_diskIndex` 里的条目恒为 `hasCover == false`，`cached()` 同步返回的信息里没有封面。
+   同一次运行内点「一键读取」会走 `_remember()` → `_saveToDisk()`，后者执行 `_diskIndex[hash] = info`（**这里的 info 是带封面的**），所以当前会话立刻正常 —— 这正是「点一次就好、重启又坏」的原因。
+
+2. **路径归一化把网络代理 URL 破坏了**
+   `PlaylistContentNotifier._normalizePath()` 直接 `return p.normalize(path);`。Windows 上 `package:path` 的 `normalize()` 会把 `http://127.0.0.1:18765/myune/<token>` 里的连续斜杠折叠并转成反斜杠，结果不再是合法 URL。
+   而封面工作线程 `_coverWorker()` 里是 `final filePath = cacheKey;`，拿到的是这个被破坏的字符串：
+   - `RemoteMediaRegistry.isNetwork(filePath)` → `isProxyUrl()` 要求 `startsWith('http://127.0.0.1:')` → 判定为 **false**；
+   - 于是走「本地文件 `readAudioInfo()`」分支，对一个不存在的路径读标签，必然失败；
+   - 结果 `_coverlessPaths.add(cacheKey)`，这一行被标记为「已确认无封面」，**连按需补封面也不会再触发**。
+
+   `Song._normalizeForCache()` 早已针对 `'://'` 做了保护（网络地址原样返回），但 `PlaylistContentNotifier._normalizePath()` 没有同步这个修复，两处 key 语义不一致，又连带让 `Song.normalizedPath` 与封面仓库的 key 对不上。
+
+### 本机证据（2026-11-11）
+
+```
+Documents/myune_music/tag_cache/ : 102 个 .json + 102 个 .cover ，共 38 MB
+network.log:
+  19:14~19:15  tag read ok ... cover=xxxxxB ...   ← 上一次「一键读取」写的盘
+  19:54:36     tag cache loaded 102 entries        ← 重启，只加载了 JSON
+  19:54:36 之后没有任何封面读取记录                ← 封面从未补回内存
+```
+
+### 改动文件与关键代码位置
+
+| 文件 | 位置 | 改动 |
+| --- | --- | --- |
+| `lib/services/network/network_tag_reader.dart` | `NetworkTagInfo.withCover()` | 新增：用 `.cover` 字节补全来自 JSON 的条目，供启动与按需 hydrate 复用 |
+| 同上 | `_maxHydratedCoverBytes` | 新增常量 128 MB，限制启动时一次性补回的封面体积 |
+| 同上 | `initialize()` | 改为「JSON + `.cover` 一起读」，每批 8 个并发；写日志 `tag cache loaded N entries, covers hydrated M (X.X MB)` |
+| 同上 | `_loadDiskEntry(File, bool)` | 新增：单条目读取；`fromJson` 返回 null 但存在 `.cover` 时仍构造一个只有封面的条目，不丢数据 |
+| 同上 | `_readCoverByHash(String)` / `_readCoverFile(String)` | 新增按 hash 直读；`_hydrateCover()` 改用 `withCover()` 减少重复 |
+| `lib/page/playlist/playlist_content_notifier.dart` | `_normalizePath()` | 网络 URL / `nas:` 标识原样返回，与 `Song._normalizeForCache()` 对齐；本地路径仍 `p.normalize()` |
+| 同上 | `_loadAllData()` | 末尾追加 `unawaited(_primeNetworkCoversFromDisk())` |
+| 同上 | `_primeNetworkCoversFromDisk()` | 新增：延迟 150 ms 避开 Provider 创建期，`initialize()` 幂等兜底 → `_sweepNetworkTagsIntoSongs()` 回填全部列表 → 更新 `_currentSong` 与其封面 → `notifyListeners()` |
+| 同上 | `requestSongCover()` | 新增快速路径：网络媒体若 `NetworkTagReader.cached(key)` 已有封面，直接 `_coverStore.put()` 播种，首帧即可显示，不必等封面工作线程排队 |
+
+### 修复后的数据流
+
+```
+启动 main()
+  └─ await NetworkTagReader.initialize()
+       ├─ 读 <hash>.json        → 标题 / 歌手 / 专辑 / 时长 / 内嵌歌词
+       └─ 读 <hash>.cover       → 封面二进制  ← 本次新增
+            ↓ _diskIndex[hash] = 带封面的 NetworkTagInfo
+  └─ runApp → PlaylistContentNotifier
+       ├─ _loadAllData() 末尾 _primeNetworkCoversFromDisk()
+       │    └─ _sweepNetworkTagsIntoSongs() → 列表 Song.albumArt + _coverStore
+       └─ 列表行 SongCoverBuilder
+            ├─ coverCacheKey(原始 URL) → _normalizePath 原样返回 ← 本次修复
+            └─ requestSongCover() → cached()?.cover → _coverStore.put() → 立即重绘
+```
+
+全程**零网络请求**：封面来自本机 `tag_cache`，仅在播放时才需要本机流代理。
+
+### 如何验证
+
+1. 确认 `tag_cache/` 里有成对的 `.json` + `.cover`；
+2. 完全退出 App 再启动，进入「全部歌曲」/ 歌单，**不点任何按钮**，封面应在列表首帧出现；
+3. 打开「更多 → 查看网络日志」，应看到一行：
+   `tag cache loaded 102 entries, covers hydrated 102 (36.2 MB)`（数字按实际曲库变化）；
+4. 播放网络歌曲，播放页模糊背景封面、系统媒体控件封面都应同步出现；
+5. 「一键读取本目录封面」仍可用，但对已缓存条目应当秒完成且**不产生 `tag read ok` 联网日志**。
+
+### 已知限制
+
+- 启动时补回封面有 128 MB 软上限；超大曲库超出部分仍会在列表行可见时按需从磁盘读取，不影响正确性。
+- 旧版本可能已在内存里把部分路径误标记进 `_coverlessPaths`，但该集合是进程级的，重启即清空；升级到本版本后不会再产生误标记。
+- 网络媒体页的**文件列表行**目前仍用文件图标而不是封面缩略图（该页展示的是远端目录项，不是已入库的 Song）。若需要在这一页也显示封面缩略图，属于另一项 UI 改动，本轮未纳入。
 
 
 ### 环境要求
