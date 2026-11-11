@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../src/rust/api/audio_info.dart';
+import 'network_header_tags.dart';
 import 'network_media_service.dart';
 import 'network_proxy_log.dart';
 import 'remote_media_registry.dart';
@@ -118,22 +119,50 @@ class NetworkTagReader {
       final head = await _fetchHead(url);
       if (head != null) {
         try {
-          final info = await _parse(
-            head.path,
-            partial: !head.complete,
-            totalBytes: head.totalBytes,
+          // 两条独立路径，互不拖累：
+          // 1) 纯 Dart 按字节解析头部（不需要扩展名、不需要文件完整），
+          //    FLAC / MP3 的封面与内嵌歌词由此稳定拿到；
+          // 2) lofty 解析同一个文件，覆盖 M4A / OGG / APE 等其它容器。
+          // 任一条成功即可，最后按「字节解析优先」合并。
+          final headerTags = NetworkHeaderTagParser.parse(head.bytes);
+          NetworkTagInfo? loftyInfo;
+          try {
+            loftyInfo = await _parse(
+              head.path,
+              partial: !head.complete,
+              totalBytes: head.totalBytes,
+            );
+          } catch (_) {
+            // lofty 对截断文件报错是预期内，交给字节解析结果兜底。
+          }
+          final merged = _combine(head, headerTags, loftyInfo);
+          if (merged != null && merged.hasAny) return _remember(url, merged);
+          NetworkProxyLog.instance.write(
+            'tag read empty ext=${head.extension} head=${head.bytes.length}B '
+            'via=${headerTags?.format ?? '-'} lofty=${loftyInfo != null}',
           );
-          if (info != null && info.hasAny) return _remember(url, info);
         } finally {
           // 头部文件只是中间产物：解析完就删，否则看一遍曲库就会在临时目录
           // 里堆出几个 GB。同一次运行内由内存缓存兜底，不会重复下载。
           await _deleteQuietly(head.path);
         }
       }
+
+      // 头部完全解析不出来时才退回完整下载。远端已声明总长且超过缓存上限
+      // 时直接跳过，避免为了一个封面发起必失败的几十 MB 请求。
+      if (head != null &&
+          head.totalBytes != null &&
+          head.totalBytes! > NetworkMediaService.tagCacheMaxBytes) {
+        return null;
+      }
       final full = await NetworkMediaService.tagCachePath(url);
       if (full == null) return null;
       final info = await _parse(full, partial: false);
-      if (info == null) return null;
+      if (info == null || !info.hasAny) return null;
+      NetworkProxyLog.instance.write(
+        'tag read ok via=full cover=${info.cover?.length ?? 0}B '
+        'lyrics=${info.lyrics?.length ?? 0}ch',
+      );
       return _remember(url, info);
     } catch (error) {
       NetworkProxyLog.instance.write('tag read failed: $error');
@@ -141,6 +170,42 @@ class NetworkTagReader {
     } finally {
       _inflight.remove(url);
     }
+  }
+
+  /// 合并两条解析路径的结果，并写一条可核对的诊断日志。
+  ///
+  /// 字节解析出来的元数据是「完整标签块」，优先于 lofty 对截断文件的估算；
+  /// 尤其是时长（FLAC STREAMINFO 直接给出精确值）。
+  static NetworkTagInfo? _combine(
+    _HeadFile head,
+    NetworkHeaderTags? header,
+    NetworkTagInfo? lofty,
+  ) {
+    if (header == null && lofty == null) return null;
+    final Uint8List? cover = (header?.hasCover ?? false)
+        ? header!.cover
+        : lofty?.cover;
+    final String? lyrics = (header?.hasLyrics ?? false)
+        ? header!.lyrics
+        : lofty?.lyrics;
+    final info = NetworkTagInfo(
+      title: header?.title ?? lofty?.title,
+      artist: header?.artist ?? lofty?.artist,
+      album: header?.album ?? lofty?.album,
+      genre: header?.genre ?? lofty?.genre,
+      durationMs: header?.durationMs ?? lofty?.durationMs,
+      trackNumber: header?.trackNumber ?? lofty?.trackNumber,
+      cover: cover,
+      lyrics: lyrics,
+      partial: false,
+    );
+    NetworkProxyLog.instance.write(
+      'tag read ok ext=${head.extension} head=${head.bytes.length}B '
+      'total=${head.totalBytes ?? '-'}B via=${header?.format ?? 'lofty'} '
+      'cover=${cover?.length ?? 0}B lyrics=${lyrics?.length ?? 0}ch '
+      'duration=${info.durationMs ?? '-'}ms',
+    );
+    return info;
   }
 
   static Future<void> _deleteQuietly(String path) async {
@@ -222,9 +287,9 @@ class NetworkTagReader {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  /// 只拉文件头。返回本地缓存文件与「是否已经是完整文件」。
+  /// 只拉文件头。返回字节、带真实扩展名的临时文件与总长度。
   ///
-  /// 头部文件用完即删（见 [_readUncached]），这里不再做「复用已有头部文件」
+  /// 头部文件用完即删（见 [_readUncached]），这里不做「复用已有头部文件」
   /// 的缓存，避免临时目录被几 GB 的音频头塞满。
   static Future<_HeadFile?> _fetchHead(String url) async {
     try {
@@ -234,7 +299,6 @@ class NetworkTagReader {
       final hash = crypto.sha1.convert(utf8.encode(url)).toString();
 
       final client = http.Client();
-      IOSink? opened;
       try {
         final request = http.Request('GET', Uri.parse(url))
           ..headers['Range'] = 'bytes=0-${_headBytes - 1}';
@@ -247,42 +311,84 @@ class NetworkTagReader {
         }
         final declaredTotal =
             _totalFromRange(response.headers) ?? response.contentLength;
-        final file = File(p.join(dir.path, '$hash.head'));
-        // 不可空局部变量：`opened` 只用于异常时兜底关闭。
-        final sink = file.openWrite();
-        opened = sink;
+        final buffer = BytesBuilder(copy: false);
         var received = 0;
         await for (final chunk in response.stream) {
           if (received + chunk.length > _headBytes) {
-            sink.add(chunk.sublist(0, _headBytes - received));
+            buffer.add(chunk.sublist(0, _headBytes - received));
             received = _headBytes;
             break;
           }
           received += chunk.length;
-          sink.add(chunk);
+          buffer.add(chunk);
         }
-        await sink.close();
-        opened = null;
-        if (received == 0) {
-          await _deleteQuietly(file.path);
-          return null;
-        }
+        if (received == 0) return null;
+        final bytes = buffer.takeBytes();
+
+        // 关键：文件名必须带真实音频扩展名，且不能与 tagCachePath 的
+        // 完整缓存文件同名（那里是 `$hash$ext`）。以前写成 `$hash.head`，
+        // Rust 的 lofty 认不出格式，几十 MB 的 FLAC 就永远读不到封面。
+        // 扩展名优先取远端路径，取不到再按文件头 magic 兜底。
+        final ext = _extensionOf(url, bytes);
+        final file = File(p.join(dir.path, '${hash}_head$ext'));
+        await file.writeAsBytes(bytes, flush: true);
         final complete = declaredTotal != null && received >= declaredTotal;
         return _HeadFile(
           file.path,
+          bytes,
           complete: complete,
           totalBytes: declaredTotal,
+          extension: ext,
         );
       } finally {
-        try {
-          await opened?.close();
-        } catch (_) {}
         client.close();
       }
     } catch (error) {
       NetworkProxyLog.instance.write('tag head failed: $error');
       return null;
     }
+  }
+
+  /// 从代理 URL 里编码的远端路径取扩展名；取不到时按文件头 magic 判断。
+  static String _extensionOf(String url, Uint8List bytes) {
+    var candidate = '';
+    final target = RemoteMediaRegistry.decodeTarget(url);
+    if (target != null) {
+      candidate = (target['p'] ?? '').toString();
+      if (candidate.isEmpty) candidate = (target['t'] ?? '').toString();
+    }
+    if (candidate.isEmpty) {
+      try {
+        final segments = Uri.parse(url).pathSegments;
+        if (segments.isNotEmpty) candidate = segments.last;
+      } catch (_) {}
+    }
+    final dot = candidate.lastIndexOf('.');
+    if (dot >= 0) {
+      var ext = candidate.substring(dot + 1).toLowerCase();
+      final query = ext.indexOf('?');
+      if (query >= 0) ext = ext.substring(0, query);
+      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (ext.isNotEmpty && ext.length <= 5) return '.$ext';
+    }
+    if (bytes.length >= 12 && _magic(bytes, 4, 4) == 'ftyp') return '.m4a';
+    if (bytes.length >= 4) {
+      final head = _magic(bytes, 0, 4);
+      if (head == 'fLaC') return '.flac';
+      if (head == 'OggS') return '.ogg';
+      if (head == 'MAC ') return '.ape';
+    }
+    if (bytes.length >= 3 && _magic(bytes, 0, 3) == 'ID3') return '.mp3';
+    return '.bin';
+  }
+
+  static String _magic(Uint8List bytes, int start, int length) {
+    final end = start + length > bytes.length ? bytes.length : start + length;
+    if (end <= start) return '';
+    return latin1.decode(
+      Uint8List.sublistView(bytes, start, end),
+      allowInvalid: true,
+    );
   }
 
   /// 从 `Content-Range: bytes 0-2097151/12345678` 里取出总长度。
@@ -296,9 +402,21 @@ class NetworkTagReader {
 }
 
 class _HeadFile {
-  const _HeadFile(this.path, {required this.complete, this.totalBytes});
+  const _HeadFile(
+    this.path,
+    this.bytes, {
+    required this.complete,
+    required this.extension,
+    this.totalBytes,
+  });
 
   final String path;
+
+  /// 头部字节，纯 Dart 解析器直接读它，不依赖文件扩展名。
+  final Uint8List bytes;
+
+  /// 写盘时使用的扩展名（诊断用）。
+  final String extension;
 
   /// 头部请求已经拿回了整个文件（文件本身小于头部大小）。
   final bool complete;

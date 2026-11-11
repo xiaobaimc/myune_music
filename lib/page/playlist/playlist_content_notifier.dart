@@ -1117,6 +1117,19 @@ class PlaylistContentNotifier extends ChangeNotifier {
     if (now.difference(_lastNetworkTagNotify).inMilliseconds < 1200) return;
     _lastNetworkTagNotify = now;
     _sweepNetworkTagsIntoSongs();
+    // 封面工作线程读到的标签也要同步到「当前正在播放」的 Song：
+    // _currentSong 是独立对象，光刷新列表不会让播放页的背景封面更新。
+    final current = _currentSong;
+    if (current != null && RemoteMediaRegistry.isNetwork(current.filePath)) {
+      final info = NetworkTagReader.cached(current.filePath);
+      if (info != null && info.hasAny) {
+        final merged = _applyTagInfo(current, info);
+        _currentSong = merged;
+        if (merged.albumArt != null && merged.albumArt!.isNotEmpty) {
+          _coverStore.put(merged.normalizedPath, merged.albumArt!);
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -1185,11 +1198,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 直接返回 basicSong（albumArt 恒为 null），导致网络媒体永远没有封面。
     // 现在按需从 URL 里编码的封面地址下载并回填，本地文件仍走下面的完整链路。
     if (RemoteMediaRegistry.isNetwork(filePath)) {
-      if (basicSong.albumArt != null && basicSong.albumArt!.isNotEmpty) {
-        return basicSong;
-      }
-      // 播放时后台补一次内嵌标签（不阻塞出声），读到后再回填标题 / 封面。
+      // 列表滚动时通常已经预加载过内嵌标签，这里同步合并一次：有封面就
+      // 立刻交给播放页，不必等后台读标签或 3 秒的目录封面超时。
+      final cachedTags = NetworkTagReader.cached(filePath);
+      final withTags = (cachedTags != null && cachedTags.hasAny)
+          ? _applyTagInfo(basicSong, cachedTags)
+          : basicSong;
+      // 后台补读标签：即使缓存已有，也负责把封面回填到当前歌曲、封面仓库
+      // 和系统媒体会话，避免「列表里有封面、播放页却空白」。
       unawaited(_refreshNetworkSongTags(filePath));
+      if (withTags.albumArt != null && withTags.albumArt!.isNotEmpty) {
+        return withTags;
+      }
       Uint8List? art;
       try {
         art = await RemoteMediaRegistry.artworkFor(filePath).timeout(
@@ -1197,18 +1217,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
           onTimeout: () => null,
         );
       } catch (_) {
-        return basicSong;
+        return withTags;
       }
-      if (art == null || art.isEmpty) return basicSong;
+      if (art == null || art.isEmpty) return withTags;
       return Song(
-        title: basicSong.title,
-        artist: basicSong.artist,
-        album: basicSong.album,
-        filePath: basicSong.filePath,
+        title: withTags.title,
+        artist: withTags.artist,
+        album: withTags.album,
+        filePath: withTags.filePath,
         albumArt: art,
-        duration: basicSong.duration,
-        trackNumber: basicSong.trackNumber,
-        genre: basicSong.genre,
+        duration: withTags.duration,
+        trackNumber: withTags.trackNumber,
+        genre: withTags.genre,
       );
     }
     final cacheKey = _normalizePath(filePath);
@@ -1314,18 +1334,29 @@ class PlaylistContentNotifier extends ChangeNotifier {
   /// 界面和系统媒体会话，用户不会为了一个封面等上几秒。
   Future<void> _refreshNetworkSongTags(String url) async {
     if (!NetworkTagReader.enabled) return;
-    if (NetworkTagReader.cached(url) != null) return;
     try {
-      final info = await NetworkTagReader.read(url);
+      // 不能因为「缓存里已有标签」就提前返回：标签往往是列表滚动时预加载的，
+      // 那时还没有当前播放歌曲，封面必须在这里回填到 _currentSong 才会
+      // 出现在播放页。缓存命中时直接用，未命中才发起一次读取。
+      final info =
+          NetworkTagReader.cached(url) ?? await NetworkTagReader.read(url);
       if (info == null || !info.hasAny) return;
       _sweepNetworkTagsIntoSongs();
+
       final current = _currentSong;
-      if (current == null || current.filePath != url) {
+      // 端口漂移 / 队列恢复后 URL 可能不完全一致，用归一化路径比较。
+      final urlKey = _normalizePath(url);
+      if (current == null || current.normalizedPath != urlKey) {
         notifyListeners();
         return;
       }
       final merged = _applyTagInfo(current, info);
       _currentSong = merged;
+      _evictableCoverPaths.remove(merged.normalizedPath);
+      if (merged.albumArt != null && merged.albumArt!.isNotEmpty) {
+        _coverlessPaths.remove(merged.normalizedPath);
+        _coverStore.put(merged.normalizedPath, merged.albumArt!);
+      }
       notifyListeners();
       try {
         await _audioService.player.setMediaSession(
@@ -1341,6 +1372,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
       } catch (_) {
         // 系统媒体会话更新失败不影响播放。
       }
+      unawaited(extractAndApplyDynamicColor(merged.albumArt));
+      // 标签晚于歌词加载到达时，把内嵌歌词补上（仅当当前还没有歌词）。
+      unawaited(_lyricsHandler.refreshEmbeddedLyrics(url));
     } catch (_) {
       // 读不到标签时保持原有信息即可。
     }
@@ -1821,7 +1855,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
           Uint8List? bytes = NetworkTagReader.cached(filePath)?.cover;
           if (bytes == null || bytes.isEmpty) {
             final info = await NetworkTagReader.read(filePath).timeout(
-              const Duration(seconds: 10),
+              const Duration(seconds: 20),
               onTimeout: () => null,
             );
             bytes = info?.cover;

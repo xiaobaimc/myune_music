@@ -289,6 +289,26 @@ class LyricsHandler {
     }
   }
 
+  /// 网络标签是后台读取的，可能晚于 [loadLyricsForSong] 到达。
+  ///
+  /// 此时若界面还没有歌词，用已缓存的内嵌歌词补上；已有歌词（通常来自
+  /// 在线歌词源）时保持不动，不抢走用户正在看的逐字歌词。
+  Future<void> refreshEmbeddedLyrics(String songFilePath) async {
+    if (!RemoteMediaRegistry.isNetwork(songFilePath)) return;
+    if (_currentLyrics.isNotEmpty) return;
+    final current = _getCurrentSong();
+    if (current == null || current.filePath != songFilePath) return;
+    if (!NetworkTagReader.enabled) return;
+    final lyrics = NetworkTagReader.cached(songFilePath)?.lyrics;
+    if (lyrics == null || lyrics.trim().isEmpty) return;
+    final lines = _parseLrcContent(lyrics.split(RegExp(r'\r?\n')));
+    if (lines.isEmpty) return;
+    _currentLyrics = lines;
+    _currentLyricLineIndex = -1;
+    _lyricLineIndexController.add(-1);
+    _notifyListeners();
+  }
+
   // 加载内嵌歌词
   Future<void> _loadEmbeddedLyrics(String songFilePath) async {
     // 网络媒体：filePath 是本机代理 URL，不能交给 File.exists()。
@@ -297,7 +317,7 @@ class LyricsHandler {
       if (!NetworkTagReader.enabled) return;
       try {
         final info = await NetworkTagReader.read(songFilePath).timeout(
-          const Duration(seconds: 5),
+          const Duration(seconds: 8),
           onTimeout: () => null,
         );
         final lyrics = info?.lyrics;
