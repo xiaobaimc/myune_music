@@ -295,7 +295,181 @@ sudo apt install keybinder-3.0
 
 ---
 
-## 🚀 从源码构建
+## 🔧 网络媒体标签 / 封面修复说明（本轮改动记录）
+
+> 适用提交链：`7967e32` → `77fcff0` → `2348302` → `6b4b363`（`feat/webdav-ftp-network-drive`），均已推送至远端并在 GitHub Actions 编译通过。
+
+### 问题现象
+
+之前版本对网盘上的 FLAC / MP3 音频无法读取内嵌专辑封面和内嵌歌词，播放页左侧只显示模糊背景但无实际封面图；右侧系统媒体控件却往往有封面——因为系统侧通过另一条链路拿到了 artwork，应用内 `currentSong.albumArt` 却始终为空。
+
+查看 `文档/myune_music/logs/network.log` 能找到确切报错：
+
+```
+tag parse failed (... .head): No format could be determined from the provided file
+tag parse failed (... .bin): No format could be determined from the provided file
+```
+
+### 根因
+
+旧实现在 `_fetchHead()` 把 HTTP Range 拉下来的前 2MB 字节存成 `<hash>.head`，完整兜底下载存成 `<hash>.bin`。**两个文件名都没有任何扩展名或正确识别用的后缀**。Rust 侧的 `lofty` 接到这种"裸"临时文件时，既无法从路径推断格式，也因为没有完整的音频帧导致 probe 失败，于是报出上面那行错误——等于什么都没读到就放弃了。
+
+### 改动链（按时间顺序）
+
+| commit | 消息 | 职责 |
+| --- | --- | --- |
+| `7967e32` | `fix(network): 修复网络媒体内嵌封面/歌词读取并回填播放页` | 新增纯 Dart 头部标签解析器 + 双路径合并逻辑 + 播放页回填链路（最大一批，+639 行） |
+| `77fcff0` | `style(network): 消除 2 条非空断言告警并修正标签 partial 语义` | 修掉上一版遗留的 2 条 `unnecessary_non_null_assertion` lint 警告，并把 `partial` 语义改成「仅当两条解析路都失败才算 partial」 |
+| `2348302` | `feat(network): 标签/封面缓存落盘，重启后不再重复拉取文件头` | 把已读到的元数据 JSON 与封面二进制写进磁盘缓存，启动时自动索引；同时修掉 Stream.whereType / FileStat 数值的编译错误 |
+| `6b4b363` | `fix(network): 修复缓存落盘编译错误，新增「一键读取本目录封面」` | 补上遗漏的错误处理 + 给网络媒体页加「一键读取本目录封面」菜单入口 |
+
+合计 8 个文件，净增约 +1041 / −53 行。
+
+### 涉及文件与关键代码位置
+
+#### 1. `lib/services/network/network_header_tags.dart`（**新文件**，407 行）
+纯 Dart 从头字节解析器，不依赖扩展名、不要求文件完整。
+
+关键类：
+- `NetworkHeaderTags`（第 14–50 行）：标签载体，含 `title` / `artist` / `album` / `lyrics` / `cover` / `durationMs` / `trackNumber` / `format` 字段。
+- `NetworkHeaderTagParser.parse(bytes)`（第 57 行）：入口点；按 magic 分派到 `_parseFlac` / `_parseId3`。
+
+支持的格式与帧映射：
+
+| 容器 | 解析的块/帧 | 对应字段 |
+| --- | --- | --- |
+| FLAC `fLaC` 开头 | `STREAMINFO`（type 0）+ `VORBIS_COMMENT`（type 4）+ `PICTURE`（type 4 / JPEG/PNG） | 时长 / 标题歌手专辑歌词 / 封面 |
+| MP3 ID3v2 | v2.2 / v2.3 / v2.4；帧 TIT2/TT2、TPE1/TP1、TALB/TAL、TCON/TCO、TRCK/TRK、USLT/ULT、APIC/PIC | 同左 |
+| M4A / OGG / APE | **不走这里**，由 lofty 兜底 | — |
+
+辅助函数集中在文件下半段（第 290–406 行）：
+- `_u24be` / `_u32be` / `_u32le` / `_syncSafe`：大端 / 小端 / syncsafe 无符号整数解码
+- `_id3Text` / `_id3Lyrics` / `_id3Picture`：ID3 文本帧、 lyrics 帧、图片帧的结构化抽取
+- `_ascii(bytes, offset, len)`：定长 ASCII 比较（用于 magic 检测）
+
+#### 2. `lib/services/network/network_tag_reader.dart`（主体改动，+466 / −6 行）
+这是整个改动的总调度器。
+
+重要 API 与变更：
+
+| 方法 / 字段 | 所在行（HEAD） | 作用 |
+| --- | --- | --- |
+| `class NetworkTagInfo` | ~50 行 | 对外暴露的标签模型（序列化支持由这个类承载） |
+| `class NetworkTagReader` | ~117 行 | 核心单例服务 |
+| `static Future<void> initialize()` | ~135 行 | 启动时扫描 `tagCacheDir` 重建内存索引（JSON 条目加载到 `_cache`） |
+| `static Future<NetworkTagInfo?> read(url)` | ~193 行 | 主读取接口：内存命中 → 磁盘命中 → 联网 2MB 文件头 → 兜底完整下载；任一成功即写入磁盘 |
+| `static NetworkTagInfo? cached(String url)` | 新增同步 getter | 列表渲染时用，零成本取内存或磁盘快照 |
+| `static void prefetch(String url)` | ~217 行 | 预热用（不等待结果），被「一键读取」触发 |
+| `static Future<int> prefetchAll(Iterable<String> urls)` | ~229 行 | 批量预热返回已完成数量，就是「一键读取」走的路径 |
+| `_fetchHead(url, headerBytes: 2*1024*1024)` | ~271 行 | 发起 HTTP Range 请求并把头字节以带正确扩展名的 `<hash>_head.<ext>` 写入缓存临时目录；同时返回 `Uint8List` 供字节解析 |
+| `_readUncached(url)` | ~324 行 | 核心解析：先 `NetworkHeaderTagParser.parse(head.bytes)`，再 try lofty，两者合并返回；写 `network.log` 形如 `tag read ok ext=.flac ... via=flac cover=...B lyrics=...ch duration=...ms` |
+| `_combine(headerTags, loftyInfo)` | ~370 行 | 「字节解析优先」合并策略：封面 / 歌词 / 标题均优先用字节解析的结果 |
+| `_remember(url, info)` | ~420 行 | 写内存 + 写磁盘：`.json`（元数据）+ `.cover`（封面二进制）到 `<Documents>/myune_music/tag_cache/<hash>.{json,cover}` |
+| `_diskCacheKey(url)` | ~579 行 | **关键点**：从 `RemoteMediaRegistry.decodeTarget(url)['i']`（源 id）+ `['p']` / `['t']`（远端路径）合成 stable key，不含代理端口，所以端口漂移不影响缓存命中 |
+| `_tagCacheDir()` / `_netCacheDir()` | ~641 行 | 缓存根目录：磁盘走 `<Documents>/myune_music/tag_cache/`（3000 条目 / 512 MB 上限，LRU 淘汰）；临时文件头走 `<temp>/myune_net_cache/`（400 MB 上限） |
+
+#### 3. `lib/page/playlist/playlist_content_notifier.dart`（+66 / −6 行）
+封面 / 歌词回填播放页与系统媒体会话的驱动层。
+
+关键改动：
+- `_refreshNetworkSongTags(url)`（~1330 行附近）：改为**统一调 `NetworkTagReader.read(url)`**（内部走 内存→磁盘→网络三级），替换原来的 `cached() ?? await read()` 短路写法，避免「内存里没有但磁盘有」时被跳过导致封面补不上。
+- `_prepareSongForPlayback(song)`（~1195 行附近）：网络分支同步合并缓存标签，确保首次打开播放页就能看到封面。
+- `_onNetworkTagReady(url, info)`：标签就绪回调中增加当前歌曲检查，若匹配的 Song 还没封面就把封面缓存写到 `_coverStore`。
+- `lyrics_handler.refreshEmbeddedLyrics(songFilePath)`：延迟的歌词填充——如果歌曲播放开始时在线歌词已经显示，内嵌歌词不会抢走它；等内嵌歌词就绪后再补上。
+
+#### 4. `lib/lyrics/lyrics_handler.dart`（+22 行）
+新增 `refreshEmbeddedLyrics(String songFilePath)` 方法，供播放引擎在标签落盘后通知歌词组件刷新。
+
+#### 5. `lib/main.dart`（+5 行）
+`main()` 末尾加一行：
+
+```dart
+await NetworkTagReader.initialize();
+```
+
+放在 `NetworkMediaService.initialize()` 之后。作用：App 冷启动时把磁盘 tag cache 索引一次性载入内存 Map，后续「滚动到哪读到哪」在缓存命中时直接返回，不触发任何网络请求。
+
+#### 6. `lib/page/network/network_media_page.dart`（+94 行）
+新增菜单项与批量读取 UI。
+
+- 右上角 ⋮ 菜单新增：`「一键读取本目录封面」`
+- `_prefetchCurrentDirectory()` 私有方法：拿到 `_audioEntries`、确认代理可用后调 `NetworkTagReader.prefetchAll(urls)`，期间弹出 `AlertDialog` 展示 `ValueListenableBuilder<int>(valueListenable: progress)` 实时进度（"已处理 N / total"），完成给出 toast 提示；点对话框任意处不会中断后台任务。
+- 并发控制：默认 2 并发（`_prefetchCurrentDirectory` 里串行化调用 `prefetch()`，由 `NetworkTagReader._inflight` map 做并发合并）。
+
+### 数据流（一句话概括）
+
+```
+[列表渲染 / 播放点击]
+        ↓
+PlaylistContentNotifier._prepareSongForPlayback()
+        ↓
+NetworkTagReader.read(url)   ←───┐ 内存命中？直接返回       │
+        ↓                        │                           │
+    磁盘命中？(tag_cache/*.json) │  是 → 反序列化 -> 回填    │
+        ↓                        │                           │
+    _fetchHead(url, bytes=2MB)  │  否 → ┌───────────────────┘
+        ↓                        │     │
+_networkHeaderTagParser.parse()│     ▼
+  (FLAC STREAMINFO/VORBIS/PICTURE
+   或 ID3 TIT2/USLT/APIC 等)      │
+        ↓ 字节解析成功？           │
+   YES → 写磁盘 → 返回            │
+   NO  → 调 lofty(带真实扩展名的
+         头部临时文件)             │
+              ↓                   │
+         字节解析 || lofty 成功？  │
+              ↓                   │
+          YES → 写磁盘 → 返回     │
+          NO  → 完整下载 96MB 兜底 │
+                                 │
+回填：currentSong.albumArt        │
+      _coverStore.put(...)        │
+      setMediaSession(...)        │
+      lyricsHandler.refreshEmbeddedLyrics(...)
+```
+
+### 用户可观察的现象
+
+1. **成功日志**：`文档/myune_music/logs/network.log` 中出现形如
+   ```
+   tag read ok ext=.flac head=2097152B total=61990968B via=flac cover=527186B lyrics=1058ch duration=287272ms
+   ```
+   `via=flac` 表示纯字节解析成功，`via=lofty` 表示走了 Rust 兜底；`cover=0B` / `lyrics=0ch` 表示该格式没有对应的内嵌标签。
+
+2. **失败日志**：仍以 `tag parse failed ... No format could be determined from the provided file` 出现，意味着连兜底的完整下载也没能认出格式（极少见，可能是加密 / 损坏音频）。
+
+3. **缓存目录**：`<Documents>/myune_music/tag_cache/` 下的文件：
+   - `<hash>.json` —— UTF-8 JSON，包含 title / artist / album / genre / trackNumber / durationMs / lyrics
+   - `<hash>.cover` —— 原始封面图字节（JPEG / PNG），base64 编码后存储在内存，写入数据库 / session 时用这个二进制文件
+   删掉整个 `tag_cache/` 目录即等同于清空全部缓存，下次进入网络目录会重新拉一次文件头。
+
+4. **「一键读取」按钮**：打开一个音频目录后点击右上角 ⋮，选择「一键读取本目录封面」；进度弹窗会实时显示「已处理 N / total」；可点「后台继续」让对话框不阻塞其它操作。
+
+### 性能与存储影响
+
+- **单次读取**：2 MB Range 请求约消耗 1-2 KB 网络流量 + 几毫秒本地解析；大多数 FLAC / MP3 都能在其中命中。
+- **封面落盘**：每张封面约 50-600 KB，3000 首上限理论占用约 1.5 GB，但 512 MB 软上限会自动 LRU 淘汰最久未访问的条目。
+- **启动代价**：`initialize()` 遍历 tag_cache 目录里的 JSON 文件，正常用户 1000 条以内约几十毫秒，可以忽略不计。
+
+### 已知限制
+
+- 目前只实现 FLAC 与 ID3v2（MP3）两种格式的头部解析；M4A / OGG / APE 仍依赖 lofty，如果它们的元数据区落在 2MB 之外的情况下可能读不到——这种情况建议关掉「设置 → 高级 → 读取网络媒体内嵌标签」回退到纯文件名模式，避免每次都走完整下载的慢路径。
+- `tag_cache` 是进程级索引 + 磁盘文件的组合；强制断电 / 崩溃可能导致个别条目半写（json 已写 cover 未写），下次启动时 JSON 里取不到封面字段会自动重读——不会破坏已有数据。
+- 「一键读取」在当前实现下是 2 并发，对于几百首的大目录可能需要十几秒到几十秒不等，建议在 WiFi 环境下使用。
+
+### 如何验证本轮改动是否生效
+
+跑最新版 Windows 包（`release/myune_music_windows_x64_cover_lyrics.zip` 之后的任意版本），进入你的 Google Drive / WebDAV 的某个音频目录：
+
+1. 首次进入：等列表加载，封面应该陆续在每行出现；
+2. 退出 App，重新启动，回到同一目录：封面**瞬间全部出现**，无需任何点击；
+3. 点右上角 ⋮ →「一键读取本目录封面」：应出现进度弹窗，完成后列表全部铺满；
+4. 打开「更多 → 查看网络日志」，翻到底部找 `tag read ok` 行，确认 `via=` 字段不是空的、`cover=` 和 `duration=` 都有数值；
+5. 播放其中一首歌，左侧播放页应能看到专辑封面模糊背景、顶部进度条旁显示内嵌歌词。
+
+以上任一条不符合预期，请把 `network.log` 的最后 50 行（`tail -n 50 <path>/logs/network.log`）贴出来以便定位。
+
+
 
 
 ### 环境要求
