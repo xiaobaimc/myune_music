@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../../page/playlist/playlist_content_notifier.dart';
 import '../../page/playlist/playlist_models.dart';
 import '../../services/network/network_media_service.dart';
 import '../../services/network/network_proxy_log.dart';
+import '../../services/network/network_tag_reader.dart';
 import '../../services/network/remote_entry.dart';
 import '../../services/network/remote_source.dart';
 import '../../services/network/remote_stream.dart';
@@ -422,6 +424,85 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
     }
   }
 
+  /// 一键读取当前目录所有音频的内嵌封面 / 标题 / 时长 / 歌词。
+  ///
+  /// 与「滚动到哪读到哪」互补：想把整个目录提前缓存好时用这个。
+  /// 只请求文件头（约 2 MB/首），已经缓存过的条目直接命中内存 / 磁盘。
+  Future<void> _prefetchCurrentDirectory() async {
+    final entries = _audioEntries;
+    if (entries.isEmpty) {
+      _notification.info('当前目录没有音频文件');
+      return;
+    }
+    if (!await _ensureProxy()) return;
+    if (!mounted) return;
+    final urls = entries
+        .map((entry) => _songOf(entry).filePath)
+        .toList(growable: false);
+    final total = urls.length;
+    final progress = ValueNotifier<int>(0);
+    BuildContext? dialogContext;
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          dialogContext = ctx;
+          return AlertDialog(
+            title: const Text('读取封面与标签'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  ValueListenableBuilder<int>(
+                    valueListenable: progress,
+                    builder: (_, value, __) =>
+                        Text('已处理 $value / $total'),
+                  ),
+                  const SizedBox(height: 12),
+                  ValueListenableBuilder<int>(
+                    valueListenable: progress,
+                    builder: (_, value, __) => LinearProgressIndicator(
+                      value: total == 0 ? null : value / total,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '只请求文件头（约 2 MB/首），读取内嵌封面、标题、时长与歌词，'
+                    '不会下载整首音频。已缓存过的条目会直接命中，不再联网。',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('后台继续'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    var success = 0;
+    try {
+      success = await NetworkTagReader.prefetchAll(
+        urls,
+        onProgress: (done, _) => progress.value = done,
+      );
+    } finally {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+      }
+    }
+    if (!mounted) return;
+    _notification.info('已读取 $success / $total 首的封面与标签');
+  }
+
   /// 诊断当前目录里的第一首音频（没有音频就诊断目录本身）。
   Future<void> _diagnoseCurrent() async {
     final source = _active;
@@ -668,6 +749,16 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
             subtitle: Text('含所有子目录'),
           ),
         ),
+        const PopupMenuItem<String>(
+          value: 'prefetch',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.image_outlined, size: 18),
+            title: Text('一键读取本目录封面'),
+            subtitle: Text('封面 / 标题 / 时长 / 歌词，读完即缓存'),
+          ),
+        ),
         const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'click',
@@ -751,6 +842,9 @@ class _NetworkMediaPageState extends State<NetworkMediaPage>
         break;
       case 'scanAllSongs':
         await _scanAndDispatch(_ScanAction.allSongs);
+        break;
+      case 'prefetch':
+        await _prefetchCurrentDirectory();
         break;
       case 'click':
         setState(() => _enqueueMode = !_enqueueMode);

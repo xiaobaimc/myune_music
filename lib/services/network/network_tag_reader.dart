@@ -221,6 +221,47 @@ class NetworkTagReader {
     unawaited(read(url));
   }
 
+  /// 批量读取一组网络音频的标签 / 封面（「一键读取本目录」用）。
+  ///
+  /// 与「滚动到哪读到哪」互补：用户希望主动把整个目录的封面先缓存好时调用。
+  /// 默认 2 并发，避免把上游或 Drive 配额打满；已经缓存过的条目会直接命中
+  /// 内存 / 磁盘，不产生网络请求。返回真正读到内容的条数。
+  static Future<int> prefetchAll(
+    List<String> urls, {
+    int concurrency = 2,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    if (!enabled) return 0;
+    final targets = urls
+        .where((url) => url.isNotEmpty && RemoteMediaRegistry.isNetwork(url))
+        .toList(growable: false);
+    if (targets.isEmpty) return 0;
+    var done = 0;
+    var success = 0;
+    var next = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final index = next++;
+        if (index >= targets.length) return;
+        try {
+          final info = await read(targets[index]);
+          if (info != null && info.hasAny) success++;
+        } catch (_) {
+          // 单首失败不影响整批。
+        }
+        done++;
+        onProgress?.call(done, targets.length);
+      }
+    }
+
+    final workers = <Future<void>>[
+      for (var i = 0; i < concurrency && i < targets.length; i++) worker(),
+    ];
+    await Future.wait(workers);
+    return success;
+  }
+
   static void clear() {
     _cache.clear();
   }
@@ -429,16 +470,18 @@ class NetworkTagReader {
   /// 超过条目数或体积上限时，按最后修改时间删最旧的。
   static Future<void> _trimDisk(Directory dir) async {
     try {
-      final files = await dir.list().whereType<File>().toList();
+      final files = (await dir.list().toList()).whereType<File>().toList();
       if (files.isEmpty) return;
-      var totalBytes = 0;
-      var jsonCount = 0;
+      int totalBytes = 0;
+      int jsonCount = 0;
       final stats = <MapEntry<File, int>>[];
       for (final file in files) {
         final stat = await file.stat();
-        totalBytes += stat.size;
+        totalBytes += stat.size.toInt();
         if (file.path.endsWith(_jsonSuffix)) jsonCount++;
-        stats.add(MapEntry(file, stat.modified.millisecondsSinceEpoch));
+        stats.add(
+          MapEntry(file, stat.modified.millisecondsSinceEpoch.toInt()),
+        );
       }
       if (jsonCount <= _diskMaxEntries && totalBytes <= _diskMaxBytes) return;
       stats.sort((a, b) => a.value.compareTo(b.value));
