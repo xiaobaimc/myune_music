@@ -1,3 +1,4 @@
+
 # 🎵 Myune Music
 
 <div align="center">
@@ -258,7 +259,7 @@ Google Cloud Console 创建，仓库和程序里**不会内置任何真实凭据
   否则会报 `redirect_uri_mismatch`。界面里的登录说明也写了这一条。
 * **凭据不进仓库**：`client_id` / `client_secret` / `refresh_token` 只存在本机
   `shared_preferences` 与 `文档/myune_music/google_drive.json`，不写日志、不随程序分发。
-* 登录超时 5 分钟，可随时点进度框「取消」；临时 HTTP 服务在结束时一定会关闭。
+* 登录超时 10 分钟，可随时点进度框「取消」；临时 HTTP 服务在结束时一定会关闭。
 * 「更多 → 查看当前 Google 账号 / 授权范围」可以确认当前连的是哪个账号。
 
 ### 文件管理（上传 / 新建 / 重命名 / 删除）
@@ -499,7 +500,7 @@ _networkHeaderTagParser.parse()│     ▼
 
 ### 性能与存储影响
 
-- **单次读取**：2 MB Range 请求约消耗 1-2 KB 网络流量 + 几毫秒本地解析；大多数 FLAC / MP3 都能在其中命中。
+- **单次读取**：2 MB Range 请求实际下载约 2 MB 网络流量 + 几毫秒本地解析；大多数 FLAC / MP3 都能在其中命中。
 - **封面落盘**：每张封面约 50-600 KB，3000 首上限理论占用约 1.5 GB，但 512 MB 软上限会自动 LRU 淘汰最久未访问的条目。
 - **启动代价**：`initialize()` 分批并发（每批 8 个）读取 `tag_cache` 里的 JSON **和 `.cover` 二进制**，128 MB 以内会在启动阶段全部补回内存；本机 102 首 / 38 MB 实测为纯本地 IO，不产生任何网络请求。超过 128 MB 的部分仍走按需读取。
 
@@ -735,6 +736,203 @@ mpv / FFmpeg 请求 http://127.0.0.1:<port>/myune/<token>
 - 「Web 应用」类型 OAuth 客户端仍需为每个可能的 loopback 端口登记重定向 URI；推荐直接创建「桌面应用」类型客户端。
 - 上传续传依赖 Google resumable 会话仍在有效期内（约 1 周）；会话过期会提示重新上传。
 
+
+## 🧩 网络媒体实现原理（可复用到其他应用）
+
+> 本节不是 myune_music 专用的 UI 说明，而是把上面“网络媒体”那套做法拆成可照抄的思路、接口和关键步骤。通用部分（协议客户端、代理、Range、标签解析、缓存）换个播放器、换个语言也能用；myune_music 特有的部分（mpv 播放、歌单模型）会单独标出来，复用时按自己应用替换。
+
+### 架构总览
+
+```
+┌──────────────┐  配置（本机保存，含密码/凭据，不写日志）
+│ 网络源配置    │  WebDAV / FTP / Google Drive 三种类型，统一抽象为 RemoteSource
+└──────┬───────┘
+       ▼
+┌──────────────┐  协议客户端（每个源一个客户端，接口相同）
+│ WebDavClient │  PROPFIND 列目录 + GET（Range）读文件
+│ FtpClient    │  控制连接 + PASV 数据连接，LIST / SIZE / REST / RETR
+│ GoogleDrive  │  Drive API v3：files.list / files.get / 上传 / 改名 / 删除
+└──────┬───────┘
+       ▼
+┌──────────────┐  服务层（与 UI 解耦）
+│ NetworkMedia │  listDirectory / open / probe / diagnose / 递归扫描
+│ Service      │  统一返回 RemoteEntry / RemoteStreamResult
+└──────┬───────┘
+       ▼
+┌──────────────┐  两条并行链路
+│ 标签链路      │  NetworkTagReader：2 MB 文件头 → 解析 → 落盘缓存 → 回填 UI
+│ 播放链路      │  LocalStreamProxy：127.0.0.1:18765-18774 → 按需拉流 → 播放器
+└──────────────┘
+```
+
+关键设计原则（抄之前先记住这几条）：
+
+1. **协议客户端接口统一**：不管底层是 WebDAV、FTP 还是 Drive，对上层只暴露三个操作——`list(目录)`、`open(路径, start, end)`、`probe(路径)`，返回统一的 `RemoteEntry` / `RemoteStreamResult`（字节流 + 总长度 + 实际起止 + Content-Type + 关闭方法）。新加一种协议时，只要实现这三个方法，上层 UI、歌单、缓存、代理都不用改。
+2. **远端文件不落盘**：播放和标签都走“按需拉流 + 只拉需要的那一段”，不要先把整首歌下载到本地再播。
+3. **代理与上游解耦**：播放器永远只认识本机代理地址 `http://127.0.0.1:端口/...`，不直接认识 WebDAV / FTP / Drive。代理内部再按源类型选客户端。这样播放器换成别的解码器、歌单换成别的数据模型，代理不用动。
+4. **缓存 key 与端口无关**：缓存 key 用“网络源 id + 远端路径 / 媒体 id”合成，千万不要把代理端口（每次启动可能顺延）放进 key，否则重启就全失效。
+5. **失败要能定位**：每次上游请求都写一行结构化日志（方法、耗时、字节、结果），再加一个 `diagnose()`，能区分“上游拒绝 / 太慢 / 不支持 Range”和“本机代理异常”，否则线上问题没法查。
+
+### 数据流（播一首网络歌曲）
+
+```
+1. 配置：用户在“网络媒体”里添加源（WebDAV/FTP/Drive），配置只存本机 shared_preferences
+2. 列目录：NetworkMediaService.listDirectory
+     WebDAV → PROPFIND（Depth: 1）/ FTP → LIST / Drive → files.list（分页）
+     只返回文件夹 + 音频文件，其余类型由音频过滤器排除
+3. 标签预加载（列表可见时触发，不用等播放）：
+     NetworkTagReader.read(url)：内存 → 磁盘 tag_cache → Range 拉 2 MB 文件头
+       → 纯 Dart 字节解析（FLAC/ID3v2）+ Rust lofty 兜底 → 按“字节解析优先”合并
+       → 写磁盘（.json + .cover）→ 回填列表 / 播放页 / 系统媒体会话
+     头部解析失败才走完整下载兜底（单文件上限 96 MB）
+4. 点播：RemoteMediaRegistry 生成代理 URL（带 token，不含真实凭据）
+     → LocalStreamProxy（127.0.0.1:18765-18774）按需向上游拉流（Range）
+     → 播放器 open() 前把旧队列里的旧端口 URL 按 token 改写为当前端口
+     → mpv 边下边播；队列持久化时把专辑 / 时长 / 音轨号 / ≤512 KB 封面一起存下
+5. 启动时：main() → NetworkMediaService.initialize()（加载网络源 + 启动代理，失败不阻断本地播放）
+     → NetworkTagReader.initialize()（载入 tag_cache 索引 + 封面）→ 回填歌单封面
+```
+
+### 关键文件与类（以 myune_music 为例，复用时照这个分工抄）
+
+| 层 | 文件（myune_music） | 类 / 接口 | 作用 |
+| --- | --- | --- | --- |
+| 协议 | `lib/services/network/webdav_client.dart` | `WebDavClient` | PROPFIND 列目录 + GET（Range）读文件 |
+| 协议 | `lib/services/network/ftp_client.dart` | `FtpClient`、`_FtpSession`、`_FtpControl` | 控制连接 + PASV 数据连接 |
+| 协议 | `lib/services/network/google_drive_client.dart` | `GoogleDriveClient` | Drive API v3：列目录、拉流、上传、改名、删除 |
+| 协议 | `lib/services/network/google_drive_auth.dart` | `GoogleDriveAuth`（loopback 登录） | OAuth 授权、换 token、查账号 |
+| 服务 | `lib/services/network/network_media_service.dart` | `NetworkMediaService` | 统一 list/open/probe/diagnose、递归扫描、重试 |
+| 代理 | `lib/services/network/local_stream_proxy.dart` | `LocalStreamProxy` | 本机 HttpServer，Range 转发 + 容错 |
+| 标签 | `lib/services/network/network_tag_reader.dart` | `NetworkTagReader`、`NetworkTagInfo` | 三级读取（内存→磁盘→网络）、落盘、预热 |
+| 标签 | `lib/services/network/network_header_tags.dart` | `NetworkHeaderTagParser`、`NetworkHeaderTags` | 纯 Dart 字节解析 FLAC/ID3v2 |
+| 注册 | `lib/services/network/remote_media_registry.dart` | `RemoteMediaRegistry` | 代理 URL 生成 / 解析、源类型判定 |
+| 播放 | `lib/services/audio/audio_service.dart` | `AudioService` | myune_music 特有：mpv 播放、EQ、倍速 |
+| 歌单 | `lib/page/playlist/playlist_content_notifier.dart` | `PlaylistContentNotifier` | myune_music 特有：歌单模型、封面回填 |
+
+### WebDAV：怎么做
+
+- **列目录**：`PROPFIND <url>`，请求头 `Depth: 1`、`Content-Type: application/xml; charset=utf-8`，带 Basic 认证（`Authorization: Basic base64(用户名:密码)`）。响应是带命名空间的 XML，自己解析出子项（注意 Depth:1 会把目录自身也返回，要跳过自身）。发送超时 20 秒、读正文超时 30 秒，非 2xx 按“WebDAV PROPFIND 失败（HTTP 状态码）”抛错。
+- **读文件**：`GET <url>`，有起止就加 `Range: bytes=start-end`（闭区间，`start`/`end` 可空表示从头/到尾）。拿到响应头那段单独设超时（本项目默认 25 秒），因为有的 WebDAV 桥要先向网盘申请下载地址，首包可能要几十秒；这个值必须小于播放器的网络超时（mpv 默认 60 秒），否则播放器先放弃。
+- **判断 Range 是否真的生效**：看状态码是不是 `206`，再看 `Content-Range`。不要只看请求发了 Range 就当它生效——上游忽略 Range 时，代理要自行跳过起点字节（见下面代理一节）。
+- **探测**：只取响应头、不下载正文，用于拿总长度和是否支持 Range。
+
+### FTP：怎么做
+
+- **连接**：`dart:io Socket` 直连控制端口（默认 21）。先 `USER <用户名>`，若返回 230 表示已完成登录，不再发 `PASS`；否则发 `PASS <密码>`，再发 `TYPE I`（二进制传输）。匿名登录时用户名用 `anonymous`。
+- **列目录**：`LIST <目录>`，数据走 PASV 数据连接，解析返回的列表行（文件名、大小、是否为目录）。
+- **读文件（关键顺序，不能错）**：先 `PASV` 建立数据连接，**再** `REST <start>`，**最后** `RETR <路径>`。旧实现曾把 PASV 夹在 REST 和 RETR 之间，部分 NAS 会因此重置重启点，Range 请求实际从 0 开始，拖动进度后播放器报 `loading failed`。总长度用 `SIZE <路径>` 先取，用于算 `servedEnd` 和截断长度。
+- **PASV 地址回退**：PASV 返回的地址可能是 NAS 的内网 / 回环地址，在 NAT 后不可达。先试 PASV 给出的端口 + 控制连接的对端地址，失败再试控制连接对端，仍失败再试 PASV 返回的另一个同网段地址。每次请求用全新的 `_FtpSession`，避免 PASV / REST 状态在多个请求之间互相污染。
+- **探测**：登录 + `SIZE` + 只读一个数据块就断开，不下载全文。
+
+### Google Drive API v3：怎么做
+
+- **列目录**：`GET https://www.googleapis.com/drive/v3/files`，参数 `q` 过滤、`fields=id,name,mimeType,size,fileExtension,modifiedTime,shortcutDetails`、`supportsAllDrives=true`、`includeItemsFromAllDrives=true`（覆盖共享盘）、分页用 `nextPageToken`。返回里 `shortcutDetails` 是快捷方式，要解析出真实目标；只列出可下载的二进制文件，Google 文档 / 表格 / 幻灯片没有音频内容，由音频过滤器排除。
+- **拉流**：`GET https://www.googleapis.com/drive/v3/files/<id>?alt=media`，带 `Range: bytes=a-b` 时上游直接返回 `206 + Content-Range`。总长度优先用响应头，拿不到时用 `files.get?fields=size` 兜底。
+- **写操作（仅 Drive 源开放）**：
+  - 新建文件夹：`POST files`（`mimeType=application/vnd.google-apps.folder`）；
+  - 重命名：`PATCH files/<id>`（`files.update`）；
+  - 移入回收站：`DELETE files/<id>`（`files.delete`，不是永久删除，可在网页端回收站恢复，删除前二次确认）；
+  - 上传：`uploadType=resumable`，先 POST metadata 拿会话 URL，再按 4 MB（256 KB 整数倍，Drive resumable 的要求）分块 PUT，每块带 `Content-Range: bytes start-end/total`，中间返回 `308 Resume Incomplete`，最后一块返回 `200/201` 才算完成。带实时进度与取消，不把大文件整首读进内存。
+- **token 管理**：`refresh_token → access_token` 只在内存缓存，提前 2 分钟过期，并发刷新合并成一次请求（`_tokenInflight` map），不要每个请求都换 token。
+
+### OAuth loopback（桌面应用登录 Google）：怎么做
+
+这是 Google 官方为桌面应用推荐的 Loopback 流程，抄的时候按这个顺序走，不要自己发明重定向方式：
+
+```
+1. 本机起临时 HTTP 服务：127.0.0.1:53682，占用则顺延到 53693
+2. 用系统浏览器打开 https://accounts.google.com/o/oauth2/v2/auth
+   参数：client_id、redirect_uri=http://127.0.0.1:<端口>/、response_type=code、
+         scope=https://www.googleapis.com/auth/drive、access_type=offline、
+         prompt=consent（确保每次都能拿到 refresh_token）、
+         include_granted_scopes=true、state=随机值（防伪造回调）
+3. 用户在网页里登录并同意
+4. Google 把 code 重定向回 http://127.0.0.1:<端口>/?code=...&state=...
+5. 校验 state，不一致直接拒绝（可能为伪造请求）
+6. 用 code + client_id + client_secret 调 https://oauth2.googleapis.com/token 换 token
+   （换 token 请求超时 30 秒；查账号请求超时 15 秒）
+7. 拿到 access_token + refresh_token → 只写本机设置与 google_drive.json → 关闭临时服务
+```
+
+注意点（都已在代码里核实）：
+
+- 权限范围是 `https://www.googleapis.com/auth/drive`（完整 Drive 读写），是 Google 的“受限范围”，未做 OAuth 验证的应用会显示“此应用未经验证”，把账号加进该 OAuth 客户端的**测试用户**即可继续。
+- 客户端类型为“桌面应用”时 Google 允许任意 loopback 端口，无需登记；若用“Web 应用”类型，要在 Cloud Console 把 `http://127.0.0.1:53682/`（以及顺延端口）加入“已获授权的重定向 URI”，否则报 `redirect_uri_mismatch`。
+- 登录超时 10 分钟，可随时点“取消”；临时服务结束时一定关闭。
+- `client_id` / `client_secret` / `refresh_token` 只存在本机 `shared_preferences` 与 `文档/myune_music/google_drive.json`，不写日志、不随程序分发、不进仓库。`refresh_token` 等同于该账号 Drive 的长期读写权限，怀疑泄露就去 Google 账号“安全性 → 第三方应用访问权限”里撤销并重新生成。
+
+### 本机流代理：怎么边下边播
+
+- **为什么要代理**：播放器只认识本地文件或 http(s) 地址，不认识 WebDAV / FTP / Drive。代理在本机起一个 `HttpServer`（`HttpServer.bind(127.0.0.1, 端口)`），把远端文件伪装成一个本地 http 地址给播放器，播放时按需拉流、不落盘。
+- **端口**：固定取一小段 `18765-18774`（10 个端口），按顺序试绑，占用就顺延，都被占用就报错“端口 18765-18774 均被占用”。代理 URL 里带一个固定 token，重启后端口变了，播放前按 token 把旧队列里的 URL 改写为当前端口，历史队列不会失效。
+- **Range 转发**：播放器发 `Range: bytes=a-b` → 代理按原样向上游发 Range。上游返回 `206 + Content-Range` 是正常情况；上游忽略 Range、返回完整文件（起点为 0）时，代理**自行跳过起点之前的字节**，再按终点截断，拼出合法的 `206` 给播放器，避免拖动后 `loading failed`。上游不给总长度时，先用一次 `Range: bytes=0-0` 换回 `Content-Range` 里的总长度，再补上 `Content-Length`；仍拿不到长度就退化为不带 Range 语义的 `200` 顺序流（完整、从 0 开始），不给播放器一个截断的 `206`。后缀型 Range（`bytes=-500`）暂不支持，按从头开始处理。
+- **超时与重试**：代理打开上游的预算放宽到 **45 秒**（原来 25 秒会先于播放器放弃，mpv 只报超时；45 秒仍低于 mpv 默认 60 秒）。上游打开失败自动重试 **3 次**，退避 `250ms × (第几次 + 1)`，日志写 `upstream open failed attempt=X/3`。
+- **协议判定以配置为准**：代理 URL 里的 `proto` 只作元数据，实际用哪个客户端一律以 `RemoteSource.type` 为准，避免旧队列里的别名把 Drive 请求错发到 WebDAV / FTP 端口。
+
+### 标签解析：只拉 2 MB 文件头，怎么做
+
+- **只拉文件头**：先取前 **2 MB**（`_headBytes = 2 * 1024 * 1024`，`Range: bytes=0-2097151`）。MP3 的 ID3v2、FLAC 的元数据块、M4A 的 moov 都在文件开头，一次请求就能拿到标题 / 歌手 / 专辑 / 内嵌封面 / 内嵌歌词 / 精确时长。实测 59 MB 的 FLAC 全部标签只占前 537 KB，封面 527 KB、内嵌歌词 1 KB 都在其中。
+- **双解析路径，按“字节解析优先”合并**：
+  - 路径 A（纯 Dart，不依赖扩展名、不要求文件完整）：`NetworkHeaderTagParser.parse(bytes)`，按 magic 分派——FLAC（`fLaC` 开头，`STREAMINFO` + `VORBIS_COMMENT` + `PICTURE`）、MP3 ID3v2（v2.2 / v2.3 / v2.4，帧 TIT2、TPE1、TALB、TCON、TRCK、USLT、APIC 等）。
+  - 路径 B（Rust lofty 兜底）：把带真实扩展名的头部临时文件（`<hash>_head.<ext>`，不是无扩展名的 `.head`）交给 lofty，覆盖 M4A / OGG / APE 等路径 A 不做的格式。旧实现曾把头字节存成无扩展名的 `<hash>.head`，lofty 无法从路径推断格式而报 `No format could be determined from the provided file`，这就是本轮修复的根因之一。
+  - 合并：封面 / 歌词 / 标题均优先用字节解析的结果，任一成功即可；两条路都失败才算 partial。
+- **兜底**：头部完全解析不出东西时才退回完整下载，**单文件上限 96 MB**（`NetworkMediaService.tagCacheMaxBytes = 96 * 1024 * 1024`，注释明确写“此前 48 MB 会把 60 MB 左右的 FLAC 直接挡在兜底之外；现在放宽到 96 MB 作为保险，且只在头部两条解析路径都失败时才会触发”）。设置页文案已同步为“单文件上限 96 MB”。
+- **触发时机**：列表行可见时才读（滚动到哪读到哪），不用等播放；“一键读取本目录封面”可批量预热（默认 2 并发）。
+
+### 缓存落盘：怎么存、怎么淘汰
+
+这里有**两套缓存**，不要混为一谈：
+
+| 缓存 | 位置 | 内容 | 上限 | 淘汰 |
+| --- | --- | --- | --- | --- |
+| 标签/封面缓存 | `文档/myune_music/tag_cache/` | `<hash>.json`（标题/歌手/专辑/时长/内嵌歌词等）+ `<hash>.cover`（封面二进制 JPEG/PNG） | 3000 条 / 512 MB（`_diskMaxEntries` / `_diskMaxBytes`） | 超出按最久未修改（LRU）淘汰；删掉整个目录即清空 |
+| 临时文件头/完整下载缓存 | `<系统临时目录>/myune_net_cache/` | 带真实扩展名的头部临时文件（`<hash>_head.<ext>`）与完整下载兜底文件 | 总计 400 MB（`tagCacheMaxTotalBytes`） | 超出按最久未修改淘汰 |
+
+- **key 规则**：缓存 key 从“网络源 id + 远端路径 / 媒体 id”合成（`RemoteMediaRegistry.decodeTarget(url)['i']` + `['p']` / `['t']`），**不含代理端口**，所以端口在 18765-18774 之间漂移也不会失效。
+- **启动回填**：`NetworkTagReader.initialize()` 启动时扫描 `tag_cache/*.json` 重建内存索引，同时把 `.cover` 一起读回内存（每批 8 个并发，`_maxHydratedCoverBytes = 128 MB` 上限，日志写 `tag cache loaded N entries, covers hydrated M (X.X MB)`）。超过 128 MB 的部分仍走按需读取，不影响正确性。
+- **写路径**：`NetworkTagReader.read(url)`：内存命中 → 磁盘命中 → 联网 2 MB 文件头 → 兜底完整下载；任一成功即写内存 + 写磁盘。`cached(url)` 是同步 getter，列表渲染时零成本取快照。
+- **不要反复重试**：读不到标签时不反复重试，也不覆盖成“无标签”，避免一次上游 502 把结果记死。
+
+### 歌单集成与播放页回填（myune_music 特有，复用时按自己模型改）
+
+- 网络歌曲和本地文件一样可以进歌单，重启后不丢。“全部加入「全部歌曲」”实际落到内置的真实歌单「网络媒体收藏」，因为「全部歌曲」是由所有歌单聚合出来的虚拟列表，本身没有可追加的存储。
+- 递归扫描：把整棵目录树一次性收集起来，默认上限 **5000 首、8 层深度**（`maxEntries = 5000`、`maxDepth = 8`），适合“歌手/专辑”多层目录。
+- 回填：标签就绪后回填列表、播放页背景和系统媒体会话；内嵌歌词优先于在线歌词（酷狗 / 网易 / QQ），读不到内嵌歌词才走在线歌词；封面就绪晚于歌词加载时，内嵌歌词也会补上，不抢走已显示的在线歌词。
+- 启动封面修复（本轮）：`initialize()` 改为 JSON + `.cover` 一起读；`PlaylistContentNotifier._normalizePath()` 对网络 URL / `nas:` 标识原样返回（不要用 `package:path` 的 `normalize()` 折叠 `http://127.0.0.1:18765/...` 里的斜杠，否则 `isProxyUrl()` 判定失败，封面会被误标记进 `_coverlessPaths`）；`_loadAllData()` 末尾追加 `_primeNetworkCoversFromDisk()`（延迟 150 ms，幂等兜底，回填全部列表并更新当前歌曲封面）。
+
+### 诊断与日志：怎么查问题
+
+- 每次上游请求失败自动重试 3 次，并把每次请求写进 `文档/myune_music/logs/network.log`，成功行形如 `tag read ok ext=.flac head=2097152B total=61990968B via=flac cover=527186B lyrics=1058ch duration=287272ms`（`via=flac` 表示纯字节解析成功，`via=lofty` 表示走了 Rust 兜底）。
+- `NetworkMediaService.diagnose()` 分三步查：① 直连上游取 1 字节响应头；② 模拟拖动进度，直接向上游要“文件正中间”的两个字节；③ 走本机代理再取一次。能区分“上游拒绝 / 太慢 / 不支持 Range”和“本机代理异常”。页面内“更多 → 查看网络日志 / 连接诊断”就是这两个入口。
+- 网络源配置（含密码与 Google 凭据）只保存在本机 `shared_preferences`，**不会写进日志**。
+
+### 通用 vs myune_music 特有
+
+| 部分 | 通用，可直接复用 | myune_music 特有，复用时替换 |
+| --- | --- | --- |
+| 协议客户端 | WebDAV PROPFIND/GET、FTP PASV/LIST/REST/RETR、Drive files.list/files.get | — |
+| OAuth loopback | 127.0.0.1 临时服务 + state + 换 token 流程 | Google 账号与 Drive scope 按自己平台换 |
+| 流代理 | HttpServer + Range 转发 + 上游忽略 Range 时跳字节 + 端口顺延 + token 改写 | 播放器换成别的解码器时只改代理 URL 的消费方 |
+| 标签解析 | 2 MB 文件头 + 双路径合并 + 字节解析优先 | 解析的帧/块按自己支持的格式增减 |
+| 缓存 | key（源 id + 远端路径）、两级缓存、LRU、上限 | 缓存目录、单文件上限按自己应用调 |
+| 歌单/播放页 | “虚拟聚合列表要用真实容器歌单承载”的思路 | 歌单模型、mpv 播放、EQ/滤镜、主题 |
+
+### 移植到其他应用的检查清单
+
+1. 先定统一的协议客户端接口：`list` / `open(start, end)` / `probe`，返回统一的流结果（字节流 + 总长度 + 起止 + Content-Type）。
+2. 再做本机代理：固定一小段端口、token 稳定、Range 转发 + 上游忽略 Range 时跳字节、首包超时留够（播放器超时的 3/4 左右）。
+3. 标签先做 2 MB 文件头 + 双路径合并，不要一上来就完整下载；缓存 key 不要带端口。
+4. OAuth 只走官方 loopback 流程，凭据只存本机，绝不进仓库、不写日志。
+5. 每个上游请求写一行结构化日志，再加一个 `diagnose()`，否则出了问题只能靠猜。
+6. 写操作默认只开放给明确支持的源（本项目只开放给 Drive，WebDAV/FTP 只读），不要默认全开。
+
+### 文档与代码一致性说明（随本稿一起修）
+
+- **已修（本文稿）**：“性能与存储影响”里“2 MB Range 请求约消耗 1-2 KB 网络流量”已改为“2 MB Range 请求实际下载约 2 MB 网络流量”（实测日志 `head=2097152B`，即 2 MB）。原句与同一页的实测日志矛盾。
+- **已修**：设置页 `lib/page/setting/tabs/advanced_tab.dart` 的“单文件上限 48 MB”已改为 96 MB，并把说明里的源类型补全为 WebDAV / FTP / Google Drive，与代码及本文档一致。
+- **已核对一致的数字**：代理端口 18765-18774、OAuth 端口 53682（顺延至 53693）、OAuth 超时 10 分钟、代理首包预算 45 秒（原 25 秒，mpv 默认 60 秒）、上传分块 4 MB、文件头 2 MB、单文件兜底 96 MB、tag_cache 3000 条 / 512 MB、临时缓存 400 MB、启动补回封面 128 MB（每批 8 个）、递归扫描 5000 首 / 8 层、一键读取 2 并发、重试 3 次。以上均已在分支代码里逐项核对。
+
+## 🚀 从源码构建
 
 ### 环境要求
 
