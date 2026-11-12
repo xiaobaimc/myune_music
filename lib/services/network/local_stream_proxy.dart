@@ -377,7 +377,7 @@ class LocalStreamProxy {
     var stalled = 0;
     try {
       for (var attempt = 0; attempt < 4 && active != null; attempt++) {
-        final RemoteStreamResult leg = active!;
+        final RemoteStreamResult leg = active;
         var legBytes = 0;
         try {
           await for (final chunk in leg.bytes) {
@@ -440,7 +440,7 @@ class LocalStreamProxy {
       }
     } finally {
       if (closeActive && active != null) {
-        unawaited(active!.close?.call());
+        unawaited(active.close?.call());
       }
     }
   }
@@ -647,7 +647,7 @@ class LocalStreamProxy {
               first: result,
               resumeStart: result.servedStart,
               end: effectiveEnd,
-              expected: declaredLength!,
+              expected: declaredLength,
             )
           : result.bytes;
 
