@@ -307,7 +307,10 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
                 'refresh_token 并填好，不需要复制粘贴。\n\n'
                 '若授权页提示 redirect_uri_mismatch：到 Google Cloud Console 把 '
                 'http://127.0.0.1:53682/ 加入该 OAuth 客户端的「已获授权的重定向 URI」'
-                '（客户端类型为「桌面应用」时无需登记）。\n\n'
+                '（客户端类型为「桌面应用」时无需登记，推荐）。若 53682 被占用，'
+                '应用会顺延端口并在进度窗口里提示需要登记的新地址。\n\n'
+                '若浏览器没有自动打开，进度窗口里会给出可复制的授权地址，'
+                '手动粘贴到浏览器完成登录即可，回调同样能回到应用。\n\n'
                 '若提示「此应用未经验证」，把你的账号加入该客户端的测试用户即可继续。',
             style: TextStyle(fontSize: 12, height: 1.6),
           ),
@@ -352,9 +355,11 @@ class _RemoteSourceEditorState extends State<_RemoteSourceEditor> {
               children: <Widget>[
                 const LinearProgressIndicator(),
                 const SizedBox(height: 14),
+                // 浏览器没能自动打开时，状态里会带上完整的授权地址；
+                // 用 SelectableText 让用户可以直接选中复制去浏览器里打开。
                 ValueListenableBuilder<String>(
                   valueListenable: _authStatus,
-                  builder: (_, value, __) => Text(
+                  builder: (_, value, __) => SelectableText(
                     value,
                     style: const TextStyle(fontSize: 12),
                   ),

@@ -8,6 +8,7 @@ import '../statistics_page/statistics_manager.dart';
 import '../../services/notification_service.dart';
 import '../setting/settings_provider.dart';
 import '../../widgets/custom_background_layer.dart';
+import '../../services/network/remote_media_registry.dart';
 
 class SongDetailsPage extends StatelessWidget {
   const SongDetailsPage({super.key});
@@ -131,17 +132,27 @@ class SongDetailsPage extends StatelessWidget {
                             label: '文件路径',
                             value: details.filePath,
                             selectable: true,
-                            trailing: IconButton(
-                              icon: const Icon(Icons.open_in_new, size: 18),
-                              onPressed: () {
-                                _openFileLocation(context, details.filePath);
-                              },
-                              tooltip: '打开文件所在位置',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              splashRadius: 18,
-                              iconSize: 18,
-                            ),
+                            // 网络媒体没有本机目录，隐藏「打开文件所在位置」，
+                            // 避免对代理 URL 调用 explorer 弹出错误窗口。
+                            trailing: details.isNetwork
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(
+                                      Icons.open_in_new,
+                                      size: 18,
+                                    ),
+                                    onPressed: () {
+                                      _openFileLocation(
+                                        context,
+                                        details.filePath,
+                                      );
+                                    },
+                                    tooltip: '打开文件所在位置',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    splashRadius: 18,
+                                    iconSize: 18,
+                                  ),
                           ),
                           if (details.year != null)
                             _infoCard(
@@ -216,6 +227,8 @@ class SongDetailsPage extends StatelessWidget {
   }
 
   void _openFileLocation(BuildContext context, String filePath) async {
+    // 双保险：即使某处传来的是代理 URL / nas: 标识，也不要交给 explorer。
+    if (RemoteMediaRegistry.isNetwork(filePath)) return;
     try {
       final directory = File(filePath).parent.path;
 

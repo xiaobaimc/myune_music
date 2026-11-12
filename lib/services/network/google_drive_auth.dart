@@ -65,7 +65,9 @@ class GoogleDriveAuth {
   static const int _firstPort = 53682;
   static const int _portAttempts = 12;
 
-  static const Duration _timeout = Duration(minutes: 5);
+  // 低性能机器上浏览器冷启动 + Google 登录页加载可能明显超过 5 分钟，
+  // 放宽到 10 分钟；用户随时可以点「取消」立即中止，不会白等。
+  static const Duration _timeout = Duration(minutes: 10);
 
   /// 启动一次网页登录。[onStatus] 用于把「已打开浏览器 / 等待授权 / 正在换取令牌」
   /// 这类进度回显到界面上。
@@ -92,6 +94,13 @@ class GoogleDriveAuth {
           shared: false,
         );
         port = server.port;
+        if (attempt > 0) {
+          onStatus?.call(
+            '首选端口 $_firstPort 被占用，已改用 $port。若 Google 提示 '
+            'redirect_uri_mismatch，请把 http://127.0.0.1:$port/ 加入该 OAuth '
+            '客户端的「已获授权的重定向 URI」；客户端类型选「桌面应用」则无需登记。',
+          );
+        }
         break;
       } on SocketException {
         // 端口被占用就顺延，最多尝试 _portAttempts 个。
@@ -109,32 +118,33 @@ class GoogleDriveAuth {
     final callback = Completer<_Callback>();
 
     void handle(HttpRequest request) {
+      final params = request.uri.queryParameters;
+      final error = params['error'] ?? '';
+      final code = params['code'] ?? '';
+      // 只有带 code 或 error 的才是 OAuth 回调。浏览器另外还会请求
+      // /favicon.ico、根路径探测、预连接等，这些既没有 code 也没有 error；
+      // 旧实现把它们当 state 校验失败直接判定登录失败，在低性能机器或
+      // 某些浏览器上就表现为「刚打开就随机提示登录失败」。这里一律忽略。
+      if (error.isEmpty && code.isEmpty) {
+        unawaited(_respondProbe(request));
+        return;
+      }
       if (callback.isCompleted) {
         unawaited(_respond(request, false, '该授权请求已被处理，请关闭本页。'));
         return;
       }
-      final params = request.uri.queryParameters;
-      final error = params['error'] ?? '';
-      if (error.isNotEmpty) {
-        callback.complete(
-          _Callback(error: '授权被拒绝或取消：$error'),
-        );
-        unawaited(_respond(request, false, '授权未完成：$error，可以关闭本页。'));
-        return;
-      }
       if (params['state'] != state) {
-        callback.complete(
-          const _Callback(error: 'state 校验失败，已拒绝该回调（可能为伪造请求）'),
+        // state 不匹配：可能是伪造请求，也可能是用户开了两个登录窗口，
+        // 旧窗口的回调落到了新服务上。拒绝这一条但不要终止整个登录，
+        // 否则多点一次「登录」就再也登不进去。
+        unawaited(
+          _respond(request, false, 'state 校验失败，已忽略该回调，请回到应用重试。'),
         );
-        unawaited(_respond(request, false, '校验失败，已拒绝该回调。'));
         return;
       }
-      final code = params['code'] ?? '';
-      if (code.isEmpty) {
-        callback.complete(
-          const _Callback(error: 'Google 未返回授权码 code'),
-        );
-        unawaited(_respond(request, false, '未收到授权码，请返回应用重试。'));
+      if (error.isNotEmpty) {
+        callback.complete(_Callback(error: '授权被拒绝或取消：$error'));
+        unawaited(_respond(request, false, '授权未完成：$error，可以关闭本页。'));
         return;
       }
       callback.complete(_Callback(code: code));
@@ -143,8 +153,26 @@ class GoogleDriveAuth {
       );
     }
 
+    Timer? cancelTimer;
     try {
-      subscription = server.listen(handle);
+      subscription = server.listen(
+        handle,
+        onError: (Object error) {
+          if (!callback.isCompleted) {
+            callback.complete(_Callback(error: '回调服务异常：$error'));
+          }
+        },
+      );
+      // 低性能机器上点「取消」后不能让服务继续空等 10 分钟：周期性检查
+      // 取消标志并提前结束等待，用户才能立刻重新发起登录。
+      if (isCancelled != null) {
+        cancelTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
+          if (callback.isCompleted) return;
+          if (await isCancelled() && !callback.isCompleted) {
+            callback.complete(const _Callback(error: '已取消登录'));
+          }
+        });
+      }
 
       final authUri = Uri.parse(_authEndpoint).replace(
         queryParameters: <String, String>{
@@ -160,21 +188,26 @@ class GoogleDriveAuth {
       );
 
       onStatus?.call('正在打开浏览器，请在网页里登录并授权…');
-      final launched = await launchUrl(
-        authUri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched) {
-        throw StateError(
-          '无法打开系统浏览器。请手动复制下面的地址到浏览器完成授权：\n$authUri',
+      var launched = false;
+      try {
+        launched = await launchUrl(
+          authUri,
+          mode: LaunchMode.externalApplication,
         );
+      } catch (_) {
+        // 部分低性能机器 / 无默认浏览器配置时 url_launcher 会抛异常。
+        launched = false;
       }
-
-      onStatus?.call('等待网页授权完成（最多 5 分钟）…');
+      // 回调服务已经起来了，浏览器没自动打开不代表登录失败：把地址回显到
+      // 界面，用户手动复制到任意浏览器完成授权，回调一样能落回本机。
+      final manualHint = launched
+          ? ''
+          : '\n\n无法自动打开浏览器，请手动复制下面的地址到浏览器完成授权：\n$authUri';
+      onStatus?.call('等待网页授权完成（最多 10 分钟）…$manualHint');
       final cb = await callback.future.timeout(
         _timeout,
         onTimeout: () => throw TimeoutException(
-          '等待网页授权超时（5 分钟），请重新发起登录',
+          '等待网页授权超时（10 分钟），请重新发起登录',
         ),
       );
       if (cb.error != null) throw StateError(cb.error!);
@@ -210,8 +243,15 @@ class GoogleDriveAuth {
         scope: tokens.scope,
       );
     } finally {
-      await subscription?.cancel();
-      await server.close(force: true);
+      cancelTimer?.cancel();
+      try {
+        await subscription?.cancel();
+      } catch (_) {}
+      // 低性能机器上若浏览器还挂着半开连接，close 可能迟迟不返回；
+      // 加超时保护，避免「登录成功但界面一直转圈」。
+      try {
+        await server.close(force: true).timeout(const Duration(seconds: 3));
+      } catch (_) {}
     }
   }
 
@@ -304,10 +344,40 @@ class GoogleDriveAuth {
       request.response
         ..statusCode = HttpStatus.ok
         ..headers.contentType = ContentType.html
+        ..headers.set('Cache-Control', 'no-store')
         ..write(html);
       await request.response.close();
     } catch (_) {
       // 用户可能已经关掉浏览器标签，忽略响应写入失败。
+    }
+  }
+
+  /// 浏览器探测请求的应答：只回一个静态页面，绝不触碰 OAuth 回调状态。
+  /// favicon 直接 204，避免浏览器重复拉取时又被当成一次回调。
+  static Future<void> _respondProbe(HttpRequest request) async {
+    try {
+      if (request.uri.path == '/favicon.ico') {
+        request.response
+          ..statusCode = HttpStatus.noContent
+          ..headers.set('Cache-Control', 'no-store');
+        await request.response.close();
+        return;
+      }
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.html
+        ..headers.set('Cache-Control', 'no-store')
+        ..write('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+            '<title>Myune Music 授权</title></head>'
+            '<body style="font-family:system-ui,\'Microsoft YaHei\',sans-serif;'
+            'padding:32px;color:#1f1f1f">'
+            '<h2 style="font-size:18px">正在等待 Google 授权…</h2>'
+            '<p style="font-size:14px;color:#555">请在刚才打开的 Google 页面完成'
+            '登录并点「允许」，完成后本页会自动跳转。</p>'
+            '</body></html>');
+      await request.response.close();
+    } catch (_) {
+      // 探测连接被浏览器主动断开，忽略即可。
     }
   }
 

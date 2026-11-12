@@ -602,6 +602,140 @@ network.log:
 - 网络媒体页的**文件列表行**目前仍用文件图标而不是封面缩略图（该页展示的是远端目录项，不是已入库的 Song）。若需要在这一页也显示封面缩略图，属于另一项 UI 改动，本轮未纳入。
 
 
+## 🛠 网络播放 / 歌曲详情 / 网页登录稳定性修复记录（本轮改动）
+
+### 问题现象
+
+1. 点击播放网络音频时，多数情况下报
+   `MpvLogError(prefix: lavf, level: LogLevel.error, text: avformat_open_input() failed)`。
+2. 打开「歌曲详情」页，所有网络媒体都显示「无法加载歌曲详情，请稍后重试」。
+3. Google Drive 网页登录在低性能电脑上有一定概率失败；失败后进度窗口要等满 5 分钟才能重试。
+
+### 根因（四条，互相独立）
+
+**① 后缀型 Range 被当成文件开头返回（播放报错主因）**
+
+FFmpeg 在 `avformat_open_input()` 探测阶段，为了读 MP3 的 ID3v1 / APE tag 或 MP4 的尾部元数据，
+会发 `Range: bytes=-500` 这类「最后 N 字节」请求。旧代理的正则只解析出 `to=500`，
+`start` 留空，于是 `formatRangeHeader(null, 500)` 生成 `bytes=0-500`，把**文件开头**返回给播放器，
+并谎报成合法 206。libavformat 拿到错位数据就直接放弃，报 `avformat_open_input() failed`。
+
+**② 声明了 Content-Length 却没发够，且 keep-alive 复用了半截响应**
+
+`本机 Documents/myune_music/logs/network.log` 里的证据：
+
+```text
+stream done sent=9090     expected=70564705 ⚠ 上游提前结束
+stream done sent=1128885  expected=41332587 ⚠ 上游提前结束
+stream done sent=725288   expected=26145410 ⚠ 上游提前结束
+```
+
+这些小数值既包含「FFmpeg 探测读完就主动断开」，也包含上游 `alt=media` 长连接中途结束。
+旧实现只要响应提前结束，就留下一条声明了完整长度、实际却发不够的 HTTP 响应；
+默认 keep-alive 又让 mpv 的下一次请求（探测后 seek）复用同一条 TCP 连接，读到错位字节。
+`work/probe_playback.py` 用真实凭据实测 Google Drive API 对
+`bytes=0-` / `bytes=0-2097151` / `bytes=48401-` / 无 Range 都稳定返回合法 `206/200`、
+`Content-Range`、`Content-Length` 与 `fLaC` 首字节，说明**上游 API 正常，问题在本机代理**。
+
+**③ 代理 URL 被当成本地磁盘路径（歌曲详情）**
+
+网络媒体的 `filePath` 是 `http://127.0.0.1:<port>/myune/<base64url>` 或 `nas:` 媒体标识，
+不是 Windows 路径。旧 `getCurrentSongDetails()` 无条件调用 `Uri.file()` / `File.exists()` /
+Rust `readAudioInfo()`：URL 里的冒号被当成非法卷标，`File.exists()` 抛
+`FileSystemException`，`FutureBuilder` 永远落到 `snapshot.hasError`，于是显示「无法加载歌曲详情」。
+
+**④ OAuth 回调把浏览器探测请求当成失败（登录概率性失败）**
+
+旧 `handle(HttpRequest)` 对任何「没有 `state` 匹配」的请求都立刻
+`callback.complete(error)`，直接判定登录失败。浏览器在真实回调之外还会请求
+`/favicon.ico`、根路径探测、预连接等，这些请求既没有 `code` 也没有 `error`。
+低性能机器上浏览器冷启动慢、预取行为更多，命中概率明显更高，表现为「随机登录失败」。
+另外 `launchUrl()` 返回 `false` 就抛异常终止登录（但回调服务其实已经起来了），
+端口顺延时 `redirect_uri` 变化会让「Web 应用」类型客户端报 `redirect_uri_mismatch`，
+以及 `isCancelled` 只在授权完成后检查一次，点「取消」后仍要空等整个超时。
+
+### 改动文件与关键代码位置
+
+| 文件 | 位置 / 函数 | 改动 |
+| --- | --- | --- |
+| `lib/services/network/local_stream_proxy.dart` | `_handle()` Range 解析 | 识别 `bytes=-N` 后缀型 Range，先用 `_probeTotal()` 补出文件总长，换算成 `[total-N, total-1]` 再向上游请求；补不出长度时退回 200 整段顺序流，绝不谎报区间 |
+| 同上 | `_handle()` 响应头 | `response.persistentConnection = false`，网络流响应永不复用连接 |
+| 同上 | `_resilientBytes()`（新增） | 上游断流（干净 EOF **或**连接重置抛异常）时，按 `resumeStart + delivered` 的绝对偏移重新 `opener()` 续推，最多 3 次；上游忽略 Range 时用 `skipByteStream()` 跳过已发字节；保证「声明了 Content-Length 就一定发够」 |
+| 同上 | `_handle()` `canResume` | 只要声明过 `declaredLength` 就启用续推，顺序流同样覆盖 |
+| `lib/page/playlist/playlist_content_notifier.dart` | `getCurrentSongDetails()` | `RemoteMediaRegistry.isNetwork()` 分流，本地分支给 `Uri.file()` / `File.exists()` 加 try/catch 兜底 |
+| 同上 | `_networkSongDetails()`（新增） | 优先取 `NetworkTagReader.cached()`，无缓存才 `read()`（12 s 超时 + try/catch）；从 `decodeTarget()` 解出远端可读路径；任何标签读取异常都不让详情页掉进 `hasError` |
+| `lib/page/playlist/playlist_models.dart` | `SongDetails` | 新增 `isNetwork` 字段 |
+| `lib/page/song_details/song_details_page.dart` | 「文件路径」卡片 / `_openFileLocation()` | 网络媒体隐藏「打开文件所在位置」，并对代理 URL 加双保险拦截，避免弹 explorer 错误窗口 |
+| `lib/services/network/google_drive_auth.dart` | `handle()` | 只有带 `code` 或 `error` 的才是回调；`/favicon.ico` 回 204、其它探测回静态等待页，一律不触碰登录状态；`state` 不匹配只拒绝该条、不终止登录 |
+| 同上 | `signIn()` | 超时 5 → 10 分钟；`launchUrl()` 失败不再抛异常，把完整授权 URL 回显给界面继续等回调；端口顺延明确提示需登记的 `redirect_uri`；`Timer.periodic` 每 500 ms 检查取消标志；`server.listen(..., onError:)`；`finally` 里 `close()` 加 3 s 超时保护 |
+| 同上 | `_respond()` / `_respondProbe()`（新增） | 回调页与探测页都加 `Cache-Control: no-store` |
+| `lib/page/network/network_source_editor.dart` | 登录进度弹窗 | 状态文本改为 `SelectableText`，无法自动打开浏览器时可直接选中复制授权地址；说明弹窗补充端口顺延与手动打开的处理 |
+| `lib/services/network/google_drive_client.dart` | `uploadFile()` | 每个分块 PUT 带 `Bearer`（每块重新取 token，避免长传过期）；5xx / 连接中断时用 `Content-Range: bytes */total` 查询服务端已确认偏移并续传，最多恢复 3 次，不再从头重传整首歌 |
+| 同上 | `_uploadStatus()`（新增） | resumable 会话状态查询 |
+| 同上 | `_accessToken()` | 凭据不完整时直接返回可读的中文错误，不再发一次注定失败的 HTTP 请求 |
+| 同上 | `_escapeQuery()`（新增） | `files.list?q=` 里的文件夹 ID 转义引号 / 反斜杠 |
+
+### 修复后的播放数据流
+
+```text
+mpv / FFmpeg 请求 http://127.0.0.1:<port>/myune/<token>
+  ↓ 解析 Range
+  ├─ bytes=-500        → _probeTotal() 补总长 → 换算成 [total-500, total-1]
+  ├─ bytes=48401-      → 原样透传
+  └─ 无 Range          → 原样透传
+  ↓ _resolve(target) → WebDav / Ftp / GoogleDrive 的 open(start, end)
+  ↓ 响应头：Content-Length / Content-Range / Connection: close
+  ↓ _resilientBytes() 按绝对偏移续推，保证发够 Content-Length
+  ↓ 客户端主动断开时 async* 取消订阅，不会继续下载整首歌
+```
+
+### 缓存到底占多少空间（回答「离线缓存大不大」）
+
+日常所说的「封面缓存」**不缓存音频文件本体**，只落盘两类文件：
+
+```text
+文档/myune_music/tag_cache/
+  ├─ <hash>.json    标题 / 歌手 / 专辑 / 时长 / 内嵌歌词 / 封面是否可用
+  └─ <hash>.cover   封面图二进制（JPEG / PNG）
+```
+
+本机实测（102 首已读取过的网络歌曲）：
+
+| 项目 | 数值 |
+| --- | --- |
+| 102 个 `.json` 合计 | 273,018 字节（约 0.26 MB） |
+| 102 个 `.cover` 合计 | 39,074,331 字节（约 37.3 MB） |
+| 单张封面 | 最小 20,779 B，最大 1,597,101 B，平均约 374 KB |
+| `文档/myune_music` 总计 | 约 39 MB |
+| 音频文件 | **0 个** |
+
+也就是说：**剔除音频，只留下封面图 + JSON 元数据 / 歌词**。
+上限为 3000 条 / 512 MB，按最久未修改淘汰，不会无限增长。
+
+唯一例外：`NetworkMediaService.tagCachePath()` 在头部标签解析失败时，会把完整音频文件
+下载到系统临时目录 `myune_net_cache` 作为解析兜底（单文件上限 96 MB、目录上限 400 MB）。
+这是**临时解析缓存**，不是界面上看到的封面缓存，会被自动裁剪，且本轮之后纯字节头部解析
+已能覆盖 FLAC / MP3，正常情况下几乎不会再触发。
+
+### 如何验证
+
+1. 播放任意 Google Drive / WebDAV 音频，观察 `errors.log` 不再出现 `avformat_open_input() failed`。
+2. 打开「歌曲详情」，应显示远端可读路径、标题 / 歌手 / 专辑 / 封面，且**没有**「打开文件所在位置」按钮。
+3. 查看 `network.log`，正常播放时应出现 `serve status=...` 且断流时能看到
+   `upstream resumed at=...`；`suffix range resolved total=...` 表示后缀 Range 已被正确换算。
+   客户端主动断开走 `stream aborted by client or upstream`，不再被误标成「⚠ 上游提前结束」。
+4. 网页登录：反复发起登录、开两个登录窗口、点「取消」后立刻重试，都应正常；
+   首选端口被占用时进度窗口会提示需要登记的 `redirect_uri`。
+5. 上传大文件途中短暂断网，应从服务端已确认偏移继续，而不是从头重传。
+
+### 已知限制
+
+- 后缀型 Range 需要先补一次文件总长（多一个 API 请求，约 1 s）；仅在 FFmpeg 探测阶段出现。
+- 续推最多 3 次；上游持续失败仍会中止，并向 mpv 返回不完整的响应（日志会记录 `upstream resume failed`）。
+- 「Web 应用」类型 OAuth 客户端仍需为每个可能的 loopback 端口登记重定向 URI；推荐直接创建「桌面应用」类型客户端。
+- 上传续传依赖 Google resumable 会话仍在有效期内（约 1 周）；会话过期会提示重新上传。
+
+
 ### 环境要求
 
 * 安装 **Rust** 环境

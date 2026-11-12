@@ -62,9 +62,27 @@ class GoogleDriveClient {
     return id.isEmpty ? 'root' : id;
   }
 
+  /// Drive 的 `files.list?q=` 是字符串查询，文件夹 ID 里若出现引号/反斜杠
+  /// 必须转义，否则用户手动粘贴 ID 时会得到 400 而不是可读的错误。
+  static String _escapeQuery(String value) => value
+      .replaceAll('\\', '\\\\')
+      .replaceAll("'", "\\'");
+
   /// access_token 只在内存里缓存，提前 2 分钟过期；并发刷新合并成一次请求。
   Future<String> _accessToken() {
     final key = source.refreshToken;
+    if (key.trim().isEmpty ||
+        source.clientId.trim().isEmpty ||
+        source.clientSecret.trim().isEmpty) {
+      // 没配好凭据时别发一次注定失败的 HTTP 请求，也别让界面只显示
+      // 「invalid_client」这种看不懂的错误。
+      return Future<String>.error(
+        StateError(
+          'Google Drive 凭据不完整：请先在「网络媒体 → 编辑源」里网页登录，'
+          '或导入本机 文档/myune_music/google_drive.json',
+        ),
+      );
+    }
     final cached = _tokenCache[key];
     if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
       return Future<String>.value(cached.value);
@@ -133,7 +151,7 @@ class GoogleDriveClient {
     String? pageToken;
     do {
       final query = <String, String>{
-        'q': "'$effective' in parents and trashed = false",
+        'q': "'${_escapeQuery(effective)}' in parents and trashed = false",
         'fields': 'nextPageToken,files('
             'id,name,mimeType,size,fileExtension,modifiedTime,shortcutDetails)',
         'pageSize': '1000',
@@ -373,7 +391,7 @@ class GoogleDriveClient {
     do {
       final uri = Uri.parse('$_apiBase/files').replace(
         queryParameters: <String, String>{
-          'q': "'$effective' in parents and "
+          'q': "'${_escapeQuery(effective)}' in parents and "
               "mimeType = '$_folderMime' and trashed = false",
           'fields': 'nextPageToken,files(id,name,mimeType,shortcutDetails)',
           'pageSize': '1000',
@@ -584,6 +602,7 @@ class GoogleDriveClient {
 
       const int chunkSize = 4 * 1024 * 1024;
       var sent = 0;
+      var recoveries = 0;
       while (sent < total) {
         if (isCancelled != null && await isCancelled()) {
           throw StateError('上传已取消');
@@ -594,22 +613,34 @@ class GoogleDriveClient {
         final lastByte = endExclusive - 1;
         final request = http.Request('PUT', Uri.parse(sessionUri))
           ..headers.addAll(<String, String>{
+            // 会话地址通常自带凭证，但官方示例仍带 Bearer；无损音频上传
+            // 可能跨过 access_token 有效期，这里每块重新取一次，避免 401。
+            'Authorization': 'Bearer ${await _accessToken()}',
             'Content-Length': '${chunk.length}',
             'Content-Range': 'bytes $sent-$lastByte/$total',
             'Content-Type': contentType,
           })
           ..bodyBytes = chunk;
-        final streamed = await client
-            .send(request)
-            .timeout(const Duration(seconds: 180));
-        final body = await streamed.stream.bytesToString();
-        if (streamed.statusCode == 308) {
+        http.StreamedResponse? streamed;
+        var body = '';
+        try {
+          streamed = await client
+              .send(request)
+              .timeout(const Duration(seconds: 180));
+          body = await streamed.stream.bytesToString();
+        } catch (_) {
+          // 网络抖动：先当作一次可恢复失败，下面查询服务端已确认的偏移。
+          streamed = null;
+        }
+        final status = streamed?.statusCode ?? 0;
+        if (status == 308) {
           // Resume Incomplete：这一块已被服务端接收，继续下一块。
           sent = endExclusive;
+          recoveries = 0;
           onProgress?.call(sent, total);
           continue;
         }
-        if (streamed.statusCode == 200 || streamed.statusCode == 201) {
+        if (status == 200 || status == 201) {
           onProgress?.call(total, total);
           final decoded = jsonDecode(body);
           if (decoded is Map) {
@@ -629,13 +660,69 @@ class GoogleDriveClient {
             size: total,
           );
         }
-        throw StateError(
-          '上传失败（HTTP ${streamed.statusCode}）：${_shortError(body)}',
-        );
+        // 5xx / 连接中断：不要从头重传整首歌。向会话查询服务端已确认
+        // 接收的字节数，从那里继续；弱网或低性能机器下成功率明显更高。
+        if (recoveries >= 3) {
+          throw StateError('上传失败（HTTP $status）：${_shortError(body)}');
+        }
+        recoveries++;
+        final confirmed = await _uploadStatus(client, sessionUri, total);
+        if (confirmed == null) {
+          throw StateError('上传失败（HTTP $status）：${_shortError(body)}');
+        }
+        if (confirmed > sent) sent = confirmed;
+        onProgress?.call(sent, total);
+        if (sent >= total) {
+          // 服务端其实已经收完（只是最后一块的响应丢了），按成功处理。
+          return RemoteEntry(
+            name: fileName,
+            path: pathOf('', fileName),
+            isDirectory: false,
+            size: total,
+          );
+        }
       }
       throw StateError('上传未正常结束，请重试');
     } finally {
       client.close();
+    }
+  }
+
+  /// 查询 resumable 会话里服务端已确认接收的字节数（Drive 协议规定用
+  /// `Content-Range: bytes */total` 的空 PUT 查询）。返回 null 表示查询失败。
+  Future<int?> _uploadStatus(
+    http.Client client,
+    String sessionUri,
+    int total,
+  ) async {
+    try {
+      final request = http.Request('PUT', Uri.parse(sessionUri))
+        ..headers.addAll(<String, String>{
+          'Authorization': 'Bearer ${await _accessToken()}',
+          'Content-Length': '0',
+          'Content-Range': 'bytes */$total',
+        })
+        ..bodyBytes = Uint8List(0);
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 60));
+      await response.stream.drain<void>();
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return total;
+      }
+      if (response.statusCode == 308) {
+        final match = RegExp(
+          r'bytes=(\d+)-(\d+)',
+          caseSensitive: false,
+        ).firstMatch(response.headers['range'] ?? '');
+        if (match != null) {
+          return (int.tryParse(match.group(2) ?? '') ?? 0) + 1;
+        }
+        return 0;
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

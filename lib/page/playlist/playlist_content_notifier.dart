@@ -4843,12 +4843,33 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
 
     final filePath = targetSong.filePath;
-    final normalizedPath = Uri.file(
-      filePath,
-    ).toFilePath(windows: Platform.isWindows);
+
+    // 网络媒体的 filePath 是本机代理 URL 或 `nas:` 媒体标识，不是磁盘路径。
+    // 旧实现把它交给 Uri.file / File.exists / Rust readAudioInfo：Windows 下
+    // URL 里的冒号会被当成非法卷标，File.exists() 直接抛 FileSystemException，
+    // FutureBuilder 于是永远落到 snapshot.hasError，显示「无法加载歌曲详情」。
+    // 这里改走已经缓存好的网络标签，完全不碰本地文件系统。
+    if (RemoteMediaRegistry.isNetwork(filePath)) {
+      return _networkSongDetails(targetSong);
+    }
+
+    String normalizedPath;
+    try {
+      normalizedPath = Uri.file(
+        filePath,
+      ).toFilePath(windows: Platform.isWindows);
+    } catch (_) {
+      normalizedPath = filePath;
+    }
     final file = File(normalizedPath);
 
-    if (!await file.exists()) {
+    bool exists;
+    try {
+      exists = await file.exists();
+    } catch (_) {
+      exists = false;
+    }
+    if (!exists) {
       // _notificationService.error('歌曲文件不存在：${p.basename(filePath)}');
       return SongDetails(
         title: '文件不存在',
@@ -4903,6 +4924,93 @@ class PlaylistContentNotifier extends ChangeNotifier {
         filePath: filePath,
       );
     }
+  }
+
+  /// 网络媒体的歌曲详情。
+  ///
+  /// 元数据优先取内嵌标签的磁盘缓存（启动时会一次性补回内存），没有缓存时
+  /// 才按需发起一次带超时的网络读取；路径显示远端可读路径，而不是一长串
+  /// base64 代理 token。整个过程不访问本地文件系统。
+  Future<SongDetails> _networkSongDetails(Song song) async {
+    final playable = RemoteMediaRegistry.normalizePlayablePath(song.filePath);
+    final target = RemoteMediaRegistry.decodeTarget(playable);
+    String text(String key) => (target?[key] ?? '').toString().trim();
+
+    NetworkTagInfo? tags = NetworkTagReader.cached(playable);
+    if (tags == null) {
+      // 标签读取是「锦上添花」，任何异常都不能让详情页掉进 hasError
+      // 显示「无法加载歌曲详情」；失败时退回队列里已有的基础信息即可。
+      try {
+        tags = await NetworkTagReader.read(playable).timeout(
+          const Duration(seconds: 12),
+          onTimeout: () => null,
+        );
+      } catch (_) {
+        tags = null;
+      }
+    }
+
+    String? firstNonEmpty(Iterable<String?> values) {
+      for (final value in values) {
+        final trimmed = value?.trim() ?? '';
+        if (trimmed.isNotEmpty) return trimmed;
+      }
+      return null;
+    }
+
+    String remotePath = text('p');
+    if (remotePath.isNotEmpty) {
+      try {
+        remotePath = Uri.decodeComponent(remotePath);
+      } catch (_) {
+        // 远端路径里有非法百分号编码时保留原值。
+      }
+    }
+    if (remotePath.isEmpty) remotePath = text('id');
+    if (remotePath.isEmpty) remotePath = song.filePath;
+
+    final durationMs = tags?.durationMs;
+    final Duration? duration;
+    if (durationMs != null && durationMs > 0) {
+      duration = Duration(milliseconds: durationMs);
+    } else if (song.duration != null && song.duration!.inMilliseconds > 0) {
+      duration = song.duration;
+    } else {
+      duration = null;
+    }
+
+    return SongDetails(
+      title: firstNonEmpty(<String?>[
+            tags?.title,
+            song.title,
+            text('t'),
+            text('id'),
+          ]) ??
+          '网络媒体',
+      artist: firstNonEmpty(<String?>[
+            tags?.artist,
+            song.artist,
+            text('r'),
+          ]) ??
+          '未知歌手',
+      album: firstNonEmpty(<String?>[
+            tags?.album,
+            song.album,
+            text('l'),
+          ]) ??
+          '网络媒体',
+      duration: duration,
+      albumArt: (tags?.hasCover ?? false) ? tags?.cover : song.albumArt,
+      bitrate: null,
+      sampleRate: null,
+      filePath: remotePath,
+      created: null,
+      modified: null,
+      year: null,
+      genre: tags?.genre,
+      albumArtist: null,
+      isNetwork: true,
+    );
   }
 
   void setViewingSong(Song? song) {

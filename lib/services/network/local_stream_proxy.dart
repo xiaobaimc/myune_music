@@ -359,6 +359,92 @@ class LocalStreamProxy {
     }
   }
 
+  /// 上游中途断流时自动续推，确保响应体长度与已经发出的 Content-Length 一致。
+  ///
+  /// [first] 是本次请求已打开的上游流（由调用方负责关闭）；续推打开的流由
+  /// 本函数关闭。下游取消订阅时 `async*` 的 finally 会执行，因此用户切歌后
+  /// 不会继续把整首歌下载完。最多续推 3 次，避免上游持续失败时无限重连。
+  Stream<List<int>> _resilientBytes({
+    required RemoteStreamOpener opener,
+    required RemoteStreamResult first,
+    required int resumeStart,
+    required int? end,
+    required int expected,
+  }) async* {
+    RemoteStreamResult? active = first;
+    var closeActive = false;
+    var delivered = 0;
+    var stalled = 0;
+    try {
+      for (var attempt = 0; attempt < 4 && active != null; attempt++) {
+        final RemoteStreamResult leg = active!;
+        var legBytes = 0;
+        try {
+          await for (final chunk in leg.bytes) {
+            var out = chunk;
+            if (delivered + out.length > expected) {
+              out = out.sublist(0, expected - delivered);
+            }
+            if (out.isEmpty) break;
+            legBytes += out.length;
+            delivered += out.length;
+            yield out;
+            if (delivered >= expected) break;
+          }
+        } catch (error) {
+          // 上游不一定「干净 EOF」：连接重置、chunked 解码失败会直接抛异常。
+          // 这同样是断流，必须按已发偏移续推，否则 FFmpeg 探测阶段就拿到
+          // 半截响应，报 avformat_open_input() failed。
+          NetworkProxyLog.instance.write(
+            'upstream leg error at=${resumeStart + delivered}: $error',
+          );
+        }
+        if (closeActive) {
+          unawaited(leg.close?.call());
+          closeActive = false;
+        }
+        active = null;
+        if (delivered >= expected) return;
+        // 连续两段都没有任何进展才放弃，避免第一次异常就白白丢掉这首歌。
+        stalled = legBytes == 0 ? stalled + 1 : 0;
+        if (stalled >= 2) return;
+
+        final resumeAt = resumeStart + delivered;
+        if (end != null && resumeAt > end) return;
+        NetworkProxyLog.instance.write(
+          'upstream resumed at=$resumeAt delivered=$delivered '
+          'expected=$expected attempt=${attempt + 1}',
+        );
+        RemoteStreamResult next;
+        try {
+          next = await opener(resumeAt, end);
+        } catch (error) {
+          NetworkProxyLog.instance.write('upstream resume failed: $error');
+          return;
+        }
+        if (next.servedStart < resumeAt) {
+          // 上游忽略 Range 又从头返回时，在代理侧跳过已发过的字节。
+          final skipped = resumeAt - next.servedStart;
+          final reopened = next;
+          next = RemoteStreamResult(
+            bytes: skipByteStream(reopened.bytes, skipped),
+            totalLength: reopened.totalLength,
+            servedStart: resumeAt,
+            servedEnd: reopened.servedEnd,
+            contentType: reopened.contentType,
+            close: reopened.close,
+          );
+        }
+        active = next;
+        closeActive = true;
+      }
+    } finally {
+      if (closeActive && active != null) {
+        unawaited(active!.close?.call());
+      }
+    }
+  }
+
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
     RemoteStreamResult? opened;
@@ -385,6 +471,10 @@ class LocalStreamProxy {
 
       int? start;
       int? end;
+      int? suffixLength;
+      // 上游不给总长度、或后缀 Range 换算不出来时，退化为不带 Range 语义的
+      // 200 顺序流（完整、从 0 开始），避免给 mpv 一个截断或错位的 206。
+      bool sequentialFallback = false;
       final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
       if (rangeHeader != null) {
         final match = RegExp(
@@ -396,20 +486,47 @@ class LocalStreamProxy {
           final to = match.group(2) ?? '';
           if (from.isNotEmpty) start = int.tryParse(from);
           if (to.isNotEmpty) end = int.tryParse(to);
-          // 后缀型 Range（bytes=-500）暂不支持，按从头开始处理。
+          // `bytes=-500` 是「最后 500 字节」。FFmpeg 探测 MP3 的 ID3v1 /
+          // APE tag、MP4 的尾部元数据时几乎必发这种请求；旧实现把它当成
+          // `bytes=0-500` 返回文件开头，libavformat 拿到错位数据就直接
+          // `avformat_open_input() failed`。这里先补出文件总长，换算成
+          // 真正的绝对区间，再向上游请求。
+          if (from.isEmpty && to.isNotEmpty) {
+            suffixLength = int.tryParse(to);
+          }
+        }
+      }
+      if (suffixLength != null && suffixLength > 0) {
+        final suffixTotal = await _probeTotal(target).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => null,
+        );
+        if (suffixTotal != null && suffixTotal > 0) {
+          final from = suffixTotal - suffixLength;
+          start = from > 0 ? from : 0;
+          end = suffixTotal - 1;
+          NetworkProxyLog.instance.write(
+            'suffix range resolved total=$suffixTotal '
+            'start=$start end=$end',
+          );
+        } else {
+          // 拿不到总长度时宁可退回整段 200 顺序流，也不能谎报一个错误区间。
+          start = null;
+          end = null;
+          sequentialFallback = true;
         }
       }
 
-      opened = await _resolve(target)(start, end);
+      // 保留 opener：上游中途断流时要按新偏移重新打开同一份远端文件。
+      final opener = _resolve(target);
+      opened = await opener(start, end);
       var result = opened;
 
       // 上游不给总长度时无法构造合法 Content-Range。关掉这次带 Range 的流，
-      // 重新从 0 无 Range 拉；若仍拿不到长度，就退化为不带 Range 语义的
-      // 200 顺序流（完整、从 0 开始），避免给 mpv 一个截断的 206。
-      bool sequentialFallback = false;
+      // 重新从 0 无 Range 拉；若仍拿不到长度，同样退化为 200 顺序流。
       if (rangeHeader != null && result.totalLength == null) {
         await result.close?.call();
-        opened = await _resolve(target)(null, null);
+        opened = await opener(null, null);
         result = opened;
         if (result.totalLength == null) sequentialFallback = true;
       }
@@ -462,6 +579,11 @@ class LocalStreamProxy {
           !sequentialFallback && rangeHeader != null && total != null;
       response.statusCode =
           isPartial ? HttpStatus.partialContent : HttpStatus.ok;
+      // 网络流响应永远不复用连接。之前声明了完整 Content-Length 但上游
+      // 中途结束时，keep-alive 会把这条半截响应留在连接上，mpv 下一次
+      // （探测后 seek）复用同一 TCP 连接就会读到错位字节，报
+      // `avformat_open_input() failed`。显式 Connection: close 彻底断掉这种复用。
+      response.persistentConnection = false;
       response.headers.set(
         'Accept-Ranges',
         (isPartial || (total != null && !sequentialFallback))
@@ -509,6 +631,26 @@ class LocalStreamProxy {
         return;
       }
 
+      // 上游（尤其 Drive 的 alt=media 长连接）偶发中途断流时，按已经发出的
+      // 绝对偏移重新打开上游接着推，保证「声明了 Content-Length 就一定发够」。
+      // 否则 FFmpeg 还在 avformat_open_input 探测阶段就遇到 EOF，直接报
+      // `avformat_open_input() failed`。下游主动断开时 async* 会被取消，
+      // 不会继续下载，因此切歌不会浪费带宽。
+      // result.servedStart 已经是「bytes 流第一个字节在文件里的绝对偏移」，
+      // 续推用 resumeStart + delivered 作为新 Range 起点即可，不要求它等于
+      // 客户端请求的 start（上游忽略 Range 时由 skipByteStream 对齐过）。
+      // 只要声明过 Content-Length 就必须发够，顺序流同样适用。
+      final canResume = declaredLength != null && declaredLength > 0;
+      final Stream<List<int>> outbound = canResume
+          ? _resilientBytes(
+              opener: opener,
+              first: result,
+              resumeStart: result.servedStart,
+              end: effectiveEnd,
+              expected: declaredLength!,
+            )
+          : result.bytes;
+
       try {
         // 统计实际发出的字节数：mpv 报
         // `http: Error reading HTTP response: Immediate exit requested` 时，
@@ -516,7 +658,7 @@ class LocalStreamProxy {
         // 就能一眼分开——前者 sent < expected，后者 sent 与 expected 无关。
         var sent = 0;
         await response.addStream(
-          result.bytes.map((chunk) {
+          outbound.map((chunk) {
             sent += chunk.length;
             return chunk;
           }),

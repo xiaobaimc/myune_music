@@ -231,6 +231,10 @@ class SongDetails {
   final String? genre;
   final String? albumArtist;
 
+  /// 该详情来自网络媒体；[filePath] 是远端可读路径而非本机磁盘路径。
+  /// 详情页据此隐藏「打开文件所在位置」等只对本地文件有意义的操作。
+  final bool isNetwork;
+
   SongDetails({
     this.title,
     this.artist,
@@ -245,6 +249,7 @@ class SongDetails {
     this.year,
     this.genre,
     this.albumArtist,
+    this.isNetwork = false,
   });
 }
 
