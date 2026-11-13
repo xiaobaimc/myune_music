@@ -426,6 +426,12 @@ class _DuplicateDialogState extends State<DuplicateDialog> {
 
   Widget _groupCard(DuplicateGroup group, ThemeData theme) {
     final selected = _selected[group.key] ?? group.recommendedIndex;
+    // 自动模式是「按音质自动判定」的只读预览：groupValue 固定为判定结果，
+    // onChanged 里直接忽略输入，避免用户以为改选后会影响自动结果。
+    final groupValue = _mode == _DuplicateMode.auto
+        ? (group.needsReview ? _keepAll : group.recommendedIndex)
+        : selected;
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -435,9 +441,37 @@ class _DuplicateDialogState extends State<DuplicateDialog> {
           children: <Widget>[
             _groupHeader(group, theme),
             const SizedBox(height: 2),
-            if (group.needsReview) _keepAllTile(group, selected, theme),
-            for (var i = 0; i < group.candidates.length; i++)
-              _candidateTile(group, i, selected, theme),
+            // Flutter 3.32 之后 RadioListTile 的 groupValue / onChanged 已废弃，
+            // 统一由 RadioGroup 祖先管理选中值。
+            RadioGroup<int>(
+              groupValue: groupValue,
+              onChanged: (value) {
+                if (_mode == _DuplicateMode.auto) return;
+                if (value == null) return;
+                setState(() => _selected[group.key] = value);
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // 自动模式下「需人工确认」的组没有任何副本会被隐藏，这里给出
+                  // 一个可见的选中项，避免整组都没有选中态让人以为界面坏了。
+                  if (group.needsReview)
+                    RadioListTile<int>(
+                      value: _keepAll,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '保留全部副本（不隐藏）',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.tertiary,
+                        ),
+                      ),
+                    ),
+                  for (var i = 0; i < group.candidates.length; i++)
+                    _candidateTile(group, i, theme),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -462,55 +496,16 @@ class _DuplicateDialogState extends State<DuplicateDialog> {
     );
   }
 
-  /// 自动模式下「需人工确认」的组没有副本会被隐藏，所以这里也给出
-  /// 一个可见的选中项，避免整组 radio 都没有选中态让人以为界面坏了。
-  Widget _keepAllTile(DuplicateGroup group, int selected, ThemeData theme) {
-    final autoLocked = _mode == _DuplicateMode.auto;
-    return RadioListTile<int>(
-      value: _keepAll,
-      groupValue: autoLocked ? _keepAll : selected,
-      onChanged: autoLocked
-          ? null
-          : (value) {
-              if (value != null) {
-                setState(() => _selected[group.key] = value);
-              }
-            },
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-        '保留全部副本（不隐藏）',
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.tertiary,
-        ),
-      ),
-    );
-  }
-
-  Widget _candidateTile(
-    DuplicateGroup group,
-    int index,
-    int selected,
-    ThemeData theme,
-  ) {
+  /// 组内单个候选的单选项。选中值由外层 `RadioGroup` 统一管理，
+  /// 这里只声明自己的 `value`。
+  Widget _candidateTile(DuplicateGroup group, int index, ThemeData theme) {
     final candidate = group.candidates[index];
     final recommended = index == group.recommendedIndex;
     final path = candidate.song.filePath;
     final shortPath = path.length > 110 ? '${path.substring(0, 110)}…' : path;
-    final autoLocked = _mode == _DuplicateMode.auto;
 
     return RadioListTile<int>(
       value: index,
-      groupValue: autoLocked
-          ? (group.needsReview ? _keepAll : group.recommendedIndex)
-          : selected,
-      onChanged: autoLocked
-          ? null
-          : (value) {
-              if (value != null) {
-                setState(() => _selected[group.key] = value);
-              }
-            },
       dense: true,
       contentPadding: EdgeInsets.zero,
       title: _candidateTitle(candidate.qualityLabel, recommended, theme),
