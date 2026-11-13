@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:silky_scroll/silky_scroll.dart';
 import '../../theme/scroll_config.dart';
+import 'auto_scan_import_dialog.dart';
+import 'duplicate_dialog.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/sort_dialog.dart';
@@ -43,6 +45,32 @@ class _AllSongsPageState extends State<AllSongsPage> {
         criterion: result['criterion'] as SortCriterion,
         descending: result['descending'] as bool,
       );
+    }
+  }
+
+  Future<void> _showAutoScanDialog(BuildContext context) async {
+    await showAutoScanImportDialog(context);
+  }
+
+  Future<void> _showDuplicateDialog(
+    BuildContext context,
+    PlaylistContentNotifier notifier,
+  ) async {
+    final notification = context.read<NotificationService>();
+    if (notifier.allSongs.isEmpty) {
+      notification.error('没有歌曲可以去重');
+      return;
+    }
+    // 「全部歌曲」已经隐藏过副本，必须回到各歌单的原始路径里找重复组。
+    final groups = await notifier.findDuplicateGroups();
+    if (!context.mounted) return;
+    if (groups.isEmpty) {
+      notification.info('没有发现重复曲目');
+      return;
+    }
+    final applied = await showDuplicateDialog(context, groups: groups);
+    if (applied == true && context.mounted) {
+      notification.info('去重完成，已更新「全部歌曲」');
     }
   }
 
@@ -100,6 +128,19 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
                             const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.folder_open),
+                              tooltip: '自动扫描目录并导入',
+                              onPressed: () => _showAutoScanDialog(context),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.filter_alt),
+                              tooltip: '音乐去重',
+                              onPressed: () =>
+                                  _showDuplicateDialog(context, notifier),
+                            ),
+                            const SizedBox(width: 8),
                             IconButton(
                               icon: const Icon(Icons.sort),
                               tooltip: '排序歌曲',

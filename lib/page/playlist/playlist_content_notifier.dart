@@ -30,6 +30,7 @@ import '../../services/search_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../services/network/remote_media_registry.dart';
 import '../../services/network/network_tag_reader.dart';
+import '../../services/library/duplicate_resolver.dart';
 import '../../utils/search_debouncer.dart';
 import '../../lyrics/lyrics_handler.dart';
 
@@ -84,6 +85,12 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   bool _allSongsLoaded = false; // 表示全部歌曲是否已加载完成
   bool get allSongsLoaded => _allSongsLoaded;
+
+  /// 去重时用户手动指定的保留项：分组键 -> filePath。
+  /// 空映射表示「全部按音质自动保留最佳」。
+  Map<String, String> _dedupeOverrides = <String, String>{};
+  Map<String, String> get dedupeOverrides =>
+      Map<String, String>.unmodifiable(_dedupeOverrides);
 
   List<Playlist> _playlists = []; // 所有歌单列表
   List<Playlist> get playlists => _playlists;
@@ -453,6 +460,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _albumSortOrders = await _playlistManager.loadAlbumSortOrders();
     _genreSortOrders = await _playlistManager.loadGenreSortOrders();
     await _loadSongMetadataCache();
+    _dedupeOverrides = await _playlistManager.loadDedupeOverrides();
 
     // 加载现有的播放列表
     await _loadPlaylists();
@@ -861,6 +869,20 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _audioService.player.stream.error.listen((error) {
       final errorString = error.toString();
+
+      // mpv 主动取消一次 HTTP 读取时，FFmpeg 会把这条「取消信号」记成
+      // error 级日志：
+      //   MpvLogError(prefix: ffmpeg, level: LogLevel.error,
+      //     text: http: Error reading HTTP response: Immediate exit requested)
+      // 网络媒体首次播放会先探测 / 预缓存、再重开正式流，被替换掉的那条
+      // 连接就是这样结束的；音频本身已经在正常播放，不是文件损坏或打不开。
+      // 这类噪声无条件静默（不弹通知、不写 errors.log），仅在调试输出留痕。
+      // 只匹配取消信号本身，不能扩大到 avformat_open_input() failed 之类
+      // 的真实失败，否则真正播不了时反而没有提示。
+      if (errorString.contains('Immediate exit requested')) {
+        debugPrint('忽略 mpv 主动取消流产生的无害日志: $error');
+        return;
+      }
 
       // windows 在使用独占模式播放有损压缩的音频格式时
       // mpv会报：MpvLogError(prefix: ao/wasapi, level: LogLevel.error, text: Error initializing device: AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED (0x88890019))
@@ -4778,6 +4800,27 @@ class PlaylistContentNotifier extends ChangeNotifier {
     return addSongsToPlaylistById(networkCollectionPlaylistId, songPaths);
   }
 
+  /// 「自动扫描目录」导入的本地歌曲落点。
+  /// 「全部歌曲」是聚合视图，必须先进一个真实落盘的歌单才会出现，
+  /// 并且重启后仍然保留。
+  static const String autoScanPlaylistId = '__auto_scan_local__';
+  static const String autoScanPlaylistName = '自动扫描导入';
+
+  Future<int> addLocalSongsToAllSongs(List<String> songPaths) async {
+    if (songPaths.isEmpty) return 0;
+    final index = _playlists.indexWhere(
+      (playlist) => playlist.id == autoScanPlaylistId,
+    );
+    if (index < 0) {
+      _playlists.add(
+        Playlist(id: autoScanPlaylistId, name: autoScanPlaylistName),
+      );
+      notifyListeners();
+      await _savePlaylists();
+    }
+    return addSongsToPlaylistById(autoScanPlaylistId, songPaths);
+  }
+
   /// 可接收网络媒体的歌单（文件夹型歌单不能手动加歌，直接排除）。
   List<Playlist> get writablePlaylists =>
       _playlists.where((playlist) => !playlist.isFolderBased).toList();
@@ -5393,6 +5436,70 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
   // --- 全部歌曲页面相关 ---
 
+  /// 扫描所有歌单里的原始路径，返回重复组供去重对话框展示。
+  /// 这里必须用「未去重」的全量路径：_allSongs 已经隐藏过副本，
+  /// 从它出发永远找不到第二份。
+  Future<List<DuplicateGroup>> findDuplicateGroups() async {
+    final paths = <String>{};
+    for (final playlist in _playlists) {
+      paths.addAll(playlist.songFilePaths);
+    }
+    final songs = <Song>[];
+    for (final path in paths) {
+      songs.add(await _parseSongMetadata(path));
+    }
+    return DuplicateResolver.findGroups(songs);
+  }
+
+  /// 应用去重结果。
+  /// * [autoMode] = true：清空手动覆盖，全部按音质自动保留最佳；
+  /// * [autoMode] = false：把用户逐组选择的保留项落盘，优先于自动选优。
+  Future<void> applyDuplicateSelection({
+    required bool autoMode,
+    Map<String, String> overrides = const <String, String>{},
+  }) async {
+    _dedupeOverrides = autoMode
+        ? <String, String>{}
+        : Map<String, String>.from(overrides);
+    await _playlistManager.saveDedupeOverrides(_dedupeOverrides);
+    await _updateAllSongsList();
+    notifyListeners();
+  }
+
+  /// 去重「勾选并删除」：把这些路径从所有歌单里移除。
+  ///
+  /// 只改歌单里的引用与「全部歌曲」聚合视图，不动磁盘 / 云端文件；
+  /// 源文件是否要一并删除由 [DuplicateCleanup] 在调用本方法之前处理。
+  /// 返回实际请求的路径数（调用方用于展示汇总）。
+  Future<int> removeSongsFromLibrary(Set<String> filePaths) async {
+    if (filePaths.isEmpty) return 0;
+
+    final currentPath = _currentSong?.filePath ?? '';
+    final wasPlaying = currentPath.isNotEmpty &&
+        filePaths.contains(currentPath);
+
+    for (final playlist in _playlists) {
+      playlist.songFilePaths.removeWhere(
+        (path) => filePaths.contains(path),
+      );
+    }
+
+    // 清掉指向已移除路径的手动去重记录，避免留下永远命中不了的脏数据。
+    _dedupeOverrides.removeWhere(
+      (_, path) => filePaths.contains(path),
+    );
+    await _playlistManager.saveDedupeOverrides(_dedupeOverrides);
+
+    if (wasPlaying) {
+      await stop();
+    }
+    await _savePlaylists();
+    await _updateAllSongsList();
+    notifyListeners();
+    await _loadCurrentPlaylistSongs();
+    return filePaths.length;
+  }
+
   Future<void> _updateAllSongsList() async {
     // 初始化加载状态
     _allSongsLoaded = false;
@@ -5414,30 +5521,16 @@ class PlaylistContentNotifier extends ChangeNotifier {
     );
     savedOrder.addAll(newPaths);
 
-    // 解析元数据
-    final dedupedSongs = <Song>[];
-    final seen = <String>{};
-
-    // final stopwatch = Stopwatch()..start();
-
+    // 解析元数据（保持 savedOrder 的顺序），再按「标题 + 专辑」分组去重。
+    // 旧实现只保留每组第一个，遇到 flac / mp3 双版本时可能恰好留下低音质
+    // 那份；现在交给 DuplicateResolver 按无损优先 / 文件更大 / 元数据更
+    // 完整选优，并支持用户在去重对话框里手动指定要保留哪一份。
+    // 结果只作用于「全部歌曲」这个虚拟视图，歌单与播放队列不受影响。
+    final parsedSongs = <Song>[];
     for (final path in savedOrder) {
-      final song = await _parseSongMetadata(path);
-
-      final artist = song.artist.trim().toLowerCase();
-      final title = song.title.trim().toLowerCase();
-      final album = song.album.trim().toLowerCase();
-
-      // https://github.com/xiaobaimc/myune_music/issues/111
-      final key = (album.isNotEmpty && album != '未知专辑')
-          ? '$artist|$title|$album'
-          : '$artist|$title';
-
-      if (seen.add(key)) {
-        dedupedSongs.add(song);
-      }
+      parsedSongs.add(await _parseSongMetadata(path));
     }
-
-    _allSongs = dedupedSongs;
+    _allSongs = DuplicateResolver.resolve(parsedSongs, _dedupeOverrides);
 
     // 在后台 Isolate 中执行
     unawaited(_buildSearchIndices());

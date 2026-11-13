@@ -10,6 +10,7 @@ class PlaylistManager {
   static const String _playlistMetadataFileName = 'playlists_metadata.json';
   static const String _songsSubdirectory = 'playlist_songs';
   static const String _allSongsOrderFileName = 'all_songs_order.json';
+  static const String _dedupeOverrideFileName = 'dedupe_overrides.json';
   static const String _artistSortOrderFileName = 'artist_sort_order.json';
   static const String _albumSortOrderFileName = 'album_sort_order.json';
   static const String _genreSortOrderFileName = 'genre_sort_order.json';
@@ -279,6 +280,42 @@ class PlaylistManager {
       await file.writeAsString(jsonEncode(songFilePaths));
     } catch (e) {
       //
+    }
+  }
+
+  // --- 音乐去重：用户手动指定的「分组键 -> 要保留的 filePath」 ---
+  //
+  // 「全部歌曲」是各歌单聚合出的虚拟列表，去重只隐藏视图里的副本，
+  // 不会真的删除歌单条目，因此选择结果需要单独落盘，重启后仍生效。
+
+  Future<File> _getDedupeOverrideFile() async {
+    final path = await _getLocalPath();
+    return File('$path/$_dedupeOverrideFileName');
+  }
+
+  Future<Map<String, String>> loadDedupeOverrides() async {
+    try {
+      final file = await _getDedupeOverrideFile();
+      if (await file.exists()) {
+        final decoded = jsonDecode(await file.readAsString());
+        if (decoded is Map) {
+          return decoded.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          );
+        }
+      }
+    } catch (_) {
+      // 文件损坏时回退到自动按音质选优，不影响启动。
+    }
+    return <String, String>{};
+  }
+
+  Future<void> saveDedupeOverrides(Map<String, String> overrides) async {
+    try {
+      final file = await _getDedupeOverrideFile();
+      await file.writeAsString(jsonEncode(overrides));
+    } catch (_) {
+      // 写失败不影响本次会话内存中的去重结果。
     }
   }
 

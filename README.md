@@ -737,6 +737,252 @@ mpv / FFmpeg 请求 http://127.0.0.1:<port>/myune/<token>
 - 上传续传依赖 Google resumable 会话仍在有效期内（约 1 周）；会话过期会提示重新上传。
 
 
+## 🎵 自动扫描目录 / 音乐去重（含勾选删除） / 无害弹窗静默（本轮改动记录）
+
+### 问题现象
+
+1. 播放网络音频时仍会弹出
+   `MpvLogError(prefix: ffmpeg, level: LogLevel.error, text: http: Error reading HTTP response: Immediate exit requested)`，
+   但**声音正常播放、不影响使用**，属于纯噪声弹窗。
+2. 每次都要手动进目录逐首添加，希望「自动查找目录，无论是本地还是云端的」：
+   选一个含歌曲的文件夹，递归扫描后自动导入。
+3. 曲目里存在同一首歌的多份副本（`xxx.flac` / `xxx.mp3`、同名同格式重复上传），
+   希望「不看后缀只看名称以及读取到专辑，只要相同，自动将音质更烂的那个剔除，
+   或者说让用户选择」。
+4. 追加要求：「选择重复的，选择删除」——逐首勾选重复副本，默认只从音乐库移除，
+   也可切换成把源文件一并删除；两种删除语义都要能选。
+
+### 改动总览
+
+| 目标 | 入口 | 主要代码位置 |
+| --- | --- | --- |
+| 静默无害的取消信号 | 播放错误流 | `lib/page/playlist/playlist_content_notifier.dart` → `_audioService.player.stream.error.listen(...)` |
+| 自动扫描目录并导入 | 「全部歌曲」页 📂 按钮 | `lib/page/all_songs/auto_scan_import_dialog.dart`、`all_songs_page.dart`、`playlist_content_notifier.dart` |
+| 音乐去重（自动 / 手动两种视图模式） | 「全部歌曲」页 ⚗️ 按钮 | `lib/services/library/duplicate_resolver.dart`、`duplicate_dialog.dart`、`playlist_manager.dart` |
+| 逐首勾选并删除（可切换是否删源文件） | 同一对话框「勾选并删除」 | `lib/services/library/duplicate_cleanup.dart`、`duplicate_dialog.dart`、`playlist_content_notifier.dart` → `removeSongsFromLibrary()` |
+
+### 一、`Immediate exit requested` 为什么只静默、不修播放链路
+
+这条日志是 mpv 在**首次探测 / 预缓存后主动取消旧的 HTTP 连接**时，FFmpeg 把
+「取消信号」记成了 error 级。此时正式流已经打开、音频正在播，既不是文件损坏，
+也不是打不开；之前版本的 25 s 首包超时、`avformat_open_input() failed` 才是真实失败，
+两者成因不同。
+
+```dart
+// playlist_content_notifier.dart，错误流监听最前面
+if (errorString.contains('Immediate exit requested')) {
+  debugPrint('忽略 mpv 主动取消流产生的无害日志: $error');
+  return;
+}
+```
+
+过滤条件**只匹配这条取消信号本身**，不弹通知、不写 `errors.log`，只在调试输出留痕；
+`avformat_open_input() failed`、WASAPI 独占模式报错等仍按原有逻辑处理
+（WASAPI 那条本来就有白名单）。这样真正播不了时不会反而失去提示。
+
+### 二、自动扫描目录并导入
+
+「全部歌曲」是从所有歌单 `songFilePaths` 聚合出来的**虚拟视图**，没有落盘实体，
+因此扫描结果必须先写进一个真实歌单，重启后才不会丢。
+
+- 本地落点：`PlaylistContentNotifier.autoScanPlaylistId = '__auto_scan_local__'`，
+  歌单名「自动扫描导入」，首次扫描时自动创建；
+  `addLocalSongsToAllSongs()` 复用原有 `addSongsToPlaylistById()` 持久化。
+- 云端落点：沿用既有的 `__network_media__`「网络媒体收藏」歌单，
+  走 `addNetworkSongsToAllSongs()`。
+- 本地扫描：`FilePicker.platform.getDirectoryPath()` +
+  `Directory.list(recursive: true, followLinks: false)` +
+  `RemoteEntry.isAudioName()`（60+ 音频扩展名白名单，视频会被排除）。
+- 云端扫描：`RemoteSourceStore.instance.sources` 选网络源 → 图形化目录树
+  `RemoteDirectoryPicker`（面包屑 + 只列子文件夹，三种源统一走
+  `NetworkMediaService.listDirectory()`）→ `NetworkMediaService.scanDirectory()`
+  递归，默认 `maxEntries=5000`、`maxDepth=8`，逐目录检查取消。
+- 云端扫描前会 `NetworkMediaService.ensureProxy()`，因为构造
+  `nasSong()` 需要本机流代理 URL；代理端口 18765–18774 全被占用时明确报错。
+- 进度 UI：`_found` / `_dirs` / `_added` / `_status` + `LinearProgressIndicator`
+  +「取消扫描」；已存在的路径不会重复添加（`Set` 去重 + 歌单自身去重）。
+
+```
+本地：选文件夹 ─► 递归 list ─► isAudioName 过滤 ─► addLocalSongsToAllSongs ─► __auto_scan_local__
+云端：选网络源 ─► 目录树选目录 ─► scanDirectory ─► nasSong(代理 URL) ─► __network_media__
+                                                              │
+                                    ┌─────────────────────────┘
+                                    ▼
+                        _updateAllSongsList() 聚合 → 去重 → 「全部歌曲」
+```
+
+### 三、音乐去重
+
+#### 分组键（不看后缀）
+
+`DuplicateResolver.normalizeText()`：小写 → 去尾部扩展名 → 全角转半角 →
+非「数字 / 小写字母 / CJK / 假名 / 韩文」字符统一当分隔符 →
+剔除孤立噪声词（`mp3`、`flac`、`320k`、`HQ`、`无损` 等）→ 合并空白。
+`keyOf(song) = normalizeText(title) + '|' + normalizeText(album)`，
+歌手不进键（副本间歌手常缺失或写法不同），但会作为「需人工确认」的信号。
+
+实测等价关系：
+
+| A | B | 同组 |
+| --- | --- | --- |
+| `千万次初见.flac` | `千万次初见.mp3` | ✅ |
+| `低电量女孩(320k).mp3` | `低电量女孩.flac` | ✅ |
+| `A - B.flac` | `A - B [HQ].mp3` | ✅ |
+
+标题为空 / `未知歌曲` 时回退用文件名；网络媒体的 `filePath` 是代理 URL，
+真实文件名由 `RemoteMediaRegistry.decodeTarget()` 里的 `p` 字段解出再
+`Uri.decodeComponent()`，因此后缀判定对云端文件同样有效。
+
+#### 音质画像与「只剔除严格更差」
+
+`candidateOf(song)` 生成 `DuplicateCandidate`：
+格式等级（无损 4 → 高码率有损 3 → 普通有损 2 → 未知 1）、
+本地文件实际体积（网络媒体读不到，记为 `null`）、有时长 / 有封面、来源标签。
+`bestIndex()` 的比较顺序是「格式等级 → 体积 → 有时长 → 有封面 →
+路径字典序（仅用于保证结果稳定）」。
+
+关键保护：`inferiorIndices()` **只把真正的音质维度当剔除依据**，不把
+「有时长 / 有封面 / 路径字典序」这类平局打破条件当成剔除理由：
+
+```dart
+// duplicate_resolver.dart
+static List<int> inferiorIndices(List<DuplicateCandidate> candidates) {
+  final best = candidates[bestIndex(candidates)];
+  for (...) {
+    if (candidate.formatRank < best.formatRank) { result.add(i); continue; }
+    if (candidate.formatRank != best.formatRank) continue;
+    final size = candidate.sizeBytes, bestSize = best.sizeBytes;
+    if (size == null || bestSize == null || bestSize <= 0) continue; // 体积未知不判定
+    final diff = bestSize - size;
+    if (diff > 0 && diff * 100 >= bestSize) result.add(i);           // 差距 >= 1%
+  }
+}
+```
+
+- 同格式要求体积差至少 1%：差几个字节通常只是同一份转录被重新封装，不是音质更烂；
+  320 kbps 与 128 kbps 同名副本通常差 60% 以上，会被正常剔除。
+- 任一方体积未知（典型：两个云端 FLAC）就**不判定**。
+- `inferiorIndices` 为空、或 `artistsDiffer()`（歌手不一致，可能是翻唱 / 不同演绎）
+  时，整组标记 `needsReview` 并**保留全部副本**，自动模式绝不无依据隐藏。
+- `resolve()` 因此是「隐藏被证明更差的副本」，不是「每组只留一个」；
+  用户手动指定 override 时才只留选中的那一份。
+- `identityOf()` 先按媒体身份合并完全相同的条目：网络媒体用 token 里的
+  媒体 ID（不含代理端口，顺便解决端口漂移），本地文件用路径。
+  避免新逻辑在「无法判定」时保留整组，反而把同一首歌显示两遍（旧实现隐式保证过）。
+
+#### 三种模式与持久化
+
+`duplicate_dialog.dart` 用 `SegmentedButton` 切换三种模式：
+
+- **自动保留最佳**：清空 override，按上面的保守规则只隐藏明确更差的副本；
+  `needsReview` 组显示「保留全部副本（不隐藏）」为选中态，并标注原因
+  （「歌手不一致」/「音质相同」）。
+- **手动选择**：逐组单选要保留的版本，`needsReview` 组默认也是「保留全部副本」；
+  选了「保留全部副本」的组不写 override，回退到自动判定（本就会保留整组）。
+  用户明确选了某一版时，该组只留这一份。
+- **勾选并删除**：逐首勾选副本（每组每个版本一个复选框），提供
+  「全选非推荐版本」「清空」快捷操作和实时计数；执行前有二次确认对话框，
+  逐条列出标题与完整路径；执行后在原窗口展示逐条结果清单。
+
+前两种模式的结果通过 `PlaylistManager.loadDedupeOverrides()` /
+`saveDedupeOverrides()` 落在
+`<Documents>/myune_music/list_data/dedupe_overrides.json`，结构为
+`{ 分组键: 要保留的 filePath }`；空映射 = 全自动。文件损坏时回退自动模式，
+不影响启动。override 指向的路径已不在库里时忽略该条过期记录。
+
+> 前两种模式**只作用于「全部歌曲」虚拟列表**：歌单、播放队列、磁盘文件与
+> 云端文件都不改动，随时可以切模式撤销。第三种「勾选并删除」是真正从
+> 所有歌单移除引用，需按下面的规则处理源文件。
+
+#### 勾选并删除：两种删除语义
+
+开关 `同时删除源文件` **默认关闭**。
+
+| 开关 | 行为 |
+| --- | --- |
+| 关闭 | 只把勾选路径从所有歌单的 `songFilePaths` 移除（`removeSongsFromLibrary()`），磁盘 / 云端文件完全保留，重新扫描可加回来 |
+| 打开 | 先处理源文件，再把处理成功的路径从歌单移除；**删除失败的条目保留在音乐库里**，不出现「库里没了、文件还在」 |
+
+源文件处理由 `lib/services/library/duplicate_cleanup.dart` 负责，全部是
+**可恢复的回收站语义，不做永久删除**：
+
+| 来源 | 处理 | 实现 |
+| --- | --- | --- |
+| 本地文件 | Windows 系统回收站 | `Process.run` 调 PowerShell `Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin, UICancelOption.DoNothing)`；路径与结果走 UTF-8 临时文件，避开中文路径 / 控制台编码问题 |
+| 本地文件（回退） | 应用回收站 `<Documents>/myune_music/trash/` | PowerShell 被策略禁用、缺少程序集、超时或单文件失败时自动回退；`manifest.jsonl` 记录原路径 / 新路径 / 标题 / 时间，可手动恢复 |
+| Google Drive | Drive 回收站 | 复用已有的 `GoogleDriveClient.deleteEntry()`（`files.delete`，Drive 网页端可恢复）；从代理 token 的 `proto` / `s` / `p` 解出网络源与远端路径 |
+| WebDAV / FTP | 不支持删除源文件 | 结果清单里明确标为「暂不支持，已仅从音乐库移除」，不静默跳过 |
+
+安全边界：勾选集合只能来自重复组的候选（`_checkedItems()` 遍历
+`widget.groups`），不会碰到非重复歌曲；源文件删除失败时不从库移除；
+删除前必须过二次确认；结果清单逐条给出「移入哪个回收站 / 为什么跳过 / 为什么失败」。
+`DuplicateCleanupDetail.canRemoveFromLibrary` 是这套约束的落点。
+
+### 真实数据验证
+
+用本机 `Documents/myune_music/list_data/playback_queue.json`（103 条 Google Drive
+代理 URL，token 解码 103/103）离线复算，脚本 `work/verify_dedupe.py` 直接读取
+`duplicate_resolver.dart` 里的格式 / 噪声词集合，避免规则漂移：
+
+```
+扩展名分布: flac 98 / mp3 3 / m4a 2
+重复组: 6
+  2 组 flac + mp3  → inferiorIndices=[mp3]，自动模式各隐藏 1 份
+  4 组同名同格式 flac（云端、体积未知）→ 整组保留，标「音质相同，需人工确认」
+汇总: 自动模式隐藏 2 份（103 → 101 首），手动模式最多隐藏 6 份
+[OK] 同名同格式且体积未知的组均整组保留，无误删
+```
+
+### 如何验证
+
+1. 播放任意网络音频，确认不再弹 `Immediate exit requested`；
+   故意断开网络仍应有真实失败提示（过滤没有扩大）。
+2. 「全部歌曲」页点 📂 → 选本地音乐文件夹 → 开始扫描，
+   检查子目录里的音频都被导入、重复扫描不会新增、重启后仍在。
+3. 点 📂 → 切「云端目录」→ 选网络源 →「浏览目录」选子目录 → 开始扫描，
+   检查进度、取消按钮、扫描上限提示。
+4. 点 ⚗️ → 自动模式应用，检查 flac/mp3 组只隐藏 mp3；
+   切手动模式逐组指定，重启后 `dedupe_overrides.json` 仍生效。
+5. 查看 `all_songs_order.json` 与「自动扫描导入」歌单，确认磁盘文件没有被删。
+6. 点 ⚗️ → 切「勾选并删除」→ 勾一两首 → 「全选非推荐版本」/「清空」验证计数 →
+   保持 `同时删除源文件` 关闭应用，确认二次确认里列出完整路径、结果清单显示
+   「仅从音乐库移除，源文件保留」、磁盘文件仍在。
+7. 打开 `同时删除源文件` 再删一首本地副本，确认文件出现在 Windows 回收站；
+   若本机禁用 PowerShell，应看到结果清单改为「应用回收站」并能在
+   `<Documents>/myune_music/trash/manifest.jsonl` 找到原路径。
+
+### 已知限制
+
+- 网络媒体没有本地体积，同名同格式的云端副本无法自动判定优劣，
+  需人工在去重对话框里选一份；这是刻意保守，避免误隐藏。
+- 分组依赖标题 / 专辑元数据；元数据全是「未知」的文件会退化为按文件名分组。
+- 云端扫描默认上限 5000 首 / 8 层目录，超限时结果会标记 `truncated` 并提示。
+- 手动模式里对 `needsReview` 组明确选了某一版，会覆盖「歌手不一致」保护，
+  只保留选中的那一份（这是用户的显式决定）。
+- 前两种去重模式只改「全部歌曲」视图，不影响歌单、队列、磁盘与云端文件。
+- 「勾选并删除」会真的从**所有歌单**移除引用；若删掉了某歌单里唯一的
+  一份，需要重新扫描才能加回来（源文件未删除时随时可恢复）。
+- 删除源文件时，WebDAV / FTP 暂不支持，只从音乐库移除并在结果清单标注。
+  这是刻意不扩大删除面：这两个客户端没有实现 `DELETE` / `DELE`，
+  未经实测的删除逻辑不作为已交付能力。
+- 系统回收站依赖本机 PowerShell 与 `Microsoft.VisualBasic` 程序集可用；
+  被组策略禁用时自动回退到应用回收站（可恢复，但不是系统回收站）。
+- 正在播放的本地文件可能被 Windows 锁定而删除失败；此时该文件会保留在
+  音乐库里，结果清单会说明原因，停掉播放后重试即可。
+
+### 后续可选增强（本轮只提建议，未实现）
+
+1. 扫描结果预览：导入前先列出将新增的曲目，可勾选后再写入。
+2. 增量监视：记住上次扫描时间，只导入新增 / 修改过的文件。
+3. 去重引入音频指纹或 `NetworkTagReader` 缓存里的 `totalBytes`，
+   让云端同名同格式副本也能自动判优。
+4. 「相似但不完全相同」的模糊分组（编辑距离），处理 `Remix` / `Live` 命名差异。
+5. 去重历史与一键撤销（当前靠切换模式撤销，没有独立历史）。
+6. 给 WebDAV（`DELETE`）与 FTP（`DELE`）补上源文件删除，并在有可测试服务端时
+   实测后再开放；目前这两类源只从音乐库移除。
+7. 应用回收站里的条目做成界面可「一键还原」，而不只是 `manifest.jsonl` 手工恢复。
+
+
 ## 🧩 网络媒体实现原理（可复用到其他应用）
 
 > 本节不是 myune_music 专用的 UI 说明，而是把上面“网络媒体”那套做法拆成可照抄的思路、接口和关键步骤。通用部分（协议客户端、代理、Range、标签解析、缓存）换个播放器、换个语言也能用；myune_music 特有的部分（mpv 播放、歌单模型）会单独标出来，复用时按自己应用替换。
