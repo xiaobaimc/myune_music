@@ -59,10 +59,21 @@ void main() async {
           as FutureOr<void> Function(Map<String, dynamic>)?;
 
   // 单实例检测
+  //
+  // 某些受限环境/安全软件会拒绝 tasklist 子进程，导致启动直接失败
+  FlutterSingleInstance.processName = 'myune_music';
   final singleInstance = FlutterSingleInstance();
   if (!await singleInstance.isFirstInstance()) {
-    await singleInstance.focus();
-    exit(0); // 退出第二个实例
+    // 先尝试聚焦已有实例。若记录里的实例已经不可达不直接 exit
+    var focusError = await singleInstance.focus();
+    if (focusError != null) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      focusError = await singleInstance.focus();
+    }
+    if (focusError == null) {
+      exit(0); // 已成功聚焦到正在运行的实例
+    }
+    // debugPrint('单实例聚焦失败，按首个实例继续启动: $focusError');
   }
 
   PaintingBinding.instance.imageCache.maximumSize = 200;

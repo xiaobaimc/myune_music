@@ -19,7 +19,7 @@ import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 //       const Stream<MediaSessionCommand>.empty();
 
 //   @override
-//   Stream<MpvPlayerError> get error => const Stream<MpvPlayerError>.empty();
+//   Stream<PlayerError> get error => const Stream<PlayerError>.empty();
 
 //   @override
 //   Stream<List<Device>> get audioDevices => Stream<List<Device>>.value(const []);
@@ -78,7 +78,11 @@ class AudioService {
   }
 
   Future<void> dispose() async {
-    await _player.stop();
+    try {
+      await _player.stop();
+    } on PlayerException {
+      // 0.6 起 stop 在 mpv 拒绝时会抛异常，忽略即可
+    }
     await _player.dispose();
   }
 
@@ -123,7 +127,9 @@ class AudioService {
     }
   }
 
-  // 使用 2-track playlist 播放，启用 mpv 无缝过渡
+  // 使用 [上一首占位, 当前, 下一首] 三段 playlist 播放
+  // 如果是当前和下一首两段的话，播放列表中没有上一首
+  // 会导致系统媒体控制中无法触发上一首的事件
   Future<void> playSongGapless(
     String currentPath, {
     String? nextPath,
@@ -143,22 +149,20 @@ class AudioService {
     await setRate(rate);
     await applyEqualizer(gains: eqGains, frequencies: eqFrequencies);
 
-    final tracks = [Media(currentPath)];
+    final tracks = [Media(currentPath), Media(currentPath)];
     if (nextPath != null) {
       tracks.add(Media(nextPath));
     }
-    await _player.openAll(tracks, play: true);
+    await _player.openAll(tracks, index: 1, play: true);
   }
 
-  // 替换 mpv playlist 中的预备项（index 1）
+  // 更新三段窗口中的下一首预取项（index 2）
   Future<void> replaceNext(String? nextPath) async {
     try {
-      // 先移除旧的预备项（如果有）
       final playlist = _player.state.playlist;
-      if (playlist.items.length > 1) {
-        await _player.remove(1);
+      if (playlist.items.length > 2) {
+        await _player.remove(2);
       }
-      // 追加新的预备项
       if (nextPath != null) {
         await _player.add(Media(nextPath));
       }
@@ -167,7 +171,53 @@ class AudioService {
     }
   }
 
-  // 移除 mpv playlist 中已播完的首项，使当前播放回到 index 0
+  // 在不打断当前播放的情况下，把playlist 重排成 [上一首, 当前, 下一首]
+  // 用于播放中途开启无缝模式
+  Future<void> rebuildGaplessWindow({
+    required String currentPath,
+    String? nextPath,
+  }) async {
+    try {
+      final playlist = _player.state.playlist;
+      if (playlist.index < 0 || playlist.items.isEmpty) return;
+
+      await _removeOtherPlaylistItems();
+
+      // 当前曲目此时位于 index 0：先追加占位副本和下一首
+      // 再把副本移到最前面，当前曲目即落到 index 1
+      await _player.add(Media(currentPath));
+      if (nextPath != null) {
+        await _player.add(Media(nextPath));
+      }
+      await _player.move(1, 0);
+    } catch (e) {
+      //
+    }
+  }
+
+  // 关闭无缝模式时移除占位项和预取项，只留下当前曲目，
+  // 避免 mpv 自动切换与应用的 completed 逻辑互相干扰
+  Future<void> clearGaplessWindow() async {
+    await _removeOtherPlaylistItems();
+  }
+
+  // 删除除当前曲目外的所有 playlist 项
+  Future<void> _removeOtherPlaylistItems() async {
+    try {
+      final playlist = _player.state.playlist;
+      final currentIndex = playlist.index;
+      if (currentIndex < 0) return;
+
+      for (var i = playlist.items.length - 1; i >= 0; i--) {
+        if (i != currentIndex) {
+          await _player.remove(i);
+        }
+      }
+    } catch (e) {
+      //
+    }
+  }
+
   Future<void> removeFirst() async {
     try {
       await _player.remove(0);
@@ -177,7 +227,11 @@ class AudioService {
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    try {
+      await _player.stop();
+    } on PlayerException {
+      // 同上 忽略
+    }
   }
 
   Future<void> pause() async {
@@ -208,12 +262,23 @@ class AudioService {
     return gains.every((gain) => gain.abs() < 0.05);
   }
 
+  bool _isEqualizerRaw(AudioEffect effect) {
+    return effect is RawAudioEffect &&
+        effect.entry.startsWith('lavfi=[') &&
+        effect.entry.contains('equalizer=');
+  }
+
   Future<void> applyEqualizer({
     required List<double> gains,
     required List<int> frequencies,
   }) async {
     if (_isEqualizerFlat(gains)) {
-      await _player.updateAudioEffects((e) => e.copyWith(custom: []));
+      await _player.updateAudioEffects(
+        (effects) => [
+          for (final effect in effects)
+            if (!_isEqualizerRaw(effect)) effect,
+        ],
+      );
       return;
     }
 
@@ -225,7 +290,11 @@ class AudioService {
     }
 
     await _player.updateAudioEffects(
-      (e) => e.copyWith(custom: ['lavfi=[${filters.join(',')}]']),
+      (effects) => [
+        RawAudioEffect('lavfi=[${filters.join(',')}]'),
+        for (final effect in effects)
+          if (!_isEqualizerRaw(effect)) effect,
+      ],
     );
   }
 }

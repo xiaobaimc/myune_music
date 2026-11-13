@@ -39,7 +39,7 @@ class _AudioAnalysisPageState extends State<AudioAnalysisPage> {
       await _enableEbur128();
 
       // 配置频谱生成器
-      await _player.setSpectrum(
+      _player.setSpectrum(
         const SpectrumSettings(
           fftSize: 2048,
           bandCount: 64,
@@ -58,9 +58,29 @@ class _AudioAnalysisPageState extends State<AudioAnalysisPage> {
     }
   }
 
+  List<AudioEffect> _withEbur128(
+    List<AudioEffect> effects, {
+    required bool enabled,
+  }) {
+    final index = effects.indexWhere((effect) => effect is Ebur128Effect);
+    final next = index < 0
+        ? Ebur128Effect(enabled: enabled, metadata: true)
+        : (effects[index] as Ebur128Effect).copyWith(
+            enabled: enabled,
+            metadata: true,
+          );
+    if (index < 0) {
+      return [...effects, next];
+    }
+    return [
+      for (var i = 0; i < effects.length; i++)
+        if (i == index) next else effects[i],
+    ];
+  }
+
   Future<void> _enableEbur128() async {
     await _player.updateAudioEffects(
-      (e) => e.updateEbur128((m) => m.copyWith(enabled: true, metadata: true)),
+      (effects) => _withEbur128(effects, enabled: true),
     );
   }
 
@@ -68,7 +88,7 @@ class _AudioAnalysisPageState extends State<AudioAnalysisPage> {
   Future<void> _resetEbur128() async {
     try {
       await _player.updateAudioEffects(
-        (e) => e.updateEbur128((m) => m.copyWith(enabled: false)),
+        (effects) => _withEbur128(effects, enabled: false),
       );
       await _enableEbur128();
     } catch (e) {
@@ -81,7 +101,7 @@ class _AudioAnalysisPageState extends State<AudioAnalysisPage> {
     _playlistSub?.cancel();
     // 退出页面时关闭 ebur128 过滤器以节省性能
     _player.updateAudioEffects(
-      (e) => e.updateEbur128((m) => m.copyWith(enabled: false)),
+      (effects) => _withEbur128(effects, enabled: false),
     );
     super.dispose();
   }

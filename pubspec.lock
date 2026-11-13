@@ -49,6 +49,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.2"
+  code_assets:
+    dependency: transitive
+    description:
+      name: code_assets
+      sha256: "1ef22a0be3af9370bd9481ac76db114db92bfe75d5ca2b2d7bc911764478a4d9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   collection:
     dependency: transitive
     description:
@@ -85,10 +93,10 @@ packages:
     dependency: "direct main"
     description:
       name: crypto
-      sha256: "1e445881f28f22d6140f181e07737b22f1e099a5e1ff94b0af2f9e4a463f4855"
+      sha256: e3626ae6270383c9e3a549f34c9e4cd26c09ae6a9adaab2bf4737a00340efdc4
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.6"
+    version: "3.0.8"
   fake_async:
     dependency: transitive
     description:
@@ -255,6 +263,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.0"
+  hooks:
+    dependency: transitive
+    description:
+      name: hooks
+      sha256: eaac480a35ec0814146c2c48d96aaa829e0e44a7662c88ae84c9edf4bc35651f
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   hotkey_manager:
     dependency: "direct main"
     description:
@@ -455,12 +471,11 @@ packages:
   mpv_audio_kit:
     dependency: "direct main"
     description:
-      path: "."
-      ref: e87688132c2fc1b0960877a59a7b5a535b64917a
-      resolved-ref: e87688132c2fc1b0960877a59a7b5a535b64917a
-      url: "https://github.com/xiaobaimc/mpv_audio_kit.git"
-    source: git
-    version: "0.4.5"
+      name: mpv_audio_kit
+      sha256: "02bab9c7aa4763f44016e157c863a8bad3d04c4bd9c9917ebb9990e531b757cd"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.4"
   nested:
     dependency: transitive
     description:
@@ -581,6 +596,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.5"
+  pub_semver:
+    dependency: transitive
+    description:
+      name: pub_semver
+      sha256: "261236774e8b1d69cfc6b9eabbc96c40f25e7a2d6b171f3385d4f65d5734fb24"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1"
+  record_use:
+    dependency: transitive
+    description:
+      name: record_use
+      sha256: "1cb8564af8d43b464294411db9217f5ec04891c6f22ee2c32d73ae05e88a6bd2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   rust_lib_myune_music:
     dependency: "direct main"
     description:

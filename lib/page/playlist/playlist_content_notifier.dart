@@ -378,6 +378,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 无缝播放相关 ---
   bool _gaplessEnabled = false; // 是否启用无缝播放
   bool _isGaplessTransitioning = false; // 防止重入的标记
+  bool _gaplessWindowReady = false; // 是否已观察到稳定的 [占位, 当前, 下一首] 窗口
 
   DateTime? _lastDeviceErrorLogged;
   // 限制日志写入间隔
@@ -465,7 +466,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
     // 恢复播放状态
     await _restorePlaybackState();
     // 恢复无缝播放设置
-    updateGaplessMode(_settingsProvider.enableGaplessPlayback);
+    await updateGaplessMode(_settingsProvider.enableGaplessPlayback);
   }
 
   // 获取规范化的路径
@@ -718,7 +719,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     if (_settingsProvider.enableLoudness &&
         !_settingsProvider.enableReplayGain) {
-      _loudnessSubscription = _audioService.player.stream.loudness.listen((
+      _loudnessSubscription = _audioService.player.stream.loudnessScan.listen((
         scan,
       ) {
         if (scan == null) {
@@ -789,9 +790,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     _audioService.player.stream.playlist.listen((playlist) {
       if (!_gaplessEnabled) return;
-      // 检测 mpv 是否自动过渡到了 playlist 的第二首
-      // playlist.index 变为 1 说明 mpv 切了歌
+      // 无缝窗口为 [上一首占位, 当前, 下一首]，当前曲目位于 index 1。
+      // 只有先观察到稳定的 index 1，才把之后出现的 index 2 视为
+      // mpv 自动过渡。这样可以排除 openAll 换歌过程中“旧曲目 +
+      // 新三项”短暂停在同一索引上的误判。
       if (playlist.index == 1 && playlist.items.length >= 2) {
+        _gaplessWindowReady = true;
+        return;
+      }
+      if (_gaplessWindowReady &&
+          playlist.index == 2 &&
+          playlist.items.length >= 3) {
+        _gaplessWindowReady = false;
         _handleGaplessTransition();
       }
     });
@@ -821,7 +831,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       final errorString = error.toString();
 
       // windows 在使用独占模式播放有损压缩的音频格式时
-      // mpv会报：MpvLogError(prefix: ao/wasapi, level: LogLevel.error, text: Error initializing device: AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED (0x88890019))
+      // mpv会报：LogError(prefix: ao/wasapi, level: LogLevel.error, text: Error initializing device: AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED (0x88890019))
       // 但实际不影响播放 直接把它过滤掉
       // 每次用 libmpv 都会遇上神秘bug😡
       if (errorString.contains('AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED')) {
@@ -833,8 +843,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
       // 处理 mpv 找不到指定设备后回退到默认设备的情况：
       // 此时 audioOutputState 仍为 active，不会触发 _loadDevices 里的 failed 监听，
       // 但 audio-device 仍指向失效设备，每次播放都会报错，需要主动切回 auto
-      // 用 MpvLogError.prefix 结构化字段判断 AO 子系统，不依赖 text 字符串匹配
-      if (error is MpvLogError &&
+      // 用 LogError.prefix 结构化字段判断 AO 子系统，不依赖 text 字符串匹配
+      if (error is LogError &&
           error.prefix.startsWith('ao') &&
           !_settingsProvider.audioDeviceIsAuto) {
         final selected = _selectedDevice;
@@ -850,7 +860,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
         }
       }
 
-      final isIgnoredPlaybackError = error is MpvLogError
+      final isIgnoredPlaybackError = error is LogError
           ? (error.prefix == 'ad' ||
                 error.prefix == 'ffmpeg/audio' ||
                 error.prefix.startsWith('ffmpeg/audio') ||
@@ -2415,7 +2425,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
   Future<void> play() async {
     if (!_isPlaying) {
       if (_gaplessEnabled &&
-          _audioService.player.state.playlist.items.length <= 1) {
+          (_audioService.player.state.playlist.index < 1 ||
+              _audioService.player.state.playlist.items.length < 2)) {
         _refreshGaplessNext();
       }
       await _audioService.player.play(); // 开始播放
@@ -2441,7 +2452,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Future<void> stop() async {
-    await _audioService.player.stop();
+    await _audioService.stop();
     if (_currentSong != null) {
       final oldPath = _currentSong!.normalizedPath;
       _currentSong = null;
@@ -2555,126 +2566,263 @@ class PlaylistContentNotifier extends ChangeNotifier {
     _notificationService.info(message);
   }
 
+  List<AudioEffect> _orderedEffects(List<AudioEffect> effects) {
+    final raw = <AudioEffect>[];
+    final typed = <AudioEffect>[];
+    for (final effect in effects) {
+      if (effect is RawAudioEffect) {
+        raw.add(effect);
+      } else {
+        typed.add(effect);
+      }
+    }
+    typed.sort((a, b) => a.filterName.compareTo(b.filterName));
+    return [...raw, ...typed];
+  }
+
+  List<AudioEffect> _upsertEffect<T extends AudioEffect>(
+    List<AudioEffect> effects,
+    T Function(T? current) create,
+  ) {
+    final index = effects.indexWhere((effect) => effect is T);
+    final current = index < 0 ? null : effects[index] as T;
+    final next = create(current);
+    if (index < 0) return _orderedEffects([...effects, next]);
+    return _orderedEffects([
+      for (var i = 0; i < effects.length; i++)
+        if (i == index) next else effects[i],
+    ]);
+  }
+
   Future<void> _applyEffect(String id, bool enabled) async {
     final player = _audioService.player;
     try {
       switch (id) {
         case 'crossfeed':
           await player.updateAudioEffects(
-            (e) => e.updateCrossfeed(
-              (m) => m.copyWith(enabled: enabled, strength: 0.4, range: 0.5),
+            (fx) => _upsertEffect<CrossfeedEffect>(
+              fx,
+              (current) => (current ?? const CrossfeedEffect()).copyWith(
+                enabled: enabled,
+                strength: 0.4,
+                range: 0.5,
+              ),
             ),
           );
         case 'earwax':
           await player.updateAudioEffects(
-            (e) => e.updateCrossfeed(
-              (m) => m.copyWith(enabled: enabled, strength: 0.3),
+            (fx) => _upsertEffect<EarwaxEffect>(
+              fx,
+              (current) =>
+                  (current ?? const EarwaxEffect()).copyWith(enabled: enabled),
             ),
           );
         case 'widerStereo':
-          await player.updateAudioEffects((e) {
-            var r = e.updateExtrastereo(
-              (m) => m.copyWith(enabled: enabled, m: 1.2),
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<ExtrastereoEffect>(
+              fx,
+              (current) => (current ?? const ExtrastereoEffect()).copyWith(
+                enabled: enabled,
+                m: 1.2,
+              ),
             );
-            r = r.updateStereowiden(
-              (m) => m.copyWith(enabled: enabled, delay: 15, drymix: 0.8),
+            result = _upsertEffect<StereowidenEffect>(
+              result,
+              (current) => (current ?? const StereowidenEffect()).copyWith(
+                enabled: enabled,
+                delay: 15,
+                drymix: 0.8,
+              ),
             );
-            return r;
+            return result;
           });
         case 'haas':
           await player.updateAudioEffects(
-            (e) => e.updateHaas(
-              (m) => m.copyWith(
+            (fx) => _upsertEffect<HaasEffect>(
+              fx,
+              (current) => (current ?? const HaasEffect()).copyWith(
                 enabled: enabled,
-                level_in: 0.8,
-                level_out: 0.8,
-                side_gain: 0.35,
-                middle_source: HaasSource.mid,
+                levelIn: 0.8,
+                levelOut: 0.8,
+                sideGain: 0.35,
+                middleSource: HaasSource.mid,
               ),
             ),
           );
         case 'vocalBoost':
           await player.updateAudioEffects(
-            (e) => e.updateStereotools(
-              (m) => m.copyWith(enabled: enabled, mlev: 1.4, slev: 0.8),
+            (fx) => _upsertEffect<StereotoolsEffect>(
+              fx,
+              (current) => (current ?? const StereotoolsEffect()).copyWith(
+                enabled: enabled,
+                mlev: 1.4,
+                slev: 0.8,
+              ),
             ),
           );
         case 'vocalRemover':
           await player.updateAudioEffects(
-            (e) => e.updateStereotools(
-              (m) => m.copyWith(enabled: enabled, mlev: 0.15, slev: 1.1),
+            (fx) => _upsertEffect<StereotoolsEffect>(
+              fx,
+              (current) => (current ?? const StereotoolsEffect()).copyWith(
+                enabled: enabled,
+                mlev: 0.15,
+                slev: 1.1,
+              ),
             ),
           );
         case 'acompressor':
           await player.updateAudioEffects(
-            (e) => e.updateAcompressor((m) => m.copyWith(enabled: enabled)),
+            (fx) => _upsertEffect<AcompressorEffect>(
+              fx,
+              (current) => (current ?? const AcompressorEffect()).copyWith(
+                enabled: enabled,
+              ),
+            ),
           );
         case 'softClip':
-          await player.updateAudioEffects((e) {
-            var r = e.updateAlimiter(
-              (m) => m.copyWith(enabled: enabled, limit: 0.95),
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<AlimiterEffect>(
+              fx,
+              (current) => (current ?? const AlimiterEffect()).copyWith(
+                enabled: enabled,
+                limit: 0.95,
+              ),
             );
-            r = r.updateAsoftclip((m) => m.copyWith(enabled: enabled));
-            return r;
+            result = _upsertEffect<AsoftclipEffect>(
+              result,
+              (current) => (current ?? const AsoftclipEffect()).copyWith(
+                enabled: enabled,
+              ),
+            );
+            return result;
           });
         case 'deNoise':
-          await player.updateAudioEffects((e) {
-            var r = e.updateAgate(
-              (m) => m.copyWith(enabled: enabled, threshold: 0.04),
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<AgateEffect>(
+              fx,
+              (current) => (current ?? const AgateEffect()).copyWith(
+                enabled: enabled,
+                threshold: 0.04,
+              ),
             );
-            r = r.updateAfftdn((m) => m.copyWith(enabled: enabled));
-            return r;
+            result = _upsertEffect<AfftdnEffect>(
+              result,
+              (current) =>
+                  (current ?? const AfftdnEffect()).copyWith(enabled: enabled),
+            );
+            return result;
           });
         case 'virtualbass':
           await player.updateAudioEffects(
-            (e) => e.updateVirtualbass((m) => m.copyWith(enabled: enabled)),
+            (fx) => _upsertEffect<VirtualbassEffect>(
+              fx,
+              (current) => (current ?? const VirtualbassEffect()).copyWith(
+                enabled: enabled,
+              ),
+            ),
           );
         case 'subboost':
-          await player.updateAudioEffects((e) {
-            var r = e.updateAsubboost(
-              (m) => m.copyWith(enabled: enabled, dry: 0.7, wet: 0.5),
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<AsubboostEffect>(
+              fx,
+              (current) => (current ?? const AsubboostEffect()).copyWith(
+                enabled: enabled,
+                dry: 0.7,
+                wet: 0.5,
+              ),
             );
-            r = r.updateBass((m) => m.copyWith(enabled: enabled, g: 3));
-            return r;
+            result = _upsertEffect<BassEffect>(
+              result,
+              (current) => (current ?? const BassEffect()).copyWith(
+                enabled: enabled,
+                gain: 3,
+              ),
+            );
+            return result;
           });
         case 'crystalizer':
-          await player.updateAudioEffects((e) {
-            var r = e.updateCrystalizer((m) => m.copyWith(enabled: enabled));
-            r = r.updateTreble((m) => m.copyWith(enabled: enabled, g: 2));
-            return r;
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<CrystalizerEffect>(
+              fx,
+              (current) => (current ?? const CrystalizerEffect()).copyWith(
+                enabled: enabled,
+              ),
+            );
+            result = _upsertEffect<TrebleEffect>(
+              result,
+              (current) => (current ?? const TrebleEffect()).copyWith(
+                enabled: enabled,
+                gain: 2,
+              ),
+            );
+            return result;
           });
         case 'tilt':
-          await player.updateAudioEffects((e) {
-            var r = e.updateAtilt((m) => m.copyWith(enabled: enabled));
-            r = r.updateTiltshelf((m) => m.copyWith(enabled: enabled));
-            return r;
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<AtiltEffect>(
+              fx,
+              (current) =>
+                  (current ?? const AtiltEffect()).copyWith(enabled: enabled),
+            );
+            result = _upsertEffect<TiltshelfEffect>(
+              result,
+              (current) => (current ?? const TiltshelfEffect()).copyWith(
+                enabled: enabled,
+              ),
+            );
+            return result;
           });
         case 'vinyl':
-          await player.updateAudioEffects((e) {
-            var r = e.updateAemphasis((m) => m.copyWith(enabled: false));
-            r = r.updateAcrusher((m) => m.copyWith(enabled: false));
-            r = r.updateAtilt((m) => m.copyWith(enabled: false));
-
-            r = r.updateHighpass(
-              (m) => m.copyWith(enabled: enabled, frequency: 150),
+          await player.updateAudioEffects((fx) {
+            var result = _upsertEffect<AemphasisEffect>(
+              fx,
+              (current) =>
+                  (current ?? const AemphasisEffect()).copyWith(enabled: false),
             );
-            r = r.updateLowpass(
-              (m) => m.copyWith(enabled: enabled, frequency: 7500),
+            result = _upsertEffect<AcrusherEffect>(
+              result,
+              (current) =>
+                  (current ?? const AcrusherEffect()).copyWith(enabled: false),
             );
-
-            return r;
+            result = _upsertEffect<AtiltEffect>(
+              result,
+              (current) =>
+                  (current ?? const AtiltEffect()).copyWith(enabled: false),
+            );
+            result = _upsertEffect<HighpassEffect>(
+              result,
+              (current) => (current ?? const HighpassEffect()).copyWith(
+                enabled: enabled,
+                frequency: 150,
+              ),
+            );
+            result = _upsertEffect<LowpassEffect>(
+              result,
+              (current) => (current ?? const LowpassEffect()).copyWith(
+                enabled: enabled,
+                frequency: 7500,
+              ),
+            );
+            return result;
           });
         case 'exciter':
           await player.updateAudioEffects(
-            (e) => e.updateAexciter((m) => m.copyWith(enabled: enabled)),
+            (fx) => _upsertEffect<AexciterEffect>(
+              fx,
+              (current) => (current ?? const AexciterEffect()).copyWith(
+                enabled: enabled,
+              ),
+            ),
           );
         case 'echo':
           await player.updateAudioEffects(
-            (e) => e.updateAecho(
-              (m) => m.copyWith(
+            (fx) => _upsertEffect<AechoEffect>(
+              fx,
+              (current) => (current ?? const AechoEffect()).copyWith(
                 enabled: enabled,
-                in_gain: 0.8,
-                out_gain: 0.5,
+                inGain: 0.8,
+                outGain: 0.5,
                 delays: '80|160',
                 decays: '0.35|0.15',
               ),
@@ -2682,20 +2830,29 @@ class PlaylistContentNotifier extends ChangeNotifier {
           );
         case 'deesser':
           await player.updateAudioEffects(
-            (e) => e.updateDeesser((m) => m.copyWith(enabled: enabled)),
+            (fx) => _upsertEffect<DeesserEffect>(
+              fx,
+              (current) =>
+                  (current ?? const DeesserEffect()).copyWith(enabled: enabled),
+            ),
           );
         case 'declip':
           await player.updateAudioEffects(
-            (e) => e.updateAdeclip((m) => m.copyWith(enabled: enabled)),
+            (fx) => _upsertEffect<AdeclipEffect>(
+              fx,
+              (current) =>
+                  (current ?? const AdeclipEffect()).copyWith(enabled: enabled),
+            ),
           );
         case 'arnndn':
-          if (_arnndnModelPath != null) {
+          final modelPath = _arnndnModelPath;
+          if (modelPath != null) {
             await player.updateAudioEffects(
-              (e) => e.copyWith(
-                arnndn: ArnndnSettings(
-                  enabled: enabled,
-                  model: _arnndnModelPath!,
-                ),
+              (fx) => _upsertEffect<ArnndnEffect>(
+                fx,
+                (current) =>
+                    current?.copyWith(enabled: enabled, model: modelPath) ??
+                    ArnndnEffect(enabled: enabled, model: modelPath),
               ),
             );
           }
@@ -2822,22 +2979,46 @@ class PlaylistContentNotifier extends ChangeNotifier {
     }
   }
 
-  void updateGaplessMode(bool enabled) {
+  Future<void> updateGaplessMode(bool enabled) async {
     _gaplessEnabled = enabled;
+    _gaplessWindowReady = false;
     if (enabled) {
-      _audioService.enableGapless();
-      _refreshGaplessNext();
+      await _audioService.enableGapless();
+      _rebuildGaplessWindow();
     } else {
-      _audioService.disableGapless();
-      _audioService.replaceNext(null);
+      await _audioService.disableGapless();
+      await _audioService.clearGaplessWindow();
     }
     notifyListeners();
   }
 
+  // 围绕当前曲目重建 mpv 的三段无缝窗口
+  void _rebuildGaplessWindow() {
+    if (!_gaplessEnabled) return;
+    final currentPath = _currentSong?.filePath;
+    if (currentPath == null) return;
+    _gaplessWindowReady = false;
+    _audioService.rebuildGaplessWindow(
+      currentPath: currentPath,
+      nextPath: _peekNextPath(),
+    );
+  }
+
   void _refreshGaplessNext() {
     if (!_gaplessEnabled) return;
-    final nextPath = _peekNextPath();
-    _audioService.replaceNext(nextPath);
+    final currentPath = _currentSong?.filePath;
+    if (currentPath == null) return;
+
+    final playlist = _audioService.player.state.playlist;
+    if (playlist.index < 1 || playlist.items.length < 2) {
+      _gaplessWindowReady = false;
+      _audioService.rebuildGaplessWindow(
+        currentPath: currentPath,
+        nextPath: _peekNextPath(),
+      );
+      return;
+    }
+    _audioService.replaceNext(_peekNextPath());
   }
 
   Future<void> _handleGaplessTransition() async {
@@ -3451,6 +3632,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       await _audioService.player.setMediaSession(session);
 
       if (_gaplessEnabled) {
+        _gaplessWindowReady = false;
         await _audioService.playSongGapless(
           songFilePath,
           nextPath: _peekNextPath(),
@@ -4292,7 +4474,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     await scanner.stop();
 
-    final subscription = scanner.stream.loudness.listen((scan) {
+    final subscription = scanner.stream.loudnessScan.skip(1).listen((scan) {
       if (scan == null || completer.isCompleted) {
         return;
       }
