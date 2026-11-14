@@ -42,18 +42,18 @@ dependencies:
   system_fonts: ^1.0.1
   colorgram: ^2.0.0
   http: ^1.4.0
-  window_manager: ^0.5.1
+  window_manager: ^0.6.0
   scrollable_positioned_list: ^0.3.8
   url_launcher: ^6.3.1
-  tray_manager: ^0.5.1
+  tray_manager: ^0.8.3
   windows_taskbar: ^1.1.2
-  flutter_single_instance: ^1.6.1
+  ffi: ^2.1.0
   pinyin: ^3.3.0
   # flutter_web_scroll: ^1.0.1
   markdown_widget: ^2.3.2+8
   mpv_audio_kit: ^0.6.4
   show_fps: ^1.1.0
-  hotkey_manager: ^0.2.3
+  hotkey_manager: ^0.3.0
   silky_scroll: ^2.6.4
 
 

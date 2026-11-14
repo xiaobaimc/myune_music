@@ -36,10 +36,7 @@ class AdvancedTab extends StatelessWidget {
       children: [
         // 清理无效歌曲
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Consumer<PlaylistContentNotifier>(
             builder: (context, notifier, child) {
               return PlaylistCleaner(notifier: notifier);
@@ -48,10 +45,7 @@ class AdvancedTab extends StatelessWidget {
         ),
         // 刷新文件夹歌单
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Consumer<PlaylistContentNotifier>(
             builder: (context, notifier, child) {
               return FolderPlaylistRefresher(notifier: notifier);
@@ -60,17 +54,11 @@ class AdvancedTab extends StatelessWidget {
         ),
         // 自定义艺术家分隔符
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '更改艺术家分隔符',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('更改艺术家分隔符', style: Theme.of(context).textTheme.titleMedium),
               ElevatedButton.icon(
                 onPressed: () => _showArtistSeparator(context, settings),
                 icon: const Icon(Icons.person, size: 20),
@@ -93,20 +81,6 @@ class AdvancedTab extends StatelessWidget {
           value: settings.allowAnyFormat,
           onChanged: (value) {
             context.read<SettingsProvider>().setAllowAnyFormat(value);
-          },
-        ),
-        // 允许最小化到托盘
-        SwitchListTile(
-          title: const Row(
-            children: [
-              Text('允许最小化到托盘'),
-              SizedBox(width: 4),
-              InfoIcon('启用后点击最小化按钮将最小化到系统托盘'),
-            ],
-          ),
-          value: settings.minimizeToTray,
-          onChanged: (value) {
-            context.read<SettingsProvider>().setMinimizeToTray(value);
           },
         ),
         // 忽略某些播放错误

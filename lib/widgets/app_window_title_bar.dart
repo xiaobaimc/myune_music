@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../page/setting/settings_provider.dart';
 import '../utils/pixel_snap.dart';
+import '../window/app_window.dart';
 import 'custom_background_layer.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
@@ -51,6 +52,7 @@ class AppWindowTitleBar extends StatelessWidget {
           ),
           Expanded(
             child: DragToMoveArea(
+              window: AppWindow.instance,
               // 这里的Container是为了保证这个区域可以拖动
               child: Container(),
             ),
@@ -68,9 +70,9 @@ class AppWindowTitleBar extends StatelessWidget {
                       listen: false,
                     );
                     if (settings.minimizeToTray) {
-                      windowManager.hide();
+                      AppWindow.instance?.hide();
                     } else {
-                      windowManager.minimize();
+                      AppWindow.instance?.minimize();
                     }
                   },
                   hoverColor: const Color.fromRGBO(144, 202, 249, 1),
@@ -78,7 +80,7 @@ class AppWindowTitleBar extends StatelessWidget {
                 const SizedBox(width: 2),
                 _WindowButton(
                   icon: Icons.close,
-                  onPressed: () => windowManager.close(),
+                  onPressed: () => AppWindow.instance?.close(),
                   hoverColor: const Color.fromRGBO(239, 154, 154, 1),
                 ),
               ],

@@ -49,6 +49,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.2"
+  cnativeapi:
+    dependency: transitive
+    description:
+      name: cnativeapi
+      sha256: c43703998995e132b0656d2b8a95ed2bedc6b22ccee2c827bcdc075e0330e319
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.10"
   code_assets:
     dependency: transitive
     description:
@@ -106,7 +114,7 @@ packages:
     source: hosted
     version: "1.3.3"
   ffi:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: ffi
       sha256: "289279317b4b16eb2bb7e271abccd4bf84ec9bdcbe999e278a94b804f5630418"
@@ -200,14 +208,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.3"
-  flutter_single_instance:
-    dependency: "direct main"
-    description:
-      name: flutter_single_instance
-      sha256: "91c8a3dd16c5fc9ad8d8afc533c2f6b6318ca4905faf44f945b620f268eb094b"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.7.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -218,43 +218,19 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  freezed_annotation:
-    dependency: transitive
-    description:
-      name: freezed_annotation
-      sha256: "7294967ff0a6d98638e7acb774aac3af2550777accd8149c90af5b014e6d44d8"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.1.0"
   fuchsia_remote_debug_protocol:
     dependency: transitive
     description: flutter
     source: sdk
     version: "0.0.0"
-  google_identity_services_web:
+  glob:
     dependency: transitive
     description:
-      name: google_identity_services_web
-      sha256: "5d187c46dc59e02646e10fe82665fc3884a9b71bc1c90c2b8b749316d33ee454"
+      name: glob
+      sha256: "218aeb56050c714f62a3182775320dfa04602b55074873e24e31bbd39bda96fb"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.3+1"
-  googleapis_auth:
-    dependency: transitive
-    description:
-      name: googleapis_auth
-      sha256: b81fe352cc4a330b3710d2b7ad258d9bcef6f909bb759b306bf42973a7d046db
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.0"
-  grpc:
-    dependency: transitive
-    description:
-      name: grpc
-      sha256: "2dde469ddd8bbd7a33a0765da417abe1ad2142813efce3a86c512041294e2b26"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.1.0"
+    version: "2.2.0"
   highlight:
     dependency: transitive
     description:
@@ -275,39 +251,15 @@ packages:
     dependency: "direct main"
     description:
       name: hotkey_manager
-      sha256: "06f0655b76c8dd322fb7101dc615afbdbf39c3d3414df9e059c33892104479cd"
+      sha256: "79b5a532de33e3d7653a988bf24af00f56786797b4d396a376dbaacffe3af5e2"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.3"
-  hotkey_manager_linux:
-    dependency: transitive
-    description:
-      name: hotkey_manager_linux
-      sha256: "83676bda8210a3377bc6f1977f193bc1dbdd4c46f1bdd02875f44b6eff9a8473"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  hotkey_manager_macos:
-    dependency: transitive
-    description:
-      name: hotkey_manager_macos
-      sha256: "03b5967e64357b9ac05188ea4a5df6fe4ed4205762cb80aaccf8916ee1713c96"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
+    version: "0.3.0"
   hotkey_manager_platform_interface:
     dependency: transitive
     description:
       name: hotkey_manager_platform_interface
       sha256: "98ffca25b8cc9081552902747b2942e3bc37855389a4218c9d50ca316b653b13"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  hotkey_manager_windows:
-    dependency: transitive
-    description:
-      name: hotkey_manager_windows
-      sha256: "0d03ced9fe563ed0b68f0a0e1b22c9ffe26eb8053cb960e401f68a4f070e0117"
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0"
@@ -319,14 +271,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
-  http2:
-    dependency: transitive
-    description:
-      name: http2
-      sha256: "382d3aefc5bd6dc68c6b892d7664f29b5beb3251611ae946a98d35158a82bbfa"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.1"
   http_parser:
     dependency: transitive
     description:
@@ -444,14 +388,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.0"
-  menu_base:
-    dependency: transitive
-    description:
-      name: menu_base
-      sha256: "820368014a171bd1241030278e6c2617354f492f5c703d7b7d4570a6b8b84405"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.1"
   mesh_gradient:
     dependency: "direct main"
     description:
@@ -476,6 +412,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.4"
+  native_toolchain_c:
+    dependency: transitive
+    description:
+      name: native_toolchain_c
+      sha256: "120b6fc66acd8a5ddeaeb1e59b78836bb3ec9919bd9d9dfb1e2401985710c2c0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.19.6"
+  nativeapi:
+    dependency: transitive
+    description:
+      name: nativeapi
+      sha256: "118045bb549cb6fabad472a3a22a537e7310bbf20097350f5027808b4a5853ce"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.10"
+  nativeapi_flutter:
+    dependency: transitive
+    description:
+      name: nativeapi_flutter
+      sha256: "357a405c69212f5157da1bd3be183a53c2b841d0de0eb51f4a3947913712aec4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.10"
   nested:
     dependency: transitive
     description:
@@ -580,14 +540,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.6"
-  protobuf:
-    dependency: transitive
-    description:
-      name: protobuf
-      sha256: de9c9eb2c33f8e933a42932fe1dc504800ca45ebc3d673e6ed7f39754ee4053e
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.2.0"
   provider:
     dependency: "direct main"
     description:
@@ -627,46 +579,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.28.0"
-  screen_retriever:
-    dependency: transitive
-    description:
-      name: screen_retriever
-      sha256: "570dbc8e4f70bac451e0efc9c9bb19fa2d6799a11e6ef04f946d7886d2e23d0c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  screen_retriever_linux:
-    dependency: transitive
-    description:
-      name: screen_retriever_linux
-      sha256: f7f8120c92ef0784e58491ab664d01efda79a922b025ff286e29aa123ea3dd18
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  screen_retriever_macos:
-    dependency: transitive
-    description:
-      name: screen_retriever_macos
-      sha256: "71f956e65c97315dd661d71f828708bd97b6d358e776f1a30d5aa7d22d78a149"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  screen_retriever_platform_interface:
-    dependency: transitive
-    description:
-      name: screen_retriever_platform_interface
-      sha256: ee197f4581ff0d5608587819af40490748e1e39e648d7680ecf95c05197240c0
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  screen_retriever_windows:
-    dependency: transitive
-    description:
-      name: screen_retriever_windows
-      sha256: "449ee257f03ca98a57288ee526a301a430a344a161f9202b4fcc38576716fe13"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
   scroll_to_index:
     dependency: transitive
     description:
@@ -739,14 +651,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
-  shortid:
-    dependency: transitive
-    description:
-      name: shortid
-      sha256: d0b40e3dbb50497dad107e19c54ca7de0d1a274eb9b4404991e443dadb9ebedb
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.2"
   show_fps:
     dependency: "direct main"
     description:
@@ -844,10 +748,10 @@ packages:
     dependency: "direct main"
     description:
       name: tray_manager
-      sha256: "537e539f48cd82d8ee2240d4330158c7b44c7e043e8e18b5811f2f8f6b7df25a"
+      sha256: "30c67f4f27a9b2ad56606b369b75256fd9ef25851b66788597d4df3fbbfa536a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.1"
+    version: "0.8.3"
   typed_data:
     dependency: transitive
     description:
@@ -988,10 +892,10 @@ packages:
     dependency: "direct main"
     description:
       name: window_manager
-      sha256: "7eb6d6c4164ec08e1bf978d6e733f3cebe792e2a23fb07cbca25c2872bfdbdcd"
+      sha256: bdd6b1a2c1ce50f3bba7ffbaa0d5dc5feb6b6a24fd20269da4de90244f77a471
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.1"
+    version: "0.6.0"
   windows_taskbar:
     dependency: "direct main"
     description:
@@ -1017,5 +921,5 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.11.0-0 <4.0.0"
-  flutter: ">=3.44.0"
+  dart: ">=3.13.0 <4.0.0"
+  flutter: ">=3.47.0"

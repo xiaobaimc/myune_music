@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import '../../page/setting/settings_provider.dart';
+import '../../window/app_window.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
   final VoidCallback onSettingsPressed;
@@ -63,6 +64,7 @@ class AppWindowTitleBar extends StatelessWidget {
           ),
           Expanded(
             child: DragToMoveArea(
+              window: AppWindow.instance,
               // 这里的Container是为了保证这个区域可以拖动
               child: Container(),
             ),
@@ -80,9 +82,9 @@ class AppWindowTitleBar extends StatelessWidget {
                       listen: false,
                     );
                     if (settings.minimizeToTray) {
-                      windowManager.hide();
+                      AppWindow.instance?.hide();
                     } else {
-                      windowManager.minimize();
+                      AppWindow.instance?.minimize();
                     }
                   },
                   hoverColor: const Color.fromRGBO(144, 202, 249, 1),
@@ -90,17 +92,17 @@ class AppWindowTitleBar extends StatelessWidget {
                 const SizedBox(width: 2),
                 _WindowButton(
                   icon: Icons.fullscreen_rounded,
-                  onPressed: () async {
-                    final bool isFullScreen = await windowManager
-                        .isFullScreen();
-                    await windowManager.setFullScreen(!isFullScreen);
+                  onPressed: () {
+                    final window = AppWindow.instance;
+                    if (window == null) return;
+                    window.isFullScreen = !window.isFullScreen;
                   },
                   hoverColor: const Color.fromRGBO(144, 202, 249, 1),
                 ),
                 const SizedBox(width: 2),
                 _WindowButton(
                   icon: Icons.close,
-                  onPressed: () => windowManager.close(),
+                  onPressed: () => AppWindow.instance?.close(),
                   hoverColor: const Color.fromRGBO(239, 154, 154, 1),
                 ),
               ],

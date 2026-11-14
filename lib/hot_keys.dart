@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
 import '../page/playlist/playlist_content_notifier.dart';
+import 'window/app_window.dart';
 
 // 播放/暂停、下一首、上一首
 class PlayPauseIntent extends Intent {
@@ -163,18 +163,19 @@ class Hotkeys extends StatelessWidget {
             notifier.setVolume((notifier.volume - 3).clamp(0.0, 100.0));
           }),
           ToggleFullscreenIntent: PlayerHotkeyAction<ToggleFullscreenIntent>(
-            () async {
-              final isFullScreen = await windowManager.isFullScreen();
-              await windowManager.setFullScreen(!isFullScreen);
+            () {
+              final window = AppWindow.instance;
+              if (window == null) return;
+              window.isFullScreen = !window.isFullScreen;
             },
           ),
-          ExitFullscreenIntent: PlayerHotkeyAction<ExitFullscreenIntent>(
-            () async {
-              if (await windowManager.isFullScreen()) {
-                await windowManager.setFullScreen(false);
-              }
-            },
-          ),
+          ExitFullscreenIntent: PlayerHotkeyAction<ExitFullscreenIntent>(() {
+            final window = AppWindow.instance;
+            if (window == null) return;
+            if (window.isFullScreen) {
+              window.isFullScreen = false;
+            }
+          }),
         },
         child: child,
       ),

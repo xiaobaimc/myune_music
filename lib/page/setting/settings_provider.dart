@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../../lyrics/lyric_source.dart';
+import '../../window/single_instance.dart';
 
 // 自定义背景遮罩样式
 enum BackgroundMaskStyle { none, solid, glass }
@@ -101,6 +102,7 @@ class SettingsProvider with ChangeNotifier {
   bool _enableGaplessPlayback = false; // 默认不启用无缝播放
   bool _autoHidePlayPageComponents = false; // 默认不自动隐藏部分组件
   bool _autoCheckUpdates = true; // 默认启用启动时自动检查更新
+  bool _singleInstance = false; // 默认关闭单实例运行
 
   bool _enableCustomBackground = false; // 默认不启用自定义背景图
   String? _customBackgroundPath; // 自定义背景图文件路径
@@ -170,6 +172,7 @@ class SettingsProvider with ChangeNotifier {
   bool get enableGaplessPlayback => _enableGaplessPlayback;
   bool get autoHidePlayPageComponents => _autoHidePlayPageComponents;
   bool get autoCheckUpdates => _autoCheckUpdates; // 获取启动时自动检查更新设置
+  bool get singleInstance => _singleInstance; // 获取单实例运行设置
 
   bool get enableCustomBackground => _enableCustomBackground; // 获取自定义背景图开关
   String? get customBackgroundPath => _customBackgroundPath; // 获取自定义背景图路径
@@ -262,6 +265,8 @@ class SettingsProvider with ChangeNotifier {
         prefs.getBool(_autoHidePlayPageComponentsKey) ?? false;
     _autoCheckUpdates =
         prefs.getBool(_autoCheckUpdatesKey) ?? true; // 加载自动检查更新设置
+    _singleInstance =
+        prefs.getBool(kSingleInstancePrefsKey) ?? false; // 加载单实例运行设置
 
     // 加载自定义背景图设置
     _enableCustomBackground =
@@ -539,6 +544,18 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoCheckUpdatesKey, value);
+  }
+
+  void setSingleInstance(bool value) async {
+    if (_singleInstance == value) return;
+    _singleInstance = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kSingleInstancePrefsKey, value);
+    // 开启后让当前实例立即持有互斥量，无需重启即可生效
+    if (value) {
+      SingleInstance.claim();
+    }
   }
 
   void setLyricSourceOrder(List<String> order) async {

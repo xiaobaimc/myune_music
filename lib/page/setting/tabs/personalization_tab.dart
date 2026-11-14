@@ -106,6 +106,35 @@ class _PersonalizationTabState extends State<PersonalizationTab> {
               context.read<SettingsProvider>().setShowTaskbarProgress(value);
             },
           ),
+        // 单实例运行
+        if (Platform.isWindows)
+          SwitchListTile(
+            title: const Row(
+              children: [
+                Text('单实例运行'),
+                SizedBox(width: 4),
+                InfoIcon('启用后再次启动应用时会高亮已有窗口，而不是打开新窗口'),
+              ],
+            ),
+            value: settings.singleInstance,
+            onChanged: (value) {
+              context.read<SettingsProvider>().setSingleInstance(value);
+            },
+          ),
+        // 允许最小化到托盘
+        SwitchListTile(
+          title: const Row(
+            children: [
+              Text('允许最小化到托盘'),
+              SizedBox(width: 4),
+              InfoIcon('启用后点击最小化按钮将最小化到系统托盘'),
+            ],
+          ),
+          value: settings.minimizeToTray,
+          onChanged: (value) {
+            context.read<SettingsProvider>().setMinimizeToTray(value);
+          },
+        ),
         // 始终保持单行歌词显示
         SwitchListTile(
           title: Text(
