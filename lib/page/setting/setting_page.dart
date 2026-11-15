@@ -8,6 +8,8 @@ import 'tabs/hotkeys_tab.dart';
 import 'tabs/advanced_tab.dart';
 
 // 定义应用版本号常量
+// 发布新版本前实机测试一下Linux下的窗口、托盘、热键
+// 以及补充社区二改 readme 链接
 const String appVersion = '0.9.5';
 
 class SettingPage extends StatefulWidget {

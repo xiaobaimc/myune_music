@@ -4975,6 +4975,75 @@ class PlaylistContentNotifier extends ChangeNotifier {
     await _startPlaybackNow();
   }
 
+  // --- 从歌手/专辑/流派列表直接播放整组歌曲 ---
+
+  Future<void> playArtistGroup(String artistName) async {
+    await _playGroupSongs(
+      _applySavedOrder(
+        songsByArtist[artistName] ?? const <Song>[],
+        _artistSortOrders[artistName],
+      ),
+    );
+  }
+
+  Future<void> playAlbumGroup(String albumName) async {
+    await _playGroupSongs(
+      _applySavedOrder(
+        songsByAlbum[albumName] ?? const <Song>[],
+        _albumSortOrders[albumName],
+      ),
+    );
+  }
+
+  Future<void> playGenreGroup(String genreName) async {
+    await _playGroupSongs(
+      _applySavedOrder(
+        songsByGenre[genreName] ?? const <Song>[],
+        _genreSortOrders[genreName],
+      ),
+    );
+  }
+
+  Future<void> _playGroupSongs(List<Song> songs) async {
+    if (songs.isEmpty) {
+      return;
+    }
+
+    // 随机模式从组内随机一首开始 顺序/单曲循环从第一首开始
+    final startIndex = _playMode == PlayMode.shuffle
+        ? _random.nextInt(songs.length)
+        : 0;
+
+    // 直接播放分组时切回动态播放列表，避免继续沿用旧的独立队列
+    _isUsingQueue = false;
+    _currentPlayingQueue = null;
+    _currentPlayingQueueFilePaths = null;
+    _currentQueueIndex = -1;
+
+    await playFromDynamicList(songs, startIndex);
+  }
+
+  // 按已保存的自定义排序重排歌曲，并把后来新增的歌曲追加到末尾
+  List<Song> _applySavedOrder(List<Song> songs, List<String>? savedOrder) {
+    if (savedOrder == null || savedOrder.isEmpty) {
+      return List<Song>.from(songs);
+    }
+
+    final songMap = {for (final song in songs) song.filePath: song};
+    final orderedSongs = savedOrder
+        .map((path) => songMap[path])
+        .whereType<Song>()
+        .toList();
+
+    final existingPaths = orderedSongs.map((song) => song.filePath).toSet();
+    for (final song in songs) {
+      if (existingPaths.add(song.filePath)) {
+        orderedSongs.add(song);
+      }
+    }
+    return orderedSongs;
+  }
+
   // --- 分组歌曲 ---
 
   // 根据设置的自定义分隔符，将歌手字符串拆分为独立歌手
@@ -5059,25 +5128,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   Song? _getCoverSongForGroup(List<Song> songs, List<String>? savedOrder) {
-    List<Song> orderedSongs;
-
-    if (savedOrder != null && savedOrder.isNotEmpty) {
-      // 按保存的顺序重排歌曲
-      final songMap = {for (final song in songs) song.filePath: song};
-      orderedSongs = savedOrder
-          .map((path) => songMap[path])
-          .where((song) => song != null)
-          .cast<Song>()
-          .toList();
-      // 添加不在保存顺序中的新歌曲
-      for (final song in songs) {
-        if (!orderedSongs.contains(song)) {
-          orderedSongs.add(song);
-        }
-      }
-    } else {
-      orderedSongs = songs;
-    }
+    final orderedSongs = _applySavedOrder(songs, savedOrder);
 
     // 返回第一首封面已经在缓存里的歌曲
     // 否则退化为第一首，由列表项自己去申请封面

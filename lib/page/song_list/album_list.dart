@@ -6,6 +6,7 @@ import '../../theme/scroll_config.dart';
 import '../playlist/playlist_content_notifier.dart';
 import '../../widgets/song_cover.dart';
 import '../../widgets/single_line_lyrics.dart';
+import '../../widgets/hover_play_button.dart';
 import 'album_detail_view.dart';
 import '../../services/pinyin_cache.dart';
 import '../playlist/playlist_models.dart';
@@ -270,67 +271,95 @@ class _AlbumListState extends State<AlbumList> {
                                     // 封面已经从 Song 解耦，用第一首歌的封面代表专辑
                                     final representativeSong = songs.first;
 
-                                    return InkWell(
-                                      onTap: () {
-                                        if (_scrollController.hasClients) {
-                                          _savedScrollOffset =
-                                              _scrollController.offset;
-                                        }
-                                        notifier.setActiveAlbumView(albumName);
-                                      },
-                                      borderRadius: BorderRadius.circular(12.0),
-                                      child: Card(
-                                        clipBehavior: Clip.antiAlias,
-                                        elevation:
-                                            CustomBackgroundSurfaces.cardElevationOverBackground(
-                                              settings,
-                                            ),
-                                        color:
-                                            CustomBackgroundSurfaces.panelColor(
-                                              settings,
-                                              Theme.of(
-                                                context,
-                                              ).colorScheme.surfaceContainerLow,
-                                            ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: _AlbumCoverTile(
-                                                filePath:
-                                                    representativeSong.filePath,
+                                    return HoverPlayRegion(
+                                      builder: (context, hovered) => InkWell(
+                                        onTap: () {
+                                          if (_scrollController.hasClients) {
+                                            _savedScrollOffset =
+                                                _scrollController.offset;
+                                          }
+                                          notifier.setActiveAlbumView(
+                                            albumName,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(
+                                          12.0,
+                                        ),
+                                        child: Card(
+                                          clipBehavior: Clip.antiAlias,
+                                          elevation:
+                                              CustomBackgroundSurfaces.cardElevationOverBackground(
+                                                settings,
                                               ),
-                                            ),
-                                            Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
+                                          color:
+                                              CustomBackgroundSurfaces.panelColor(
+                                                settings,
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .surfaceContainerLow,
                                               ),
-                                              child: Text(
-                                                albumName,
-                                                style: Theme.of(
-                                                  context,
-                                                ).textTheme.titleMedium,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Stack(
+                                                  fit: StackFit.expand,
+                                                  children: [
+                                                    _AlbumCoverTile(
+                                                      filePath:
+                                                          representativeSong
+                                                              .filePath,
+                                                    ),
+                                                    Positioned(
+                                                      right: 8,
+                                                      bottom: 8,
+                                                      child: HoverPlayButton(
+                                                        visible: hovered,
+                                                        tooltip:
+                                                            '播放专辑 $albumName',
+                                                        onPressed: () =>
+                                                            notifier
+                                                                .playAlbumGroup(
+                                                                  albumName,
+                                                                ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8.0,
-                                                  ),
-                                              child: Text(
-                                                '共 ${songs.length} 首歌曲',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(
-                                                  context,
-                                                ).textTheme.bodySmall,
+                                              Padding(
+                                                padding: const EdgeInsets.all(
+                                                  8.0,
+                                                ),
+                                                child: Text(
+                                                  albumName,
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.titleMedium,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                          ],
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8.0,
+                                                    ),
+                                                child: Text(
+                                                  '共 ${songs.length} 首歌曲',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.bodySmall,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     );

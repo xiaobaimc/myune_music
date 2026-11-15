@@ -9,6 +9,7 @@ import '../playlist/playlist_content_notifier.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../../widgets/song_cover.dart';
 import '../../widgets/single_line_lyrics.dart';
+import '../../widgets/hover_play_button.dart';
 import 'artist_detail_view.dart';
 import '../setting/settings_provider.dart';
 import '../../widgets/custom_background_layer.dart';
@@ -260,24 +261,32 @@ class _ArtistListState extends State<ArtistList> {
                                         ) ??
                                         songs.first;
 
-                                    return ListTile(
-                                      leading: _ArtistCoverAvatar(
-                                        filePath: representativeSong.filePath,
-                                      ),
-                                      title: Text(artistName),
-                                      subtitle: Text('共 ${songs.length} 首歌曲'),
-                                      onTap: () {
-                                        if (_scrollController.hasClients) {
-                                          _savedScrollOffset =
-                                              _scrollController.offset;
-                                        }
-                                        notifier.setActiveArtistView(
-                                          artistName,
-                                        );
-                                      },
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          12.0,
+                                    return HoverPlayRegion(
+                                      builder: (context, hovered) => ListTile(
+                                        leading: _ArtistCoverAvatar(
+                                          filePath: representativeSong.filePath,
+                                        ),
+                                        title: Text(artistName),
+                                        subtitle: Text('共 ${songs.length} 首歌曲'),
+                                        trailing: HoverPlayButton(
+                                          visible: hovered,
+                                          tooltip: '播放 $artistName 的歌曲',
+                                          onPressed: () => notifier
+                                              .playArtistGroup(artistName),
+                                        ),
+                                        onTap: () {
+                                          if (_scrollController.hasClients) {
+                                            _savedScrollOffset =
+                                                _scrollController.offset;
+                                          }
+                                          notifier.setActiveArtistView(
+                                            artistName,
+                                          );
+                                        },
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12.0,
+                                          ),
                                         ),
                                       ),
                                     );

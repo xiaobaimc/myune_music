@@ -9,6 +9,7 @@ import '../playlist/playlist_content_notifier.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../../widgets/single_line_lyrics.dart';
 import '../../widgets/song_cover.dart';
+import '../../widgets/hover_play_button.dart';
 import 'genre_detail_view.dart';
 import '../setting/settings_provider.dart';
 import '../../widgets/custom_background_layer.dart';
@@ -331,23 +332,33 @@ class _GenreListState extends State<GenreList> {
                                         ) ??
                                         songs.first;
 
-                                    return ListTile(
-                                      leading: _GenreCoverAvatar(
-                                        filePath: representativeSong.filePath,
-                                        genreName: genreName,
-                                      ),
-                                      title: Text(genreName),
-                                      subtitle: Text('共 ${songs.length} 首歌曲'),
-                                      onTap: () {
-                                        if (_scrollController.hasClients) {
-                                          _savedScrollOffset =
-                                              _scrollController.offset;
-                                        }
-                                        notifier.setActiveGenreView(genreName);
-                                      },
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          12.0,
+                                    return HoverPlayRegion(
+                                      builder: (context, hovered) => ListTile(
+                                        leading: _GenreCoverAvatar(
+                                          filePath: representativeSong.filePath,
+                                          genreName: genreName,
+                                        ),
+                                        title: Text(genreName),
+                                        subtitle: Text('共 ${songs.length} 首歌曲'),
+                                        trailing: HoverPlayButton(
+                                          visible: hovered,
+                                          tooltip: '播放 $genreName 流派的歌曲',
+                                          onPressed: () => notifier
+                                              .playGenreGroup(genreName),
+                                        ),
+                                        onTap: () {
+                                          if (_scrollController.hasClients) {
+                                            _savedScrollOffset =
+                                                _scrollController.offset;
+                                          }
+                                          notifier.setActiveGenreView(
+                                            genreName,
+                                          );
+                                        },
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12.0,
+                                          ),
                                         ),
                                       ),
                                     );
