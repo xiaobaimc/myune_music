@@ -6,6 +6,7 @@ import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 import 'package:provider/provider.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
+import '../window/app_freeze.dart';
 
 class BalanceRateControl extends StatelessWidget {
   final Player player;
@@ -508,18 +509,28 @@ class BalanceRateControl extends StatelessWidget {
                       }
 
                       if (needsPicker) {
-                        final result = await FilePicker.platform.pickFiles(
-                          type: FileType.custom,
-                          allowedExtensions: ['rnnn'],
-                          dialogTitle: '选择 RNN 降噪模型文件',
-                        );
-                        if (result == null ||
-                            result.files.single.path == null) {
+                        String? modelPath;
+                        try {
+                          final file = await AppFreeze.during(
+                            () => FilePicker.pickFile(
+                              type: FileType.custom,
+                              allowedExtensions: const ['rnnn'],
+                              dialogTitle: '选择 RNN 降噪模型文件',
+                              windowsOptions: kWindowsPickerOptions,
+                              linuxOptions: const LinuxOptions(
+                                lockParentWindow: true,
+                              ),
+                            ),
+                          );
+                          modelPath = file?.path;
+                        } catch (e) {
+                          notifier.showNotification('打开文件选择窗口失败：$e');
                           return;
                         }
-                        await notifier.setArnndnModelPath(
-                          result.files.single.path!,
-                        );
+                        if (modelPath == null) {
+                          return;
+                        }
+                        await notifier.setArnndnModelPath(modelPath);
                       }
                     }
                     await notifier.toggleEffect(id, enabled);

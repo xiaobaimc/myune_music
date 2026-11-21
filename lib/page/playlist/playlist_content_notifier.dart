@@ -30,6 +30,7 @@ import '../../services/search_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../utils/search_debouncer.dart';
 import '../../lyrics/lyrics_handler.dart';
+import '../../window/app_freeze.dart';
 
 enum SortCriterion { title, artist, dateModified, file, random, trackNumber }
 
@@ -1685,45 +1686,53 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     final bool allowAnyFormat = _settingsProvider.allowAnyFormat;
 
-    FilePickerResult? result;
-    if (allowAnyFormat) {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: true,
-        lockParentWindow: true,
+    const linuxOptions = LinuxOptions(lockParentWindow: true);
+    const allowedExtensions = [
+      'wav',
+      'wady',
+      'wavarc',
+      'flac',
+      'alac',
+      'ape',
+      'mp3',
+      'aac',
+      'm4a',
+      'ogg',
+      'opus',
+      'wma',
+      'aiff',
+      'pcm',
+    ];
+
+    List<PlatformFile> files;
+    try {
+      files = await AppFreeze.during(
+        () => allowAnyFormat
+            ? FilePicker.pickFiles(
+                type: FileType.any,
+                windowsOptions: kWindowsPickerOptions,
+                linuxOptions: linuxOptions,
+              )
+            : FilePicker.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: allowedExtensions,
+                windowsOptions: kWindowsPickerOptions,
+                linuxOptions: linuxOptions,
+              ),
       );
-    } else {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: [
-          'wav',
-          'wady',
-          'wavarc',
-          'flac',
-          'alac',
-          'ape',
-          'mp3',
-          'aac',
-          'm4a',
-          'ogg',
-          'opus',
-          'wma',
-          'aiff',
-          'pcm',
-        ],
-        allowMultiple: true,
-        lockParentWindow: true,
-      );
+    } catch (e) {
+      _notificationService.error('打开文件选择窗口失败：$e');
+      return false;
     }
 
-    if (result == null) {
+    if (files.isEmpty) {
       return false; // 用户取消
     }
 
     final currentPlaylist = _playlists[_selectedIndex];
     final List<String> newSongPaths = [];
 
-    for (final platformFile in result.files) {
+    for (final platformFile in files) {
       if (platformFile.path != null) {
         final pathToAdd = p.normalize(platformFile.path!);
         if (!currentPlaylist.songFilePaths.contains(pathToAdd)) {
@@ -1738,7 +1747,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
       return true; // 真的有添加
     }
     // 如果确实选择了文件，但 newSongPaths 为空，说明选择是重复歌曲
-    else if (result.files.isNotEmpty) {
+    else if (files.isNotEmpty) {
       _notificationService.info('所选歌曲已存在于当前歌单中');
       return false;
     }

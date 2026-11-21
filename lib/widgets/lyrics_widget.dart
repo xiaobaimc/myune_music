@@ -83,6 +83,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   // 非当前行的行内容缓存
   final Map<int, _ElasticRowCacheEntry> _elasticRowCache =
       <int, _ElasticRowCacheEntry>{};
+  // 正在等待波浪延迟启动弹簧的行索引（未真正开始弹动前不应判定为 atRest）
+  final Set<int> _elasticPendingIndices = <int>{};
   int _elasticAnimationGeneration = 0;
 
   // 最近一次布局用的顶部填充高度
@@ -264,6 +266,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
       );
 
       final int animateTarget = widget.currentIndex;
+      if (!_isUserScrolling && _hasValidElasticIndex) {
+        _elasticPendingIndices.add(widget.currentIndex);
+        if (previousIndex >= 0 && previousIndex < widget.lyrics.length) {
+          _elasticPendingIndices.add(previousIndex);
+        }
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || widget.currentIndex != animateTarget) return;
         _animateElasticToCurrent(previousIndex: previousIndex);
@@ -463,11 +471,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     bool isCurrent,
     double blurStrength,
   ) {
-    if (!shouldBlur || isCurrent) return 0.0;
+    if (!shouldBlur || isCurrent || distance <= 0) return 0.0;
 
     const int maxDistance = 5;
     final double normalizedDistance = (distance / maxDistance).clamp(0.0, 1.0);
-    return normalizedDistance * blurStrength;
+    return math.pow(normalizedDistance, 0.8).toDouble() * blurStrength;
   }
 
   // 长音节辉光：字比背景亮就往白里晕，比背景暗就往黑里晕
@@ -548,6 +556,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     required ColorScheme colorScheme,
     required double blurStrength,
     bool enableFloating = true,
+    Duration blurDuration = kLyricBlurTransitionDuration,
+    Curve blurCurve = kLyricBlurTransitionCurve,
+    Duration blurDelay = Duration.zero,
   }) {
     final line = widget.lyrics[lyricIndex];
     final bool isCurrent = lyricIndex == widget.currentIndex;
@@ -625,6 +636,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
           final List<LyricToken> tokens = line.tokens![tokenGroupIndex];
           lineWidget = AnimatedLyricBlur(
             targetSigma: blurSigma,
+            duration: blurDuration,
+            curve: blurCurve,
+            delay: blurDelay,
             builder: (double sigma) => withHighlight(
               (double factor) => _buildMultiLineKaraokeRichText(
                 [tokens],
@@ -649,6 +663,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
               : line.texts[i];
           lineWidget = AnimatedLyricBlur(
             targetSigma: blurSigma,
+            duration: blurDuration,
+            curve: blurCurve,
+            delay: blurDelay,
             builder: (double sigma) => withHighlight(
               (double factor) => _buildStaticLyricText(
                 text: displayText,
@@ -689,6 +706,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
       columnChildren.add(
         AnimatedLyricBlur(
           targetSigma: blurSigma,
+          duration: blurDuration,
+          curve: blurCurve,
+          delay: blurDelay,
           builder: (double sigma) => withHighlight(
             (double factor) => _buildMultiLineKaraokeRichText(
               tokensToRender,
@@ -716,6 +736,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
         final Widget staticText = AnimatedLyricBlur(
           targetSigma: blurSigma,
+          duration: blurDuration,
+          curve: blurCurve,
+          delay: blurDelay,
           builder: (double sigma) => withHighlight(
             (double factor) => _buildStaticLyricText(
               text: line.texts[i],
@@ -757,6 +780,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
           final Widget translationWidget = AnimatedLyricBlur(
             targetSigma: blurSigma,
+            duration: blurDuration,
+            curve: blurCurve,
+            delay: blurDelay,
             builder: (double sigma) => withHighlight(
               (double factor) => _buildStaticLyricText(
                 text: line.texts[i],
@@ -950,6 +976,23 @@ class _LyricsWidgetState extends State<LyricsWidget>
       colorScheme,
     );
 
+    // 弹性分支的模糊过渡参数：同步波浪延迟，并拉长时长贴合弹簧收敛节奏
+    // 手动滚动（shouldBlur == false）时立刻取消模糊，不附加延迟
+    final bool syncBlurWave =
+        shouldBlur && _shouldTriggerElasticWave(_previousIndex);
+    final int blurAnchorIndex = syncBlurWave
+        ? _estimateElasticAnchorIndex(viewportHeight)
+        : widget.currentIndex;
+    final int blurVisibleTopIndex = syncBlurWave
+        ? _findElasticVisibleTopIndex()
+        : widget.currentIndex;
+    final Duration elasticBlurDuration = shouldBlur
+        ? kElasticLyricBlurTransitionDuration
+        : kLyricBlurTransitionDuration;
+    final Curve elasticBlurCurve = shouldBlur
+        ? kElasticLyricBlurTransitionCurve
+        : kLyricBlurTransitionCurve;
+
     return Listener(
       onPointerSignal: _onElasticPointerSignal,
       onPointerDown: _onElasticPointerDown,
@@ -997,6 +1040,19 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   if (cached != null && cached.hash == rowHash) {
                     row = cached.widget;
                   } else {
+                    // 非当前行同步波浪延迟；当前行随高亮淡入立即去模糊
+                    final Duration blurDelay = (syncBlurWave && !isCurrent)
+                        ? Duration(
+                            milliseconds:
+                                (_elasticDelayFromAnchor(
+                                          index,
+                                          blurAnchorIndex,
+                                          visibleTopIndex: blurVisibleTopIndex,
+                                        ) *
+                                        1000)
+                                    .toInt(),
+                          )
+                        : Duration.zero;
                     row = _buildLyricItem(
                       lyricIndex: index,
                       distance: distance,
@@ -1009,6 +1065,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       colorScheme: colorScheme,
                       blurStrength: blurStrength,
                       enableFloating: enableFloating,
+                      blurDuration: elasticBlurDuration,
+                      blurCurve: elasticBlurCurve,
+                      blurDelay: blurDelay,
                     );
                     if (isCurrent || isExitingRow) {
                       _elasticRowCache.remove(index);
@@ -1032,7 +1091,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         ),
                       ),
                       builder: (BuildContext context, Widget? child) {
-                        final double paintOffset = controller.value;
+                        // 仅在启用上浮动画时才在静止期切回默认过滤，避免上浮动画相关异常
+                        final bool snapping =
+                            enableFloating && (isCurrent || isExitingRow);
+                        final bool atRest =
+                            snapping &&
+                            !controller.isAnimating &&
+                            !_elasticPendingIndices.contains(index) &&
+                            !_isElasticPointerDragging &&
+                            !_isUserScrolling;
+                        final double paintOffset = atRest
+                            ? controller.value.roundToDouble()
+                            : controller.value;
                         // 视口外的行不参与绘制
                         final double rowHeight =
                             index < _elasticItemHeights.length
@@ -1042,7 +1112,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             paintOffset + rowHeight < -cullMargin ||
                             paintOffset > viewportHeight + cullMargin;
                         return Transform.translate(
-                          filterQuality: FilterQuality.low, // 双线性过滤，解决文字抖动
+                          filterQuality: atRest
+                              ? null
+                              : FilterQuality.low, // 滚动时双线性过滤，解决文字抖动
                           offset: Offset(0, paintOffset),
                           child: Opacity(
                             opacity: offscreen ? 0.0 : 1.0,
@@ -1311,6 +1383,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _startElasticUserScroll();
     // 更新动画代数，防止冲突
     _elasticAnimationGeneration++;
+    _elasticPendingIndices.clear();
     // 直接写控制器值即可，每行的 AnimatedBuilder 会自己刷新位移
     for (int i = 0; i < _elasticControllers.length; i++) {
       final controller = _elasticControllers[i];
@@ -1374,12 +1447,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!_hasValidElasticIndex) return;
 
     _elasticAnimationGeneration++;
+    _elasticPendingIndices.clear();
     final double center =
         (viewportHeight ?? _currentViewportHeight) * 0.38; // 高亮在0.38的位置
     final double offsetToCenter =
         center - _elasticBaseYPositions[widget.currentIndex];
     for (int i = 0; i < _elasticControllers.length; i++) {
-      final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
+      final double targetY = (_elasticBaseYPositions[i] + offsetToCenter)
+          .roundToDouble();
       _elasticControllers[i].stop();
       _elasticControllers[i].value = targetY;
     }
@@ -1393,24 +1468,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final double offsetToCenter =
         center - _elasticBaseYPositions[widget.currentIndex];
 
-    // 上一行移动的行数与时间差
-    final int fromIndex = previousIndex ?? _previousIndex;
-    final int lineDiff = (widget.currentIndex - fromIndex).abs();
-
-    int timeDiffMs = 1000;
-    if (fromIndex >= 0 &&
-        fromIndex < widget.lyrics.length &&
-        widget.currentIndex >= 0 &&
-        widget.currentIndex < widget.lyrics.length) {
-      timeDiffMs =
-          (widget.lyrics[widget.currentIndex].timestamp -
-                  widget.lyrics[fromIndex].timestamp)
-              .abs()
-              .inMilliseconds;
-    }
-
     // 小于500毫秒或大于7行，不同步延迟
-    final bool shouldTriggerWave = timeDiffMs >= 500 && lineDiff <= 7;
+    final bool shouldTriggerWave = _shouldTriggerElasticWave(
+      previousIndex ?? _previousIndex,
+    );
 
     final springDesc = SpringDescription.withDampingRatio(
       mass: 1.0,
@@ -1420,13 +1481,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
     const tolerance = Tolerance(distance: 0.1, velocity: 0.5);
 
     final int generation = ++_elasticAnimationGeneration;
+    _elasticPendingIndices.clear();
     final int anchorIndex = _estimateElasticAnchorIndex(vh);
+    final int visibleTopIndex = _findElasticVisibleTopIndex();
 
-    void startSpringAnimation(AnimationController controller, double targetY) {
+    bool startSpringAnimation(AnimationController controller, double targetY) {
       if ((controller.value - targetY).abs() < 0.1) {
         controller.value = targetY;
         controller.stop();
-        return;
+        return false;
       }
 
       final double currentVelocity =
@@ -1447,17 +1510,28 @@ class _LyricsWidgetState extends State<LyricsWidget>
           controller.value = targetY;
         }
       });
+      return true;
     }
 
     for (int i = 0; i < widget.lyrics.length; i++) {
       if (i >= _elasticControllers.length) break;
 
-      final double targetY = _elasticBaseYPositions[i] + offsetToCenter;
+      final double targetY = (_elasticBaseYPositions[i] + offsetToCenter)
+          .roundToDouble();
       final double executionDelay = shouldTriggerWave
-          ? _elasticDelayFromAnchor(i, anchorIndex)
+          ? _elasticDelayFromAnchor(
+              i,
+              anchorIndex,
+              visibleTopIndex: visibleTopIndex,
+            )
           : 0.0;
 
       if (executionDelay > 0.0) {
+        final AnimationController controller = _elasticControllers[i];
+        if ((controller.value - targetY).abs() >= 0.1 ||
+            controller.isAnimating) {
+          _elasticPendingIndices.add(i);
+        }
         Future.delayed(
           Duration(milliseconds: (executionDelay * 1000).toInt()),
           () {
@@ -1467,7 +1541,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
               return;
             }
 
-            startSpringAnimation(_elasticControllers[i], targetY);
+            final bool wasPending = _elasticPendingIndices.remove(i);
+            final bool started = startSpringAnimation(
+              _elasticControllers[i],
+              targetY,
+            );
+            // 若延迟结束后已在目标位置未启动弹簧，主动刷新一次以恢复 atRest
+            if (wasPending && !started && mounted) {
+              setState(() {});
+            }
           },
         );
       } else {
@@ -1476,25 +1558,48 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  // 计算从锚点到指定索引的延迟时间
-  double _elasticDelayFromAnchor(int index, int anchorIndex) {
-    int visibleTopIndex = widget.currentIndex;
+  bool _shouldTriggerElasticWave(int fromIndex) {
+    final int lineDiff = (widget.currentIndex - fromIndex).abs();
+    int timeDiffMs = 1000;
+    if (fromIndex >= 0 &&
+        fromIndex < widget.lyrics.length &&
+        widget.currentIndex >= 0 &&
+        widget.currentIndex < widget.lyrics.length) {
+      timeDiffMs =
+          (widget.lyrics[widget.currentIndex].timestamp -
+                  widget.lyrics[fromIndex].timestamp)
+              .abs()
+              .inMilliseconds;
+    }
+    return timeDiffMs >= 500 && lineDiff <= 7;
+  }
+
+  int _findElasticVisibleTopIndex() {
     for (int i = 0; i < _elasticControllers.length; i++) {
       // 当 value >= -20 时，说明它刚刚好处于屏幕顶端边缘或刚进入屏幕
       if (_elasticControllers[i].value >= -20) {
-        visibleTopIndex = i;
-        break;
+        return i;
       }
     }
+    return widget.currentIndex;
+  }
 
-    if (index <= visibleTopIndex) return 0.0;
+  // 计算从锚点到指定索引的延迟时间
+  double _elasticDelayFromAnchor(
+    int index,
+    int anchorIndex, {
+    int? visibleTopIndex,
+  }) {
+    final int topIndex = visibleTopIndex ?? _findElasticVisibleTopIndex();
+
+    if (index <= topIndex) return 0.0;
     if (index <= anchorIndex) return 0.0;
 
     double delay = 0.0;
     double step = 0.05;
 
     final double baseHeight = _estimatedElasticItemHeight;
-    final int startLoopIndex = math.max(visibleTopIndex, anchorIndex);
+    final int startLoopIndex = math.max(topIndex, anchorIndex);
 
     for (int i = startLoopIndex; i < index; i++) {
       if (_isCollapsedInterlude(i)) continue;
@@ -1559,6 +1664,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   void _resetElasticState() {
     _elasticAnimationGeneration++;
+    _elasticPendingIndices.clear();
     _elasticRowCache.clear();
     _disposeElasticControllers();
     _elasticItemKeys

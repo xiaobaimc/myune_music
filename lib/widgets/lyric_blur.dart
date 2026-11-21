@@ -1,18 +1,45 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
 
-// 0.5 以下的 sigma 无法用 blurRadius 表达（倒推半径会是负数）
-// 这里统一折成 0，相当于给模糊留了一小段不可见区间
-const double _kMinRepresentableSigma = 0.5;
-const double _kRadiusToSigmaFactor = 0.57735;
+import 'package:flutter/widgets.dart';
 
 const Duration kLyricBlurTransitionDuration = Duration(milliseconds: 240);
 
 const Curve kLyricBlurTransitionCurve = Curves.easeOutCubic;
 
-const double _kSigmaGridPerUnit = 20.0;
+// 弹性滚动弹簧收敛更慢，用更长时长与缓入缓出曲线贴合波浪节奏
+const Duration kElasticLyricBlurTransitionDuration = Duration(
+  milliseconds: 400,
+);
 
-double quantizeLyricBlurSigma(double sigma) =>
-    (sigma * _kSigmaGridPerUnit).roundToDouble() / _kSigmaGridPerUnit;
+const Curve kElasticLyricBlurTransitionCurve = Curves.easeInOutCubic;
+
+const double _kSigmaGridPerUnit = 20.0;
+const int _kMaxBlurPaintCacheSize = 256;
+
+final Map<(int, int), Paint> _blurPaintCache = <(int, int), Paint>{};
+
+double quantizeLyricBlurSigma(double sigma) => sigma <= 0.0
+    ? 0.0
+    : (sigma * _kSigmaGridPerUnit).roundToDouble() / _kSigmaGridPerUnit;
+
+Paint _cachedBlurPaint(Color color, double quantizedSigma) {
+  final int sigmaBucket = (quantizedSigma * _kSigmaGridPerUnit).round();
+  final (int, int) key = (color.toARGB32(), sigmaBucket);
+  final Paint? existing = _blurPaintCache.remove(key);
+  if (existing != null) {
+    _blurPaintCache[key] = existing;
+    return existing;
+  }
+
+  final Paint paint = Paint()
+    ..color = color
+    ..maskFilter = MaskFilter.blur(BlurStyle.normal, quantizedSigma);
+  if (_blurPaintCache.length >= _kMaxBlurPaintCacheSize) {
+    _blurPaintCache.remove(_blurPaintCache.keys.first);
+  }
+  _blurPaintCache[key] = paint;
+  return paint;
+}
 
 TextStyle buildLyricTextStyle({
   required Color lineColor,
@@ -20,13 +47,12 @@ TextStyle buildLyricTextStyle({
   required FontWeight fontWeight,
   required double blurSigma,
 }) {
-  final double radius = lyricShadowRadiusForSigma(blurSigma);
-  if (radius > 0.0) {
+  final double quantizedSigma = quantizeLyricBlurSigma(blurSigma);
+  if (quantizedSigma > 0.0) {
     return TextStyle(
       fontSize: fontSize,
       height: 1.2,
-      color: const Color(0x00000000),
-      shadows: <Shadow>[Shadow(color: lineColor, blurRadius: radius)],
+      foreground: _cachedBlurPaint(lineColor, quantizedSigma),
       fontWeight: fontWeight,
     );
   }
@@ -38,18 +64,14 @@ TextStyle buildLyricTextStyle({
   );
 }
 
-double lyricShadowRadiusForSigma(double sigma) =>
-    sigma <= _kMinRepresentableSigma
-    ? 0.0
-    : (sigma - _kMinRepresentableSigma) / _kRadiusToSigmaFactor;
-
-class AnimatedLyricBlur extends StatelessWidget {
+class AnimatedLyricBlur extends StatefulWidget {
   const AnimatedLyricBlur({
     super.key,
     required this.targetSigma,
     required this.builder,
     this.duration = kLyricBlurTransitionDuration,
     this.curve = kLyricBlurTransitionCurve,
+    this.delay = Duration.zero,
   });
 
   final double targetSigma;
@@ -59,15 +81,55 @@ class AnimatedLyricBlur extends StatelessWidget {
 
   final Duration duration;
   final Curve curve;
+  final Duration delay;
+
+  @override
+  State<AnimatedLyricBlur> createState() => _AnimatedLyricBlurState();
+}
+
+class _AnimatedLyricBlurState extends State<AnimatedLyricBlur> {
+  late double _effectiveTargetSigma = widget.targetSigma;
+  Timer? _delayTimer;
+
+  @override
+  void didUpdateWidget(covariant AnimatedLyricBlur oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.targetSigma == oldWidget.targetSigma) return;
+
+    _delayTimer?.cancel();
+    _delayTimer = null;
+
+    if (widget.delay <= Duration.zero) {
+      _effectiveTargetSigma = widget.targetSigma;
+    } else {
+      final double nextTarget = widget.targetSigma;
+      _delayTimer = Timer(widget.delay, () {
+        _delayTimer = null;
+        if (!mounted) return;
+        setState(() {
+          _effectiveTargetSigma = nextTarget;
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _delayTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: targetSigma, end: targetSigma),
-      duration: duration,
-      curve: curve,
+      tween: Tween<double>(
+        begin: _effectiveTargetSigma,
+        end: _effectiveTargetSigma,
+      ),
+      duration: widget.duration,
+      curve: widget.curve,
       builder: (BuildContext context, double sigma, Widget? _) =>
-          builder(quantizeLyricBlurSigma(sigma)),
+          widget.builder(quantizeLyricBlurSigma(sigma)),
     );
   }
 }

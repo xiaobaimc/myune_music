@@ -37,6 +37,14 @@
 * 🔍 支持模糊搜索拼音搜索与首拼搜索
 * 🎤 支持实时音频分析 (该页面默认被隐藏，可在 设置 → 个性化 → 页面可见性设置 手动开启)
 
+## 🌐 社区衍生版本
+
+> 这些版本由社区开发者独立维护，如果有对应平台的使用问题或 Bug，请直接前往对应仓库提交 Issue
+
+- [myune_music_android](https://github.com/baishu136/myune_music_android)
+
+Myune Music Android 手机与平板适配版，基于 xiaobaimc/myune_music 0.9.3 构建
+
 ## 🔧关于 Linux
 
 对于0.9.1及以下的版本，需要安装 `libmpv`

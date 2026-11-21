@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
 import 'setting_page.dart';
+import 'dart:math';
 
 class About extends StatelessWidget {
   const About({super.key});
@@ -41,10 +42,54 @@ class About extends StatelessWidget {
                 context: context,
                 applicationName: 'Myune Music',
                 applicationVersion: 'v$appVersion',
-                applicationIcon: Image.asset(
-                  'assets/images/icon/logo.png',
-                  width: 48,
-                  height: 48,
+                applicationIcon: StatefulBuilder(
+                  builder: (context, setState) {
+                    // 随机抽取一幅画
+                    final randomArt =
+                        _easterEggArts[Random().nextInt(_easterEggArts.length)];
+
+                    return MouseRegion(
+                      // 开盲盒！
+                      onEnter: (_) => setState(() {}),
+                      child: Tooltip(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        showDuration: const Duration(seconds: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E2E),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        richMessage: TextSpan(
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontFamilyFallback: [
+                              'Consolas',
+                              'Courier New',
+                              'Menlo',
+                            ],
+                            fontSize: 11,
+                            height: 1.15,
+                            color: Color(0xFFA6E3A1),
+                          ),
+                          text: randomArt,
+                        ),
+                        child: Image.asset(
+                          'assets/images/icon/logo.png',
+                          width: 48,
+                          height: 48,
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 applicationLegalese: '© 2025 Myune Music · Apache License 2.0',
                 children: [
@@ -143,3 +188,119 @@ class About extends StatelessWidget {
     );
   }
 }
+
+const List<String> _easterEggArts = [
+  r'''
+*    .  *       .             *
+     *        .        *       .
+ .        *          .    _.._        *
+       .         .' .-'`    .      *
+          .     /  /      *            .
+         .     |  |   .        *
+    .           \  '.___.;       .
+          .      '._  _.'   .        *
+                    ``
+       /\
+      /  \       /\        *        .
+     /    \     /  \   /\
+    /      \   /    \ /  \
+   /   /\   \ /      \    \
+  /   /  \   /   /\   \    \
+ /   /    \ /   /  \   \    \
+/___/______\___/____\___\____\
+~  ~   ~    ~   ~   ~   ~   ~
+  ~   ~   ~     /|    ~   ~
+~   ~   ~      / |  ~    ~
+    ~   ~     /__|__   ~   ~
+  ~   ~     \________/   ~   ~
+~   ~   ~ ~~~~~~~~~~~~~~ ~   ~''',
+
+  r'''
+   .-----------------------.
+  /      .-----------.      \
+ |      /   .-----.   \      |
+ |     |   /  .-.  \   |     |
+ |     |  |  ( o )  |  |     |
+ |     |   \  '-'  /   |     |
+ |      \   '-----'   /      |
+  \      '-----------'   O  /
+   '-----------------------'
+      ♪   ♫   ♪   ♫   ♪''',
+
+  r'''
+  .-------------------------.
+  |  _____________________  |
+  | |  (o)           (o)  | |
+  | |_____________________| |
+  |      /  _       _  \    |
+  |_____/__|_|_____|_|__\___|''',
+
+  r'''
+      |\      _,,,---,,_
+ZZZzz /,`.-'`'    -.  ;-;;,_
+     |,4-  ) )-,_. ,\ (  `'-'
+    '---''(_/--'  `-'\_)''',
+
+  r'''
+          _.-"""-._
+        .'  _   _  '.
+       /   (_) (_)   \
+  .---'---------------'---.
+ (   o    o    o    o     )
+  '-.._______________..-'
+        /   |   \
+       /    |    \
+      /     |     \''',
+
+  r'''
+      .      *        .       *
+   *       .    *   .      *
+          .   (  )   .   *
+             (    )
+            (  /\  )     .
+         .   )/  \(   .
+       _.___//____\\___._
+      /__________________\''',
+
+  r'''
+           ♪        ♫
+      |\__/,|   (`\     .
+    _.|o o  |_   ) )  *
+  -(((---(((--------.
+  |  [===========]  |
+  |  |  .-----.  |  |
+  |__|__|_____|__|__|''',
+
+  r'''
+         .---.
+        /     \     ♪
+       |   O   |  ♫
+        \     / .---.
+         '---'-'     |
+            \       /
+           ._'-----'_.
+          |  [=====]  |
+          |___________|''',
+
+  r'''
+        *     .   _._     *
+     v           |_|_|        .
+          v     /     \    *
+               |  [ ]  |
+        .      |       |
+              /         \
+      _______/___________\_______
+    ~   ~   ~   ~   ~   ~   ~   ~
+      ~   ~   ~   ~   ~   ~   ~''',
+
+  r'''
+      .-------.   .-----------.
+     /  .-----'   '------.    /
+    /  /                /    /
+   |  | .----.         /    /
+   |  |/  .-. \       /    /
+   |     /   \ |     /    /
+    \    \   / /    /    /
+     '----'-' /    /____/
+      '------'    '----''',
+];

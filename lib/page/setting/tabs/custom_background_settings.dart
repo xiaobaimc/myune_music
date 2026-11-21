@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../../services/notification_service.dart';
 import '../../../theme/theme_provider.dart';
+import '../../../window/app_freeze.dart';
 import '../settings_provider.dart';
 import 'info_icon.dart';
 
@@ -68,15 +69,25 @@ class _CustomBackgroundSettingsState extends State<CustomBackgroundSettings> {
     if (_picking) return;
     setState(() => _picking = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'jfif'],
-        allowMultiple: false,
-        dialogTitle: '选择背景图片',
-        lockParentWindow: true,
+      final file = await AppFreeze.during(
+        () => FilePicker.pickFile(
+          type: FileType.custom,
+          allowedExtensions: const [
+            'jpg',
+            'jpeg',
+            'png',
+            'webp',
+            'bmp',
+            'gif',
+            'jfif',
+          ],
+          dialogTitle: '选择背景图片',
+          windowsOptions: kWindowsPickerOptions,
+          linuxOptions: const LinuxOptions(lockParentWindow: true),
+        ),
       );
 
-      final path = result?.files.single.path;
+      final path = file?.path;
       if (path == null || !mounted) return;
 
       final notification = context.read<NotificationService>();

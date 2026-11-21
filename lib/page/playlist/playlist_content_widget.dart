@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:silky_scroll/silky_scroll.dart';
 import '../../theme/scroll_config.dart';
 
@@ -12,6 +13,7 @@ import '../../widgets/sort_dialog.dart';
 import '../setting/settings_provider.dart';
 import '../../layout/navigation_notifier.dart';
 import '../../services/notification_service.dart';
+import '../../window/app_freeze.dart';
 import '../../widgets/custom_background_layer.dart';
 import '../../widgets/locate_playing_song_button.dart';
 import '../../widgets/song_cover.dart';
@@ -360,14 +362,28 @@ class _FolderManagementWidgetState extends State<_FolderManagementWidget> {
           children: [
             ElevatedButton.icon(
               onPressed: () async {
-                final folder = await FilePicker.platform.getDirectoryPath(
-                  dialogTitle: '请选择文件夹',
-                  lockParentWindow: true,
-                );
-                if (folder != null) {
-                  if (!widget.selectedFolders.contains(folder)) {
+                String? folder;
+                try {
+                  final directory = await AppFreeze.during(
+                    () => FilePicker.pickDirectory(
+                      dialogTitle: '请选择文件夹',
+                      windowsOptions: kWindowsPickerOptions,
+                      linuxOptions: const LinuxOptions(lockParentWindow: true),
+                    ),
+                  );
+                  folder = directory == null
+                      ? null
+                      : p.normalize(directory.toFilePath());
+                } catch (e) {
+                  if (!context.mounted) return;
+                  context.read<NotificationService>().error('打开文件夹选择窗口失败：$e');
+                  return;
+                }
+                final selected = folder;
+                if (selected != null && selected.isNotEmpty) {
+                  if (!widget.selectedFolders.contains(selected)) {
                     setState(() {
-                      widget.selectedFolders.add(folder);
+                      widget.selectedFolders.add(selected);
                     });
                     widget.onFoldersChanged();
                   }

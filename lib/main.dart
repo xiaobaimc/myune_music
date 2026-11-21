@@ -45,6 +45,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'page/statistics_page/statistics_manager.dart';
 import 'layout/navigation_notifier.dart';
 import 'services/license_service.dart';
+import 'window/app_freeze.dart';
 import 'window/app_window.dart';
 import 'window/single_instance.dart';
 
@@ -509,9 +510,11 @@ class _MyAppState extends State<MyApp> {
           darkTheme: themeProvider.darkThemeData,
           themeMode: themeProvider.themeMode,
           builder: (context, materialAppChild) {
-            return DragToResizeArea(
-              window: AppWindow.instance,
-              child: Hotkeys(child: materialAppChild!),
+            return AppFreezeGate(
+              child: DragToResizeArea(
+                window: AppWindow.instance,
+                child: Hotkeys(child: materialAppChild!),
+              ),
             );
           },
 

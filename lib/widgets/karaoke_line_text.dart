@@ -110,11 +110,14 @@ class _CharGeometry {
     required this.charIndex,
     required this.text,
     required this.boxes,
+    required this.rowTop,
   });
 
   final int charIndex;
   final String text;
   final List<Rect> boxes;
+
+  final double rowTop;
 
   // 只画阴影的段落，布局期构建一次；每帧只改图层 alpha
   TextPainter? glowPainter;
@@ -180,6 +183,9 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
   TextPainter? _measurer;
   String _layoutKey = '';
   List<_TokenGeometry> _geometries = const <_TokenGeometry>[];
+
+  // 字形下伸（g/y 等）的墨迹会略微超出行盒，按行盒裁剪会被切掉
+  List<Rect> _rowClipRects = const <Rect>[];
   Size _paragraphSize = Size.zero;
 
   // 逐字光晕段落，随几何一起重建/释放
@@ -288,6 +294,9 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
 
     final double width = maxWidth.isFinite ? maxWidth : _paragraphSize.width;
     final List<Rect> rows = _lineRects(painter, width);
+    // 行矩形只覆盖行盒；裁剪带把底部扩到字体盒底，供所有颜色层共用
+    final List<Rect> clipRows = _buildRowClipRects(painter, rows, width);
+    _rowClipRects = clipRows;
 
     final List<LyricToken> tokens = widget.tokens;
 
@@ -319,7 +328,7 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
       }
 
       final List<Rect> fullRowBoxes = len > 0
-          ? _rowAdjustedBoxes(painter, startChar, endChar, rows, width)
+          ? _clipBoxesForRange(painter, startChar, endChar, rows, clipRows)
           : const <Rect>[];
 
       // 纯 CJK 只在最后一个字强调；其它语言要求是"短词"（≤7 字）的长音节
@@ -338,7 +347,7 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
               endChar,
               token.text,
               rows,
-              width,
+              clipRows,
             )
           : const <_CharGeometry>[];
 
@@ -432,12 +441,39 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     return rows.length - 1;
   }
 
-  List<Rect> _rowAdjustedBoxes(
+  List<Rect> _buildRowClipRects(
+    TextPainter painter,
+    List<Rect> rows,
+    double width,
+  ) {
+    if (rows.isEmpty) return const <Rect>[];
+    final List<double> bottoms = <double>[
+      for (final Rect row in rows) row.bottom,
+    ];
+    for (final ui.TextBox box in painter.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: painter.plainText.length),
+    )) {
+      final Rect rect = box.toRect();
+      final int rowIndex = _rowIndexAt((rect.top + rect.bottom) / 2.0, rows);
+      if (rowIndex >= 0 &&
+          rowIndex < bottoms.length &&
+          rect.bottom > bottoms[rowIndex]) {
+        bottoms[rowIndex] = rect.bottom;
+      }
+    }
+    return <Rect>[
+      for (int i = 0; i < rows.length; i++)
+        Rect.fromLTRB(0, rows[i].top, width, bottoms[i]),
+    ];
+  }
+
+  // 取一段字符的盒子，纵向换成对应的行裁剪带
+  List<Rect> _clipBoxesForRange(
     TextPainter painter,
     int startChar,
     int endChar,
     List<Rect> rows,
-    double width,
+    List<Rect> clipRows,
   ) {
     if (endChar <= startChar) return const <Rect>[];
     final List<Rect> boxes = <Rect>[];
@@ -447,9 +483,10 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
       final Rect rect = box.toRect();
       final double midY = (rect.top + rect.bottom) / 2.0;
       final int rowIndex = _rowIndexAt(midY, rows);
-      final Rect row = (rowIndex >= 0 && rowIndex < rows.length)
-          ? rows[rowIndex]
-          : Rect.fromLTWH(0, 0, width, _paragraphSize.height);
+      final Rect row = (rowIndex >= 0 && rowIndex < clipRows.length)
+          ? clipRows[rowIndex]
+          : Rect.fromLTWH(0, 0, _paragraphSize.width, _clipBounds.bottom);
+      // 横向用该段文字自身的盒子，纵向用整行的裁剪带
       boxes.add(Rect.fromLTRB(rect.left, row.top, rect.right, row.bottom));
     }
     return boxes;
@@ -462,21 +499,28 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     int endChar,
     String tokenText,
     List<Rect> rows,
-    double width,
+    List<Rect> clipRows,
   ) {
     final List<_CharGeometry> result = <_CharGeometry>[];
     int cursor = startChar;
     int index = 0;
     while (cursor < endChar) {
       int next = cursor + 1;
-      List<Rect> boxes = _rowAdjustedBoxes(painter, cursor, next, rows, width);
+      List<Rect> boxes = _clipBoxesForRange(
+        painter,
+        cursor,
+        next,
+        rows,
+        clipRows,
+      );
       while (boxes.isEmpty && next < endChar) {
         next += 1;
-        boxes = _rowAdjustedBoxes(painter, cursor, next, rows, width);
+        boxes = _clipBoxesForRange(painter, cursor, next, rows, clipRows);
       }
       if (boxes.isNotEmpty) {
         final int localStart = cursor - startChar;
         final int localEnd = math.min(next - startChar, tokenText.length);
+        final int rowIndex = _rowIndexAt(boxes.first.center.dy, rows);
         result.add(
           _CharGeometry(
             charIndex: index,
@@ -484,6 +528,9 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
                 ? tokenText.substring(localStart, localEnd)
                 : '',
             boxes: boxes,
+            rowTop: (rowIndex >= 0 && rowIndex < clipRows.length)
+                ? clipRows[rowIndex].top
+                : boxes.first.top,
           ),
         );
         index += 1;
@@ -520,9 +567,24 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
       );
     }
 
-    final TextStyle glowStyle = style.copyWith(
+    final TextStyle glowStyle = TextStyle(
+      inherit: style.inherit,
       color: const Color(0x00000000),
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      fontStyle: style.fontStyle,
+      letterSpacing: style.letterSpacing,
+      wordSpacing: style.wordSpacing,
+      textBaseline: style.textBaseline,
+      height: style.height,
+      leadingDistribution: style.leadingDistribution,
+      locale: style.locale,
       shadows: shadows,
+      fontFeatures: style.fontFeatures,
+      fontVariations: style.fontVariations,
+      fontFamily: style.fontFamily,
+      fontFamilyFallback: style.fontFamilyFallback,
+      overflow: style.overflow,
     );
 
     for (final _CharGeometry char in charBoxes) {
@@ -539,14 +601,13 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
       final List<ui.TextBox> ownBoxes = painter.getBoxesForSelection(
         TextSelection(baseOffset: 0, extentOffset: char.text.length),
       );
-      final Rect lineBox = char.boxes.first;
-      Offset origin = lineBox.topLeft;
+      // 光晕段落按单字排版
+      double left = char.boxes.first.left;
       if (ownBoxes.isNotEmpty) {
-        final Rect own = ownBoxes.first.toRect();
-        origin = Offset(lineBox.left - own.left, lineBox.top - own.top);
+        left -= ownBoxes.first.toRect().left;
       }
       char.glowPainter = painter;
-      char.glowOrigin = origin;
+      char.glowOrigin = Offset(left, char.rowTop);
       _glowPainters.add(painter);
     }
   }
@@ -583,6 +644,17 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
     return null;
   }
 
+  // 所有行裁剪带的整体范围；底部可能超过段落高度
+  Rect get _clipBounds {
+    double bottom = _paragraphSize.height;
+    for (final Rect rect in _rowClipRects) {
+      if (rect.bottom > bottom) {
+        bottom = rect.bottom;
+      }
+    }
+    return Rect.fromLTWH(0, 0, _paragraphSize.width, bottom);
+  }
+
   // 按当前时间算出填充状态
   _FillState _fillStateAt(double timeMs) {
     final TextPainter? painter = _measurer;
@@ -597,7 +669,7 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
       );
     }
 
-    final Rect whole = Rect.fromLTWH(0, 0, width, height);
+    final Rect whole = _clipBounds;
     final int totalChars = _fullText.length;
     final double sungChars = _sungCharsAt(timeMs);
 
@@ -641,12 +713,17 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
       currentLine = _rowIndexAt((boxRect.top + boxRect.bottom) / 2.0, rows);
       edgeX = boxRect.left + boxRect.width * fraction;
     }
-    final Rect row = rows[currentLine];
+    final Rect row = currentLine < _rowClipRects.length
+        ? _rowClipRects[currentLine]
+        : rows[currentLine];
     edgeX = edgeX.clamp(row.left, row.right);
 
+    final List<Rect> clipRows = _rowClipRects.length == rows.length
+        ? _rowClipRects
+        : rows;
     return _FillState(
-      beforeRows: rows.sublist(0, currentLine),
-      afterRows: rows.sublist(currentLine + 1),
+      beforeRows: clipRows.sublist(0, currentLine),
+      afterRows: clipRows.sublist(currentLine + 1),
       currentRow: row,
       edgeX: edgeX,
     );
@@ -1128,10 +1205,19 @@ class _KaraokeLineTextState extends State<KaraokeLineText>
                 layers.addAll(floatingWidgets);
               }
 
-              return Stack(
-                fit: StackFit.expand,
-                clipBehavior: Clip.none,
-                children: layers,
+              final double layerHeight = math.max(
+                _clipBounds.bottom,
+                _paragraphSize.height,
+              );
+              return OverflowBox(
+                alignment: Alignment.topCenter,
+                minHeight: layerHeight,
+                maxHeight: layerHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.none,
+                  children: layers,
+                ),
               );
             },
           ),
