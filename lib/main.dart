@@ -52,6 +52,9 @@ import 'window/app_freeze.dart';
 import 'window/app_window.dart';
 import 'window/single_instance.dart';
 
+/// 当前窗口状态管理器，供 MaterialApp.builder 里上报 Flutter 视图尺寸用。
+WindowStateManager? _windowState;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -71,6 +74,7 @@ void main() async {
 
   // 初始化窗口
   final windowState = WindowStateManager(AppWindow.instance);
+  _windowState = windowState;
   final initialSize = await windowState.loadWindowSize();
   final initialPosition = await windowState.loadWindowPosition();
 
@@ -81,7 +85,13 @@ void main() async {
     window.titleBarStyle = TitleBarStyle.hidden;
     window.isWindowControlButtonsVisible = true;
 
-    window.setSize(initialSize.toNative(), false);
+    if (Platform.isLinux) {
+      // 与保存值同义：Flutter 视图尺寸 == 窗口内容区尺寸
+      print('窗口尺寸恢复：保存值=$initialSize');
+      window.contentSize = initialSize.toNative();
+    } else {
+      window.setSize(initialSize.toNative(), false);
+    }
     window.center();
     window.minimumSize = const Size(480, 600).toNative();
 
@@ -101,6 +111,25 @@ void main() async {
     //  添加监听器 保存窗口大小
     windowState.window = window;
     window.addListener(windowState.onWindowEvent);
+
+    if (Platform.isLinux) {
+      // nativeapi 在 Linux/Wayland 上不保证 resize 立即生效，也不保证 resize 事件会送达
+      final confirmed = await _waitForLinuxViewSize(window, initialSize);
+      if (!confirmed) {
+        print('窗口尺寸未能在首帧前生效，首帧后重试：目标 $initialSize');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Timer(const Duration(milliseconds: 300), () {
+            window.contentSize = initialSize.toNative();
+          });
+        });
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Timer(
+          const Duration(milliseconds: 1200),
+          windowState.enableViewSizePersistence,
+        );
+      });
+    }
   }
 
   if (AppWindow.instance != null) {
@@ -519,10 +548,21 @@ class _MyAppState extends State<MyApp> {
               child: materialAppChild!,
             );
             final content = Hotkeys(child: bridged);
+            // Linux 窗口尺寸以 Flutter 视图的实际布局尺寸为准
+            final measured = Platform.isLinux
+                ? LayoutBuilder(
+                    builder: (context, constraints) {
+                      _windowState?.noteViewSize(
+                        Size(constraints.maxWidth, constraints.maxHeight),
+                      );
+                      return content;
+                    },
+                  )
+                : content;
             return AppFreezeGate(
               child: DragToResizeArea(
                 window: AppWindow.instance,
-                child: content,
+                child: measured,
               ),
             );
           },
@@ -541,6 +581,31 @@ class _MyAppState extends State<MyApp> {
       },
     );
   }
+}
+
+Future<bool> _waitForLinuxViewSize(Window window, Size target) async {
+  bool matches() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) {
+      // 拿不到视图信息时不阻塞启动
+      return true;
+    }
+    final view = views.first;
+    final ratio = view.devicePixelRatio;
+    if (ratio <= 0) return true;
+    final size = view.physicalSize / ratio;
+    return (size.width - target.width).abs() <= 1 &&
+        (size.height - target.height).abs() <= 1;
+  }
+
+  for (var i = 0; i < 13; i++) {
+    if (matches()) return true;
+    if (i > 0 && i % 3 == 0) {
+      window.contentSize = target.toNative();
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+  }
+  return matches();
 }
 
 // 管理窗口大小的加载与保存
@@ -565,6 +630,41 @@ class WindowStateManager {
 
   Timer? _resizeTimer;
 
+  /// Flutter 视图的最新布局尺寸
+  Size? _viewSize;
+  Timer? _viewSizeSaveTimer;
+
+  bool _viewSizePersistenceEnabled = false;
+
+  void enableViewSizePersistence() {
+    // 只启用写盘，不立即写入
+    _viewSizePersistenceEnabled = true;
+  }
+
+  void noteViewSize(Size size) {
+    if (!Platform.isLinux) return;
+    if (size.width <= 0 || size.height <= 0) return;
+    final previous = _viewSize;
+    if (previous != null &&
+        (previous.width - size.width).abs() < 0.5 &&
+        (previous.height - size.height).abs() < 0.5) {
+      return;
+    }
+    _viewSize = size;
+    if (!_viewSizePersistenceEnabled) return;
+    _viewSizeSaveTimer?.cancel();
+    _viewSizeSaveTimer = Timer(
+      const Duration(milliseconds: 500),
+      () => _persistViewSize(size),
+    );
+  }
+
+  Future<void> _persistViewSize(Size size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('window_width', size.width);
+    await prefs.setDouble('window_height', size.height);
+  }
+
   Future<void> onWindowEvent(WindowEvent event) async {
     switch (event) {
       case WindowResizedEvent():
@@ -585,6 +685,8 @@ class WindowStateManager {
   }
 
   Future<void> _saveWindowSize() async {
+    // Linux 走 noteViewSize 的视图尺寸，不使用 nativeapi 的 Window.size
+    if (Platform.isLinux) return;
     final size = window?.size.toSize();
     if (size == null) return;
     final prefs = await SharedPreferences.getInstance();
