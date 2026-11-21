@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'tabs/general_tab.dart';
 import 'tabs/personalization_tab.dart';

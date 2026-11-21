@@ -1,17 +1,21 @@
 // NOTE：Flutter 3.47+ 的 material_ui / cupertino_ui 解耦
 // https://docs.flutter.dev/release/breaking-changes/material-ui-and-cupertino-ui
-
-// 等待以下包或类似的替代品支持：
-// markdown_widget
-// silky_scroll
-// window_manager
-// mesh_gradient
-// scrollable_positioned_list
+//
+// 本项目自身代码已迁移到 package:material_ui。window_manager / tray_manager /
+// hotkey_manager 也已升级到支持 material_ui 的版本（0.7 / 0.9 / 0.4）。
+//
+// 仍有以下依赖基于 package:flutter/material.dart，通过官方提供的
+// MaterialUiCompatibilityBridge 做 Theme / Localizations 桥接
+// （见下方 MaterialApp.builder），等它们支持 material_ui 后可以移除：
+//   - markdown_widget
+//   - silky_scroll
+//   - mesh_gradient
+//   - scrollable_positioned_list
 
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:system_fonts/system_fonts.dart';
 import 'package:window_manager/window_manager.dart';
@@ -30,7 +34,6 @@ import 'package:tray_manager/tray_manager.dart'
         TrayIconClickedEvent,
         TrayManager;
 import 'package:windows_taskbar/windows_taskbar.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'hot_keys.dart';
 import 'theme/theme_provider.dart';
@@ -496,13 +499,9 @@ class _MyAppState extends State<MyApp> {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         Widget app = MaterialApp(
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
           supportedLocales: const [Locale('zh', 'CH'), Locale('en', 'US')],
           locale: const Locale('zh', 'CH'),
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
 
           debugShowCheckedModeBanner: false,
           title: 'MyuneMusic',
@@ -510,10 +509,20 @@ class _MyAppState extends State<MyApp> {
           darkTheme: themeProvider.darkThemeData,
           themeMode: themeProvider.themeMode,
           builder: (context, materialAppChild) {
+            // 项目已迁移到 package:material_ui，但下面这些依赖仍基于
+            // package:flutter/material.dart；用官方提供的桥接把 material_ui 的
+            // Theme / Localizations 映射过去，等它们支持 material_ui 后删掉：
+            // markdown_widget / silky_scroll / mesh_gradient /
+            // scrollable_positioned_list
+            // ignore: deprecated_member_use
+            final bridged = MaterialUiCompatibilityBridge(
+              child: materialAppChild!,
+            );
+            final content = Hotkeys(child: bridged);
             return AppFreezeGate(
               child: DragToResizeArea(
                 window: AppWindow.instance,
-                child: Hotkeys(child: materialAppChild!),
+                child: content,
               ),
             );
           },

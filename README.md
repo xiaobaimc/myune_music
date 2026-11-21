@@ -6,7 +6,7 @@
 
 <!-- 技术与协议胶囊徽章 -->
 <p align="center">
-  <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-3.47%2B-blue?logo=flutter" alt="Flutter" /></a>
+  <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-3.50%2B-blue?logo=flutter" alt="Flutter" /></a>
   <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux-brightgreen" alt="Platforms" />
   <img src="https://img.shields.io/badge/lang-Rust-orange?logo=rust" alt="Rust" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-lightgrey" alt="License" /></a>
@@ -190,7 +190,7 @@ sudo apt install keybinder-3.0
 ### 环境要求
 
 * 安装 **Rust** 环境
-* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.10.0，**Flutter** 版本需 ≥ 3.47.0
+* 安装 **Flutter SDK**，**Dart** 版本需 ≥ 3.10.0，**Flutter** 版本需 ≥ 3.50.0
 
 ### 安装依赖
 

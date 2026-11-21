@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 import 'package:provider/provider.dart';
 import '../../page/playlist/playlist_content_notifier.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import '../playlist/playlist_content_widget.dart';
 import '../../widgets/single_line_lyrics.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import '../../layout/navigation_notifier.dart';
 import '../../services/pinyin_cache.dart';
 import '../playlist/playlist_models.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:silky_scroll/silky_scroll.dart';
 import '../theme/scroll_config.dart';
 import 'dart:async';
