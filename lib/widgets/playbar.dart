@@ -402,7 +402,10 @@ class _PlaybarState extends State<Playbar> {
                             SystemMouseCursors.click,
                           ),
                         ),
-                        icon: const Icon(Icons.lyrics_outlined),
+                        icon: Icon(
+                          Icons.lyrics_outlined,
+                          color: onBarColor.withValues(alpha: 0.7),
+                        ),
                         iconSize: 23,
                         tooltip: '播放列表',
                         padding: const EdgeInsets.only(top: 1.5),

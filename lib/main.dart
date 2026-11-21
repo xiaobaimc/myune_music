@@ -87,7 +87,6 @@ void main() async {
 
     if (Platform.isLinux) {
       // 与保存值同义：Flutter 视图尺寸 == 窗口内容区尺寸
-      print('窗口尺寸恢复：保存值=$initialSize');
       window.contentSize = initialSize.toNative();
     } else {
       window.setSize(initialSize.toNative(), false);
@@ -116,7 +115,6 @@ void main() async {
       // nativeapi 在 Linux/Wayland 上不保证 resize 立即生效，也不保证 resize 事件会送达
       final confirmed = await _waitForLinuxViewSize(window, initialSize);
       if (!confirmed) {
-        print('窗口尺寸未能在首帧前生效，首帧后重试：目标 $initialSize');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           Timer(const Duration(milliseconds: 300), () {
             window.contentSize = initialSize.toNative();

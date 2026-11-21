@@ -255,7 +255,10 @@ class _PlaybarState extends State<Playbar> {
                     ),
                     // 播放列表
                     IconButton(
-                      icon: const Icon(Icons.lyrics_outlined),
+                      icon: Icon(
+                        Icons.lyrics_outlined,
+                        color: onBarColor.withValues(alpha: 0.7),
+                      ),
                       iconSize: 23 * scale,
                       tooltip: '播放列表',
                       onPressed: () {
