@@ -16,22 +16,39 @@ class PlaylistManager {
   static const String _songMetadataCacheFileName = 'song_metadata_cache.json';
   static const String _migrationFlagKey = 'data_migrated_to_app_support';
 
-  Future<String> _getLocalPath() async {
-    // 文档目录
-    final appDocDir = await getApplicationDocumentsDirectory();
-    final appDir = Directory(
-      p.join(appDocDir.path, 'myune_music', 'list_data'),
-    );
+  String? _cachedLocalPath;
+  Future<String>? _localPathFuture;
+  bool _songsDirEnsured = false;
 
-    // 检查是否需要迁移旧数据
-    await _migrateOldDataIfNeeded(appDir.path);
-
-    // 确保目录存在
-    if (!await appDir.exists()) {
-      await appDir.create(recursive: true);
+  Future<String> _getLocalPath() {
+    if (_cachedLocalPath != null) {
+      return Future<String>.value(_cachedLocalPath!);
     }
+    return _localPathFuture ??= _resolveLocalPath();
+  }
 
-    return appDir.path;
+  Future<String> _resolveLocalPath() async {
+    try {
+      // 文档目录
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final appDir = Directory(
+        p.join(appDocDir.path, 'myune_music', 'list_data'),
+      );
+
+      // 检查是否需要迁移旧数据
+      await _migrateOldDataIfNeeded(appDir.path);
+
+      // 确保目录存在
+      if (!await appDir.exists()) {
+        await appDir.create(recursive: true);
+      }
+
+      _cachedLocalPath = appDir.path;
+      return appDir.path;
+    } catch (_) {
+      _localPathFuture = null;
+      rethrow;
+    }
   }
 
   // 检查并迁移旧数据
@@ -150,9 +167,12 @@ class PlaylistManager {
   Future<File> _getSongFile(String playlistId) async {
     final path = await _getLocalPath();
     final songsDir = Directory('$path/$_songsSubdirectory');
-    // 确保歌曲目录存在
-    if (!await songsDir.exists()) {
-      await songsDir.create(recursive: true);
+    // 确保歌曲目录存在（缓存检查结果，避免加载大量歌单时重复 stat）
+    if (!_songsDirEnsured) {
+      if (!await songsDir.exists()) {
+        await songsDir.create(recursive: true);
+      }
+      _songsDirEnsured = true;
     }
     return File('${songsDir.path}/$playlistId.json');
   }

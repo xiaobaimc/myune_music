@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -105,6 +106,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
   // --- 元数据缓存 ---
   final Map<String, SongMetadataCacheEntry> _songMetadataCache = {};
   Timer? _metadataCacheSaveTimer;
+  final Set<String> _verifyingMetadataPaths = {};
+  final Map<String, DateTime> _recentlyVerifiedMetadata = {};
+  static const Duration _metadataVerifyCooldown = Duration(seconds: 10);
 
   // --- 流派标签按需补读 ---
   bool _isScanningGenres = false;
@@ -133,6 +137,8 @@ class PlaylistContentNotifier extends ChangeNotifier {
   final Set<String> _evictableCoverPaths = {};
   bool _coverEvictionScheduled = false;
   static const int _maxCoverCacheSize = 300;
+  // 除按张数淘汰外，再加一层总字节上限，避免高分辨率无损内嵌封面持续堆积占满堆内存
+  static const int _maxCoverCacheBytes = 24 * 1024 * 1024;
 
   // --- 播放器相关 ---
   final AudioService _audioService = AudioService();
@@ -1324,6 +1330,15 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     for (final filePath in filePaths) {
       final cacheKey = _normalizePath(filePath);
+      final now = DateTime.now();
+      final lastVerified = _recentlyVerifiedMetadata[cacheKey];
+      if (_verifyingMetadataPaths.contains(cacheKey) ||
+          (lastVerified != null &&
+              now.difference(lastVerified) < _metadataVerifyCooldown)) {
+        continue;
+      }
+      _verifyingMetadataPaths.add(cacheKey);
+
       final cached = _songMetadataCache[cacheKey];
       final normalizedPath = Uri.file(
         filePath,
@@ -1382,6 +1397,9 @@ class PlaylistContentNotifier extends ChangeNotifier {
           _markSongMissing,
           notify: false,
         );
+      } finally {
+        _verifyingMetadataPaths.remove(cacheKey);
+        _recentlyVerifiedMetadata[cacheKey] = DateTime.now();
       }
     }
 
@@ -1609,13 +1627,26 @@ class PlaylistContentNotifier extends ChangeNotifier {
   }
 
   void _evictCoversIfNeeded() {
-    final overflow = _coverStore.length - _maxCoverCacheSize;
-    if (overflow <= 0) return;
+    final countOverflow = _coverStore.length - _maxCoverCacheSize;
+    final bytesOverflow = _coverStore.totalBytes - _maxCoverCacheBytes;
+    if (countOverflow <= 0 && bytesOverflow <= 0) return;
 
-    final toEvict = _coverStore.keys
-        .where((key) => _evictableCoverPaths.contains(key))
-        .take(overflow)
-        .toList(growable: false);
+    final toEvict = <String>[];
+    int remainingCount = _coverStore.length;
+    int remainingBytes = _coverStore.totalBytes;
+
+    for (final key in _coverStore.keys) {
+      if (remainingCount <= _maxCoverCacheSize &&
+          remainingBytes <= _maxCoverCacheBytes) {
+        break;
+      }
+      if (!_evictableCoverPaths.contains(key)) {
+        continue;
+      }
+      toEvict.add(key);
+      remainingCount--;
+      remainingBytes -= _coverStore.coverOf(key)?.lengthInBytes ?? 0;
+    }
 
     if (toEvict.isEmpty) return;
 
@@ -3948,7 +3979,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     try {
       final colors = await extractColor(
-        MemoryImage(albumArt),
+        ResizeImage(MemoryImage(albumArt), width: 64),
         1, // 提取一种主色调
       );
       if (colors.isNotEmpty) {
@@ -5196,6 +5227,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     // 加载旧顺序并合并新路径
     final List<String> savedOrder = await _playlistManager.loadAllSongsOrder();
+    final List<String> initialSavedOrder = List<String>.of(savedOrder);
     savedOrder.removeWhere((path) => !allAvailablePaths.contains(path));
     final existingPathsInOrder = savedOrder.toSet();
     final newPaths = allAvailablePaths.where(
@@ -5232,7 +5264,10 @@ class PlaylistContentNotifier extends ChangeNotifier {
     unawaited(_buildSearchIndices());
 
     final finalPathOrder = _allSongs.map((s) => s.filePath).toList();
-    await _playlistManager.saveAllSongsOrder(finalPathOrder);
+    // 顺序未发生变化时跳过写盘，减少启动期冗余磁盘 IO
+    if (!listEquals(initialSavedOrder, finalPathOrder)) {
+      await _playlistManager.saveAllSongsOrder(finalPathOrder);
+    }
 
     // 同步更新虚拟播放列表的路径，以便播放逻辑正常工作
     _allSongsVirtualPlaylist.songFilePaths = _allSongs

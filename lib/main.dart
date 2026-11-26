@@ -157,8 +157,8 @@ void main() async {
             context.read<NotificationService>(),
           ),
         ),
-        ChangeNotifierProvider<StatisticsManager>(
-          create: (context) => StatisticsManager(),
+        ChangeNotifierProvider<StatisticsManager>.value(
+          value: statsManager,
         ),
         ChangeNotifierProvider(create: (_) => NavigationNotifier()),
       ],
@@ -188,6 +188,7 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription<bool>? _taskbarPlayingSubscription;
   StreamSubscription<bool>? _taskbarCompletedSubscription;
   bool _taskbarReady = false;
+  bool? _lastToolbarIsPlaying;
   bool _listenersBound = false;
 
   // nativeapi 的 TrayIcon 是独立对象，需要一直持有引用
@@ -365,6 +366,9 @@ class _MyAppState extends State<MyApp> {
     if (!_taskbarReady) return;
 
     try {
+      final isPlaying = _playlistNotifier.isPlaying;
+      _lastToolbarIsPlaying = isPlaying;
+
       WindowsTaskbar.setWindowTitle('MyuneMusic');
       await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
@@ -373,9 +377,13 @@ class _MyAppState extends State<MyApp> {
           _playlistNotifier.playPrevious,
         ),
         ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon('assets/images/icon/play.ico'),
-          '播放',
-          _playlistNotifier.play,
+          ThumbnailToolbarAssetIcon(
+            isPlaying
+                ? 'assets/images/icon/pause.ico'
+                : 'assets/images/icon/play.ico',
+          ),
+          isPlaying ? '暂停' : '播放',
+          isPlaying ? _playlistNotifier.pause : _playlistNotifier.play,
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon('assets/images/icon/next.ico'),
@@ -387,6 +395,7 @@ class _MyAppState extends State<MyApp> {
       // 初始化任务栏进度模式
       await WindowsTaskbar.setProgressMode(TaskbarProgressMode.normal);
     } catch (e) {
+      _lastToolbarIsPlaying = null;
       debugPrint('_initializeThumbnailToolbar出现错误: $e');
     }
   }
@@ -394,9 +403,12 @@ class _MyAppState extends State<MyApp> {
   Future<void> _updateThumbnailToolbar() async {
     if (!_taskbarReady) return;
 
-    try {
-      final isPlaying = _playlistNotifier.isPlaying;
+    final isPlaying = _playlistNotifier.isPlaying;
+    // 仅在播放/暂停状态真正变化时才刷新任务栏缩略图按钮，避免每次 notifyListeners 都触发跨进程 IPC
+    if (_lastToolbarIsPlaying == isPlaying) return;
+    _lastToolbarIsPlaying = isPlaying;
 
+    try {
       await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon('assets/images/icon/prev.ico'),
@@ -419,6 +431,7 @@ class _MyAppState extends State<MyApp> {
         ),
       ]);
     } catch (e) {
+      _lastToolbarIsPlaying = null;
       // debugPrint('_updateThumbnailToolbar出现错误: $e');
     }
   }

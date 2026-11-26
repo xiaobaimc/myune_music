@@ -108,12 +108,16 @@ class Hotkeys extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = context.watch<PlaylistContentNotifier>();
+    final disabled = context.select<PlaylistContentNotifier, bool>(
+      (n) => n.isSearching || n.disableHotKeys,
+    );
 
-    // 如果正在搜索，则直接返回子组件，不应用任何快捷键
-    if (notifier.isSearching || notifier.disableHotKeys) {
+    // 如果正在搜索或禁用快捷键，则直接返回子组件，不应用任何快捷键
+    if (disabled) {
       return child;
     }
+
+    final notifier = context.read<PlaylistContentNotifier>();
 
     return Shortcuts(
       shortcuts: const {

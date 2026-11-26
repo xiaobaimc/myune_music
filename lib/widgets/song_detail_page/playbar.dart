@@ -29,20 +29,19 @@ class _PlaybarState extends State<Playbar> {
   double _currentSliderValue = 0.0;
   bool _isDraggingSlider = false; // 判断用户是否正在拖动滑块
   int _dragSessionId = 0;
-
-  @override
-  void initState() {
-    super.initState();
-  }
+  Player? _boundPlayer;
+  Stream<Duration?>? _throttledPositionStream;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
+    final player = context.read<PlaylistContentNotifier>().mediaPlayer;
+    if (!identical(_boundPlayer, player)) {
+      _boundPlayer = player;
+      _throttledPositionStream = player.stream.position
+          .throttleTime(const Duration(milliseconds: 200))
+          .asBroadcastStream();
+    }
   }
 
   @override
@@ -50,229 +49,218 @@ class _PlaybarState extends State<Playbar> {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
+    final playlistNotifier = context.read<PlaylistContentNotifier>();
+    final Player player = playlistNotifier.mediaPlayer;
+    final Stream<Duration?> positionStream =
+        _throttledPositionStream ??
+        player.stream.position.throttleTime(const Duration(milliseconds: 200));
 
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
     final double width = size.width > 0 ? size.width : 1150.0;
     final double height = size.height > 0 ? size.height : 620.0;
     final double scale = (math.sqrt(
       (width * height) / (1150.0 * 620.0),
     )).clamp(0.5, 2.0);
 
-    // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
-    return Consumer<PlaylistContentNotifier>(
-      builder: (context, playlistNotifier, child) {
-        final Player player = playlistNotifier.mediaPlayer;
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 播放时间显示
-            StreamBuilder<Duration?>(
-              stream: player.stream.position.throttleTime(
-                const Duration(milliseconds: 200),
-              ), // 监听当前位置
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 播放时间显示
+        StreamBuilder<Duration?>(
+          stream: positionStream, // 复用节流后的位置流
+          initialData: playlistNotifier.currentPosition, // 使用 Notifier 中的同步数据
+          builder: (context, positionSnapshot) {
+            final currentPosition = positionSnapshot.data ?? Duration.zero;
+            return StreamBuilder<Duration?>(
+              stream: player.stream.duration, // 监听总时长
               initialData:
-                  playlistNotifier.currentPosition, // 使用 Notifier 中的同步数据
-              builder: (context, positionSnapshot) {
-                final currentPosition = positionSnapshot.data ?? Duration.zero;
-                return StreamBuilder<Duration?>(
-                  stream: player.stream.duration, // 监听总时长
-                  initialData:
-                      playlistNotifier.totalDuration, // 使用 Notifier 中的同步数据
-                  builder: (context, totalDurationSnapshot) {
-                    final totalDuration =
-                        totalDurationSnapshot.data ?? Duration.zero;
-                    return RepaintBoundary(
-                      child: Text(
-                        '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
-                        style: TextStyle(
-                          color: onBarColor.withValues(alpha: 0.7),
-                          fontSize: 12 * scale,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    );
-                  },
+                  playlistNotifier.totalDuration, // 使用 Notifier 中的同步数据
+              builder: (context, totalDurationSnapshot) {
+                final totalDuration =
+                    totalDurationSnapshot.data ?? Duration.zero;
+                return RepaintBoundary(
+                  child: Text(
+                    '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
+                    style: TextStyle(
+                      color: onBarColor.withValues(alpha: 0.7),
+                      fontSize: 12 * scale,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 );
               },
-            ),
-            SizedBox(height: 8 * scale),
-            // 进度条
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 2.0 * scale,
-                thumbShape: RoundSliderThumbShape(
-                  enabledThumbRadius: 6.0 * scale,
-                ),
-                overlayShape: SliderComponentShape.noOverlay,
-                activeTrackColor: accentColor,
-                inactiveTrackColor: onBarColor.withValues(alpha: 0.7),
-                thumbColor: accentColor,
-                showValueIndicator: ShowValueIndicator.onDrag,
-              ),
-              child: StreamBuilder<Duration?>(
-                stream: player.stream.position.throttleTime(
-                  const Duration(milliseconds: 200),
-                ),
-                initialData: player.state.position,
-                builder: (context, snapshot) {
-                  final currentPosition = snapshot.data ?? Duration.zero;
-                  final totalDuration = player.state.duration;
-                  double sliderValue = 0.0;
+            );
+          },
+        ),
+        SizedBox(height: 8 * scale),
+        // 进度条
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 2.0 * scale,
+            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.0 * scale),
+            overlayShape: SliderComponentShape.noOverlay,
+            activeTrackColor: accentColor,
+            inactiveTrackColor: onBarColor.withValues(alpha: 0.7),
+            thumbColor: accentColor,
+            showValueIndicator: ShowValueIndicator.onDrag,
+          ),
+          child: StreamBuilder<Duration?>(
+            stream: positionStream,
+            initialData: player.state.position,
+            builder: (context, snapshot) {
+              final currentPosition = snapshot.data ?? Duration.zero;
+              final totalDuration = player.state.duration;
+              double sliderValue = 0.0;
 
-                  if (_isDraggingSlider) {
-                    sliderValue = _currentSliderValue;
-                  } else {
-                    sliderValue = totalDuration.inMilliseconds == 0
-                        ? 0.0
-                        : currentPosition.inMilliseconds /
-                              totalDuration.inMilliseconds;
-                  }
+              if (_isDraggingSlider) {
+                sliderValue = _currentSliderValue;
+              } else {
+                sliderValue = totalDuration.inMilliseconds == 0
+                    ? 0.0
+                    : currentPosition.inMilliseconds /
+                          totalDuration.inMilliseconds;
+              }
 
-                  return Slider(
-                    value: sliderValue.clamp(0.0, 1.0),
-                    min: 0.0,
-                    max: 1.0,
-                    label: _isDraggingSlider
-                        ? _formatDuration(
-                            Duration(
-                              milliseconds:
-                                  (player.state.duration.inMilliseconds *
-                                          sliderValue)
-                                      .round(),
-                            ),
-                          )
-                        : null,
-                    onChanged: (double newValue) {
-                      setState(() {
-                        _isDraggingSlider = true;
-                        _currentSliderValue = newValue;
-                      });
-                    },
-                    onChangeStart: (double startValue) {
-                      _dragSessionId++;
-                      _isDraggingSlider = true; // 开始拖动
-                    },
-                    onChangeEnd: (double endValue) async {
-                      final currentSessionId = _dragSessionId;
-                      final totalDuration = player.state.duration;
-                      final seekPosition = Duration(
-                        milliseconds: (totalDuration.inMilliseconds * endValue)
-                            .round(),
-                      );
-                      player.seek(seekPosition); // 拖动结束后才实际 seek
-                      await Future.delayed(const Duration(milliseconds: 200));
-                      if (mounted && _dragSessionId == currentSessionId) {
-                        setState(() {
-                          _isDraggingSlider = false; // 结束拖动
-                          _currentSliderValue =
-                              totalDuration.inMilliseconds == 0
-                              ? 0.0
-                              : seekPosition.inMilliseconds /
-                                    totalDuration.inMilliseconds;
-                        });
-                      }
-                    },
-                  );
+              return Slider(
+                value: sliderValue.clamp(0.0, 1.0),
+                min: 0.0,
+                max: 1.0,
+                label: _isDraggingSlider
+                    ? _formatDuration(
+                        Duration(
+                          milliseconds:
+                              (player.state.duration.inMilliseconds *
+                                      sliderValue)
+                                  .round(),
+                        ),
+                      )
+                    : null,
+                onChanged: (double newValue) {
+                  setState(() {
+                    _isDraggingSlider = true;
+                    _currentSliderValue = newValue;
+                  });
                 },
-              ),
-            ),
-            SizedBox(height: 4 * scale),
-            // 播放控制按钮
+                onChangeStart: (double startValue) {
+                  _dragSessionId++;
+                  _isDraggingSlider = true; // 开始拖动
+                },
+                onChangeEnd: (double endValue) async {
+                  final currentSessionId = _dragSessionId;
+                  final totalDuration = player.state.duration;
+                  final seekPosition = Duration(
+                    milliseconds: (totalDuration.inMilliseconds * endValue)
+                        .round(),
+                  );
+                  player.seek(seekPosition); // 拖动结束后才实际 seek
+                  await Future.delayed(const Duration(milliseconds: 200));
+                  if (mounted && _dragSessionId == currentSessionId) {
+                    setState(() {
+                      _isDraggingSlider = false; // 结束拖动
+                      _currentSliderValue = totalDuration.inMilliseconds == 0
+                          ? 0.0
+                          : seekPosition.inMilliseconds /
+                                totalDuration.inMilliseconds;
+                    });
+                  }
+                },
+              );
+            },
+          ),
+        ),
+        SizedBox(height: 4 * scale),
+        // 播放控制按钮
+        Row(
+          mainAxisAlignment:
+              MainAxisAlignment.spaceBetween, // 使左右两边的内容分别对齐到两端
+          children: [
+            // 左侧
             Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween, // 使左右两边的内容分别对齐到两端
+              mainAxisSize: MainAxisSize.min, // 确保这个Row只占用必要的空间
               children: [
-                // 左侧
-                Row(
-                  mainAxisSize: MainAxisSize.min, // 确保这个Row只占用必要的空间
-                  children: [
-                    // 上一首
-                    IconButton(
-                      icon: Icon(
-                        Icons.skip_previous,
-                        color: onBarColor,
-                        size: 28 * scale,
-                      ),
-                      onPressed: () => playlistNotifier.playPrevious(),
-                    ),
-                    // 播放/暂停按钮
-                    StreamBuilder<bool>(
-                      stream: player.stream.playing,
-                      initialData: playlistNotifier.isPlaying,
-                      builder: (context, snapshot) {
-                        final isPlaying = snapshot.data ?? false;
-                        return PlayPauseButton(
-                          isPlaying: isPlaying,
-                          color: accentColor,
-                          size: 36.0 * scale,
-                          onPressed: isPlaying
-                              ? playlistNotifier.pause
-                              : playlistNotifier.play,
-                        );
-                      },
-                    ),
-                    // 下一首
-                    IconButton(
-                      icon: Icon(
-                        Icons.skip_next,
-                        color: onBarColor,
-                        size: 28 * scale,
-                      ),
-                      onPressed: () => playlistNotifier.playNext(),
-                    ),
-                  ],
+                // 上一首
+                IconButton(
+                  icon: Icon(
+                    Icons.skip_previous,
+                    color: onBarColor,
+                    size: 28 * scale,
+                  ),
+                  onPressed: () => playlistNotifier.playPrevious(),
                 ),
-                // 右侧
-                Row(
-                  mainAxisSize: MainAxisSize.min, // 确保这个Row只占用必要的空间
-                  children: [
-                    // 随机播放按钮 (现在放在右侧功能键组)
-                    Consumer<PlaylistContentNotifier>(
-                      builder: (context, notifier, _) {
-                        return PlayModeButton(
-                          playMode: notifier.playMode,
-                          color: onBarColor.withValues(alpha: 0.7),
-                          activeColor: accentColor,
-                          size: 24.0 * scale,
-                          onPressed: () {
-                            notifier.togglePlayMode();
-                          },
-                        );
-                      },
-                    ),
-                    // 音量控制
-                    VolumeControl(
-                      player: player,
-                      iconColor: onBarColor,
+                // 播放/暂停按钮
+                StreamBuilder<bool>(
+                  stream: player.stream.playing,
+                  initialData: playlistNotifier.isPlaying,
+                  builder: (context, snapshot) {
+                    final isPlaying = snapshot.data ?? false;
+                    return PlayPauseButton(
+                      isPlaying: isPlaying,
+                      color: accentColor,
+                      size: 36.0 * scale,
+                      onPressed: isPlaying
+                          ? playlistNotifier.pause
+                          : playlistNotifier.play,
+                    );
+                  },
+                ),
+                // 下一首
+                IconButton(
+                  icon: Icon(
+                    Icons.skip_next,
+                    color: onBarColor,
+                    size: 28 * scale,
+                  ),
+                  onPressed: () => playlistNotifier.playNext(),
+                ),
+              ],
+            ),
+            // 右侧
+            Row(
+              mainAxisSize: MainAxisSize.min, // 确保这个Row只占用必要的空间
+              children: [
+                // 随机播放按钮 (现在放在右侧功能键组)
+                Selector<PlaylistContentNotifier, PlayMode>(
+                  selector: (_, notifier) => notifier.playMode,
+                  builder: (context, playMode, _) {
+                    return PlayModeButton(
+                      playMode: playMode,
+                      color: onBarColor.withValues(alpha: 0.7),
+                      activeColor: accentColor,
                       size: 24.0 * scale,
-                    ),
-                    // // 声道平衡、倍速控制
-                    BalanceRateControl(
-                      player: player,
-                      iconColor: onBarColor,
-                      size: 24.0 * scale,
-                    ),
-                    // 播放列表
-                    IconButton(
-                      icon: Icon(
-                        Icons.lyrics_outlined,
-                        color: onBarColor.withValues(alpha: 0.7),
-                      ),
-                      iconSize: 23 * scale,
-                      tooltip: '播放列表',
-                      onPressed: () {
-                        // 打开右侧抽屉
-                        Scaffold.of(context).openEndDrawer();
-                      },
-                    ),
-                  ],
+                      onPressed: playlistNotifier.togglePlayMode,
+                    );
+                  },
+                ),
+                // 音量控制
+                VolumeControl(
+                  player: player,
+                  iconColor: onBarColor,
+                  size: 24.0 * scale,
+                ),
+                // // 声道平衡、倍速控制
+                BalanceRateControl(
+                  player: player,
+                  iconColor: onBarColor,
+                  size: 24.0 * scale,
+                ),
+                // 播放列表
+                IconButton(
+                  icon: Icon(
+                    Icons.lyrics_outlined,
+                    color: onBarColor.withValues(alpha: 0.7),
+                  ),
+                  iconSize: 23 * scale,
+                  tooltip: '播放列表',
+                  onPressed: () {
+                    // 打开右侧抽屉
+                    Scaffold.of(context).openEndDrawer();
+                  },
                 ),
               ],
             ),
           ],
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -289,20 +277,19 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
   double _currentSliderValue = 0.0;
   bool _isDraggingSlider = false; // 判断用户是否正在拖动滑块
   int _dragSessionId = 0;
-
-  @override
-  void initState() {
-    super.initState();
-  }
+  Player? _boundPlayer;
+  Stream<Duration?>? _throttledPositionStream;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
+    final player = context.read<PlaylistContentNotifier>().mediaPlayer;
+    if (!identical(_boundPlayer, player)) {
+      _boundPlayer = player;
+      _throttledPositionStream = player.stream.position
+          .throttleTime(const Duration(milliseconds: 200))
+          .asBroadcastStream();
+    }
   }
 
   @override
@@ -310,182 +297,174 @@ class _PortraitPlaybarState extends State<PortraitPlaybar> {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
     final Color onBarColor = colorScheme.onSurface;
     final Color accentColor = colorScheme.primary;
+    final playlistNotifier = context.read<PlaylistContentNotifier>();
+    final Player player = playlistNotifier.mediaPlayer;
+    final Stream<Duration?> positionStream =
+        _throttledPositionStream ??
+        player.stream.position.throttleTime(const Duration(milliseconds: 200));
 
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
     final double width = size.width > 0 ? size.width : 1150.0;
     final double height = size.height > 0 ? size.height : 620.0;
     final double scale = (math.sqrt(
       (width * height) / (1150.0 * 620.0),
     )).clamp(0.5, 2.0);
 
-    // 顶级 Consumer，确保 Playbar 整体能响应 PlaylistContentNotifier 的变化
-    return Consumer<PlaylistContentNotifier>(
-      builder: (context, playlistNotifier, child) {
-        final Player player = playlistNotifier.mediaPlayer;
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(24 * scale, 0, 24 * scale, 12 * scale),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 播放时间显示
-              StreamBuilder<Duration?>(
-                stream: player.stream.position.throttleTime(
-                  const Duration(milliseconds: 200),
-                ), // 监听当前位置
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24 * scale, 0, 24 * scale, 12 * scale),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 播放时间显示
+          StreamBuilder<Duration?>(
+            stream: positionStream, // 复用节流后的位置流
+            initialData:
+                playlistNotifier.currentPosition, // 使用 Notifier 中的同步数据
+            builder: (contextEntertainment, positionSnapshot) {
+              final currentPosition = positionSnapshot.data ?? Duration.zero;
+              return StreamBuilder<Duration?>(
+                stream: player.stream.duration, // 监听总时长
                 initialData:
-                    playlistNotifier.currentPosition, // 使用 Notifier 中的同步数据
-                builder: (contextEntertainment, positionSnapshot) {
-                  final currentPosition =
-                      positionSnapshot.data ?? Duration.zero;
-                  return StreamBuilder<Duration?>(
-                    stream: player.stream.duration, // 监听总时长
-                    initialData:
-                        playlistNotifier.totalDuration, // 使用 Notifier 中的同步数据
-                    builder: (context, totalDurationSnapshot) {
-                      final totalDuration =
-                          totalDurationSnapshot.data ?? Duration.zero;
-                      return RepaintBoundary(
-                        child: Text(
-                          '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
-                          style: TextStyle(
-                            color: onBarColor.withValues(alpha: 0.7),
-                            fontSize: 12 * scale,
-                            fontFeatures: const [FontFeature.tabularFigures()],
+                    playlistNotifier.totalDuration, // 使用 Notifier 中的同步数据
+                builder: (context, totalDurationSnapshot) {
+                  final totalDuration =
+                      totalDurationSnapshot.data ?? Duration.zero;
+                  return RepaintBoundary(
+                    child: Text(
+                      '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
+                      style: TextStyle(
+                        color: onBarColor.withValues(alpha: 0.7),
+                        fontSize: 12 * scale,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          SizedBox(height: 8 * scale),
+          // 进度条
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2.0 * scale,
+              thumbShape: RoundSliderThumbShape(
+                enabledThumbRadius: 6.0 * scale,
+              ),
+              overlayShape: SliderComponentShape.noOverlay,
+              activeTrackColor: accentColor,
+              inactiveTrackColor: onBarColor.withValues(alpha: 0.7),
+              thumbColor: accentColor,
+              showValueIndicator: ShowValueIndicator.onDrag,
+            ),
+            child: StreamBuilder<Duration?>(
+              stream: positionStream,
+              initialData: player.state.position,
+              builder: (context, snapshot) {
+                final currentPosition = snapshot.data ?? Duration.zero;
+                final totalDuration = player.state.duration;
+                double sliderValue = 0.0;
+
+                if (_isDraggingSlider) {
+                  sliderValue = _currentSliderValue;
+                } else {
+                  sliderValue = totalDuration.inMilliseconds == 0
+                      ? 0.0
+                      : currentPosition.inMilliseconds /
+                            totalDuration.inMilliseconds;
+                }
+
+                return Slider(
+                  value: sliderValue.clamp(0.0, 1.0),
+                  min: 0.0,
+                  max: 1.0,
+                  label: _isDraggingSlider
+                      ? _formatDuration(
+                          Duration(
+                            milliseconds:
+                                (player.state.duration.inMilliseconds *
+                                        sliderValue)
+                                    .round(),
                           ),
-                        ),
-                      );
-                    },
+                        )
+                      : null,
+                  onChanged: (double newValue) {
+                    setState(() {
+                      _isDraggingSlider = true;
+                      _currentSliderValue = newValue;
+                    });
+                  },
+                  onChangeStart: (double startValue) {
+                    _dragSessionId++;
+                    _isDraggingSlider = true; // 开始拖动
+                  },
+                  onChangeEnd: (double endValue) async {
+                    final currentSessionId = _dragSessionId;
+                    final totalDuration = player.state.duration;
+                    final seekPosition = Duration(
+                      milliseconds: (totalDuration.inMilliseconds * endValue)
+                          .round(),
+                    );
+                    player.seek(seekPosition); // 拖动结束后才实际 seek
+                    await Future.delayed(const Duration(milliseconds: 200));
+                    if (mounted && _dragSessionId == currentSessionId) {
+                      setState(() {
+                        _isDraggingSlider = false; // 结束拖动
+                        _currentSliderValue = totalDuration.inMilliseconds == 0
+                            ? 0.0
+                            : seekPosition.inMilliseconds /
+                                  totalDuration.inMilliseconds;
+                      });
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 4 * scale),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 上一首
+              IconButton(
+                icon: Icon(
+                  Icons.skip_previous,
+                  color: onBarColor,
+                  size: 28 * scale,
+                ),
+                onPressed: () => playlistNotifier.playPrevious(),
+              ),
+              SizedBox(width: 16 * scale),
+              // 播放/暂停
+              StreamBuilder<bool>(
+                stream: player.stream.playing,
+                initialData: playlistNotifier.isPlaying,
+                builder: (context, snapshot) {
+                  final isPlaying = snapshot.data ?? false;
+                  return PlayPauseButton(
+                    isPlaying: isPlaying,
+                    color: accentColor,
+                    size: 36.0 * scale,
+                    onPressed: isPlaying
+                        ? playlistNotifier.pause
+                        : playlistNotifier.play,
                   );
                 },
               ),
-              SizedBox(height: 8 * scale),
-              // 进度条
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2.0 * scale,
-                  thumbShape: RoundSliderThumbShape(
-                    enabledThumbRadius: 6.0 * scale,
-                  ),
-                  overlayShape: SliderComponentShape.noOverlay,
-                  activeTrackColor: accentColor,
-                  inactiveTrackColor: onBarColor.withValues(alpha: 0.7),
-                  thumbColor: accentColor,
-                  showValueIndicator: ShowValueIndicator.onDrag,
+              SizedBox(width: 16 * scale),
+              // 下一首
+              IconButton(
+                icon: Icon(
+                  Icons.skip_next,
+                  color: onBarColor,
+                  size: 28 * scale,
                 ),
-                child: StreamBuilder<Duration?>(
-                  stream: player.stream.position.throttleTime(
-                    const Duration(milliseconds: 200),
-                  ),
-                  initialData: player.state.position,
-                  builder: (context, snapshot) {
-                    final currentPosition = snapshot.data ?? Duration.zero;
-                    final totalDuration = player.state.duration;
-                    double sliderValue = 0.0;
-
-                    if (_isDraggingSlider) {
-                      sliderValue = _currentSliderValue;
-                    } else {
-                      sliderValue = totalDuration.inMilliseconds == 0
-                          ? 0.0
-                          : currentPosition.inMilliseconds /
-                                totalDuration.inMilliseconds;
-                    }
-
-                    return Slider(
-                      value: sliderValue.clamp(0.0, 1.0),
-                      min: 0.0,
-                      max: 1.0,
-                      label: _isDraggingSlider
-                          ? _formatDuration(
-                              Duration(
-                                milliseconds:
-                                    (player.state.duration.inMilliseconds *
-                                            sliderValue)
-                                        .round(),
-                              ),
-                            )
-                          : null,
-                      onChanged: (double newValue) {
-                        setState(() {
-                          _isDraggingSlider = true;
-                          _currentSliderValue = newValue;
-                        });
-                      },
-                      onChangeStart: (double startValue) {
-                        _dragSessionId++;
-                        _isDraggingSlider = true; // 开始拖动
-                      },
-                      onChangeEnd: (double endValue) async {
-                        final currentSessionId = _dragSessionId;
-                        final totalDuration = player.state.duration;
-                        final seekPosition = Duration(
-                          milliseconds:
-                              (totalDuration.inMilliseconds * endValue).round(),
-                        );
-                        player.seek(seekPosition); // 拖动结束后才实际 seek
-                        await Future.delayed(const Duration(milliseconds: 200));
-                        if (mounted && _dragSessionId == currentSessionId) {
-                          setState(() {
-                            _isDraggingSlider = false; // 结束拖动
-                            _currentSliderValue =
-                                totalDuration.inMilliseconds == 0
-                                ? 0.0
-                                : seekPosition.inMilliseconds /
-                                      totalDuration.inMilliseconds;
-                          });
-                        }
-                      },
-                    );
-                  },
-                ),
-              ),
-              SizedBox(height: 4 * scale),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // 上一首
-                  IconButton(
-                    icon: Icon(
-                      Icons.skip_previous,
-                      color: onBarColor,
-                      size: 28 * scale,
-                    ),
-                    onPressed: () => playlistNotifier.playPrevious(),
-                  ),
-                  SizedBox(width: 16 * scale),
-                  // 播放/暂停
-                  StreamBuilder<bool>(
-                    stream: player.stream.playing,
-                    initialData: playlistNotifier.isPlaying,
-                    builder: (context, snapshot) {
-                      final isPlaying = snapshot.data ?? false;
-                      return PlayPauseButton(
-                        isPlaying: isPlaying,
-                        color: accentColor,
-                        size: 36.0 * scale,
-                        onPressed: isPlaying
-                            ? playlistNotifier.pause
-                            : playlistNotifier.play,
-                      );
-                    },
-                  ),
-                  SizedBox(width: 16 * scale),
-                  // 下一首
-                  IconButton(
-                    icon: Icon(
-                      Icons.skip_next,
-                      color: onBarColor,
-                      size: 28 * scale,
-                    ),
-                    onPressed: () => playlistNotifier.playNext(),
-                  ),
-                ],
+                onPressed: () => playlistNotifier.playNext(),
               ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

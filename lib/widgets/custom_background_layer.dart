@@ -11,37 +11,54 @@ class CustomBackgroundImageLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final path = settings.existingBackgroundPath;
+    final (path, isGlass, blur) = context
+        .select<SettingsProvider, (String?, bool, double)>(
+          (s) => (
+            s.existingBackgroundPath,
+            s.isGlassBackgroundMask,
+            s.backgroundImageBlur,
+          ),
+        );
 
     // 未启用、未选择图片或文件已不存在时不绘制任何内容
     if (path == null) {
       return const SizedBox.shrink();
     }
 
+    // 按当前显示器物理宽度限制解码上限，避免 4K/8K 背景图撑爆 ImageCache
+    // 同时与窗口拖拽解耦，避免调整窗口大小时每帧重新解码图片
+    final displayWidth = View.of(context).display.size.width.round();
+    final int targetCacheWidth = (isGlass && blur >= 3.0)
+        ? (displayWidth > 0 ? displayWidth.clamp(480, 960) : 960)
+        : (displayWidth > 0 ? displayWidth.clamp(960, 1920) : 1920);
+
     final image = Image.file(
       File(path),
       fit: BoxFit.cover,
+      cacheWidth: targetCacheWidth,
+      gaplessPlayback: true,
       filterQuality: FilterQuality.medium,
       errorBuilder: (context, error, stackTrace) =>
           const SizedBox.expand(child: ColoredBox(color: Colors.transparent)),
     );
 
-    if (settings.isGlassBackgroundMask) {
-      return ClipRect(
-        child: ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(
-            sigmaX: settings.backgroundImageBlur,
-            sigmaY: settings.backgroundImageBlur,
-            // clamp 四周不会发灰
-            tileMode: TileMode.clamp,
+    if (isGlass && blur > 0) {
+      return RepaintBoundary(
+        child: ClipRect(
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(
+              sigmaX: blur,
+              sigmaY: blur,
+              // clamp 四周不会发灰
+              tileMode: TileMode.clamp,
+            ),
+            child: image,
           ),
-          child: image,
         ),
       );
     }
 
-    return image;
+    return RepaintBoundary(child: image);
   }
 }
 
@@ -51,17 +68,22 @@ class CustomBackgroundMaskLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final settings = context.watch<SettingsProvider>();
-    final enabled = settings.hasCustomBackgroundImage;
+    final (enabled, maskStyle, maskOpacity) = context
+        .select<SettingsProvider, (bool, BackgroundMaskStyle, double)>(
+          (s) => (
+            s.hasCustomBackgroundImage,
+            s.backgroundMaskStyle,
+            s.backgroundMaskOpacity,
+          ),
+        );
     final double baseAlpha = enabled
-        ? switch (settings.backgroundMaskStyle) {
+        ? switch (maskStyle) {
             BackgroundMaskStyle.none => 0.0,
             BackgroundMaskStyle.solid ||
-            BackgroundMaskStyle.glass => settings.backgroundMaskOpacity,
+            BackgroundMaskStyle.glass => maskOpacity,
           }
         : 1.0;
-    final double bottomBoost =
-        enabled && settings.backgroundMaskStyle != BackgroundMaskStyle.none
+    final double bottomBoost = enabled && maskStyle != BackgroundMaskStyle.none
         ? _maskGradientBoost
         : 0.0;
 

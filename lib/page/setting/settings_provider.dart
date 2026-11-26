@@ -106,6 +106,7 @@ class SettingsProvider with ChangeNotifier {
 
   bool _enableCustomBackground = false; // 默认不启用自定义背景图
   String? _customBackgroundPath; // 自定义背景图文件路径
+  bool _backgroundFileExists = false; // 缓存自定义背景图文件是否存在，避免 build 中同步磁盘 IO
   BackgroundMaskStyle _backgroundMaskStyle =
       BackgroundMaskStyle.solid; // 默认使用普通遮罩
   double _backgroundMaskOpacity = 0.7; // 默认遮罩不透明度
@@ -187,12 +188,28 @@ class SettingsProvider with ChangeNotifier {
   // 卡片/面板背景不透明度
   double get panelSurfaceOpacity => _panelSurfaceOpacity;
 
+  // 缓存的背景图文件是否存在（异步检测结果）
+  bool get customBackgroundFileExists => _backgroundFileExists;
+
   // 是否真正可以显示自定义背景图：已启用、已选择路径且文件仍然存在
   bool get hasCustomBackgroundImage {
     if (!_enableCustomBackground) return false;
     final path = _customBackgroundPath;
     if (path == null || path.isEmpty) return false;
-    return File(path).existsSync();
+    return _backgroundFileExists;
+  }
+
+  // 异步刷新自定义背景图文件是否存在，避免在 build() 中执行 existsSync()
+  Future<void> refreshCustomBackgroundFileExists() async {
+    final path = _customBackgroundPath;
+    final exists = (path != null && path.isNotEmpty)
+        ? await File(path).exists()
+        : false;
+    if (_customBackgroundPath != path) return;
+    if (_backgroundFileExists != exists) {
+      _backgroundFileExists = exists;
+      notifyListeners();
+    }
   }
 
   // 当前可用的背景图路径，不可用时为 null
@@ -272,6 +289,10 @@ class SettingsProvider with ChangeNotifier {
     _enableCustomBackground =
         prefs.getBool(_enableCustomBackgroundKey) ?? false;
     _customBackgroundPath = prefs.getString(_customBackgroundPathKey);
+    _backgroundFileExists =
+        (_customBackgroundPath != null && _customBackgroundPath!.isNotEmpty)
+        ? await File(_customBackgroundPath!).exists()
+        : false;
     _backgroundMaskStyle = _backgroundMaskStyleFromString(
       prefs.getString(_backgroundMaskStyleKey),
     );
@@ -619,15 +640,22 @@ class SettingsProvider with ChangeNotifier {
     if (_enableCustomBackground == value) return;
     _enableCustomBackground = value;
     notifyListeners();
+    if (value && _customBackgroundPath != null) {
+      refreshCustomBackgroundFileExists();
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enableCustomBackgroundKey, value);
   }
 
   void setCustomBackgroundPath(String? path) async {
-    _customBackgroundPath = (path == null || path.isEmpty) ? null : path;
-    // 选择了新的背景图后自动启用，避免用户以为设置没生效
-    if (_customBackgroundPath != null) {
+    final normalizedPath = (path == null || path.isEmpty) ? null : path;
+    _customBackgroundPath = normalizedPath;
+    if (normalizedPath == null) {
+      _backgroundFileExists = false;
+    } else {
+      // 选择了新的背景图后自动启用，避免用户以为设置没生效
       _enableCustomBackground = true;
+      _backgroundFileExists = await File(normalizedPath).exists();
     }
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();

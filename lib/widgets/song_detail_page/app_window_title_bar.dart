@@ -41,18 +41,16 @@ class AppWindowTitleBar extends StatelessWidget {
                   tooltip: '歌词设置',
                   padding: EdgeInsets.zero,
                 ),
-                ColorFiltered(
-                  colorFilter: ColorFilter.mode(
-                    Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                    BlendMode.srcIn,
-                  ),
-                  child: Image.asset(
-                    'assets/images/icon/icon.png',
-                    width: 21,
-                    height: 21,
-                  ),
+                Image.asset(
+                  'assets/images/icon/icon.png',
+                  width: 21,
+                  height: 21,
+                  cacheWidth: 48,
+                  cacheHeight: 48,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                  colorBlendMode: BlendMode.srcIn,
                 ),
                 const SizedBox(width: 8),
                 const Text(

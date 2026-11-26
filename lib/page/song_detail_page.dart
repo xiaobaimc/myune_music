@@ -83,7 +83,10 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
 
   Future<void> _extractColorsAsync(Song song, bool isDarkTheme) async {
     try {
-      final ImageProvider imageProvider = MemoryImage(song.albumArt!);
+      final ImageProvider imageProvider = ResizeImage(
+        MemoryImage(song.albumArt!),
+        width: 64,
+      );
       final List<CgColor> cgColors = await extractColor(imageProvider, 6);
 
       if (!mounted || song.filePath != _lastSongFilePath) return;
@@ -180,10 +183,9 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
 
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
 
-    return Consumer<PlaylistContentNotifier>(
-      builder: (context, playlistNotifier, child) {
-        final currentSong = playlistNotifier.currentSong;
-
+    return Selector<PlaylistContentNotifier, Song?>(
+      selector: (_, notifier) => notifier.currentSong,
+      builder: (context, currentSong, child) {
         _checkAndUpdateColors(currentSong, isDarkTheme);
         // 当没有封面图或用户未启用模糊背景时，使用纯色背景
         if (currentSong?.albumArt == null || !useBlurBackground) {
@@ -199,51 +201,53 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
           return Stack(
             fit: StackFit.expand,
             children: [
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, _) {
-                  final List<MeshGradientPoint> animatedPoints = [];
-                  const double amplitude = 0.35;
-                  final double time = _animation.value * 2 * math.pi;
+              RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _animation,
+                  builder: (context, _) {
+                    final List<MeshGradientPoint> animatedPoints = [];
+                    const double amplitude = 0.35;
+                    final double time = _animation.value * 2 * math.pi;
 
-                  for (int i = 0; i < basePoints.length; i++) {
-                    final point = basePoints[i];
-                    double offsetX = 0.0;
-                    double offsetY = 0.0;
+                    for (int i = 0; i < basePoints.length; i++) {
+                      final point = basePoints[i];
+                      double offsetX = 0.0;
+                      double offsetY = 0.0;
 
-                    if (i == 0) {
-                      offsetX = amplitude * math.sin(time);
-                      offsetY = amplitude * math.cos(time * 1.2);
-                    } else if (i == 1) {
-                      offsetX = amplitude * math.cos(time * 0.9);
-                      offsetY = amplitude * math.sin(time * 1.1);
-                    } else if (i == 2) {
-                      offsetX = amplitude * math.sin(time * 1.3);
-                      offsetY = amplitude * math.sin(time * 0.8);
-                    } else {
-                      offsetX = amplitude * math.cos(time * 1.1);
-                      offsetY = amplitude * math.cos(time * 1.4);
+                      if (i == 0) {
+                        offsetX = amplitude * math.sin(time);
+                        offsetY = amplitude * math.cos(time * 1.2);
+                      } else if (i == 1) {
+                        offsetX = amplitude * math.cos(time * 0.9);
+                        offsetY = amplitude * math.sin(time * 1.1);
+                      } else if (i == 2) {
+                        offsetX = amplitude * math.sin(time * 1.3);
+                        offsetY = amplitude * math.sin(time * 0.8);
+                      } else {
+                        offsetX = amplitude * math.cos(time * 1.1);
+                        offsetY = amplitude * math.cos(time * 1.4);
+                      }
+
+                      animatedPoints.add(
+                        MeshGradientPoint(
+                          position: Offset(
+                            (point.position.dx + offsetX).clamp(0.0, 1.0),
+                            (point.position.dy + offsetY).clamp(0.0, 1.0),
+                          ),
+                          color: point.color,
+                        ),
+                      );
                     }
 
-                    animatedPoints.add(
-                      MeshGradientPoint(
-                        position: Offset(
-                          (point.position.dx + offsetX).clamp(0.0, 1.0),
-                          (point.position.dy + offsetY).clamp(0.0, 1.0),
-                        ),
-                        color: point.color,
+                    return MeshGradient(
+                      points: animatedPoints,
+                      options: MeshGradientOptions(
+                        blend: 4.0,
+                        noiseIntensity: 0.1,
                       ),
                     );
-                  }
-
-                  return MeshGradient(
-                    points: animatedPoints,
-                    options: MeshGradientOptions(
-                      blend: 4.0,
-                      noiseIntensity: 0.1,
-                    ),
-                  );
-                },
+                  },
+                ),
               ),
               Container(
                 color: Theme.of(context).colorScheme.surface.withValues(
@@ -259,17 +263,21 @@ class _BackgroundBlurWidgetState extends State<BackgroundBlurWidget>
         return Stack(
           fit: StackFit.expand,
           children: [
-            ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(
-                sigmaX: 40,
-                sigmaY: 40,
-                tileMode: TileMode.decal,
-              ),
-              child: Image.memory(
-                currentSong!.albumArt!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(color: Theme.of(context).colorScheme.surface),
+            RepaintBoundary(
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(
+                  sigmaX: 40,
+                  sigmaY: 40,
+                  tileMode: TileMode.decal,
+                ),
+                child: Image.memory(
+                  currentSong!.albumArt!,
+                  fit: BoxFit.cover,
+                  cacheWidth: 200,
+                  gaplessPlayback: true,
+                  errorBuilder: (context, error, stackTrace) =>
+                      Container(color: Theme.of(context).colorScheme.surface),
+                ),
               ),
             ),
             IgnorePointer(
@@ -705,6 +713,10 @@ class _SongDetailPageState extends State<SongDetailPage> {
                                                                             .albumArt!,
                                                                         fit: BoxFit
                                                                             .cover,
+                                                                        cacheWidth:
+                                                                            800,
+                                                                        gaplessPlayback:
+                                                                            true,
                                                                         errorBuilder:
                                                                             (
                                                                               _,

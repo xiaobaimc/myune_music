@@ -7,7 +7,6 @@ use lofty::config::{ParseOptions, ParsingMode, WriteOptions};
 use lofty::file::{TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::probe::Probe;
-use lofty::read_from_path;
 use lofty::tag::{Accessor, ItemKey, Tag};
 
 #[derive(Default, Debug)]
@@ -37,31 +36,38 @@ pub struct AudioInfo {
     pub track_number: Option<u32>,
 }
 
-fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFile, String> {
-    // read_from_path
-    if let Ok(file) = read_from_path(path) {
-        let has_tag = file.primary_tag().is_some() || !file.tags().is_empty();
-        let has_cover = !options.need_cover
-            || file
-                .primary_tag()
-                .and_then(|t| t.pictures().first())
-                .is_some();
+fn build_parse_options(options: &AudioInfoOptions, mode: ParsingMode) -> ParseOptions {
+    ParseOptions::new()
+        .parsing_mode(mode)
+        .read_tags(true)
+        .read_cover_art(options.need_cover)
+        .read_properties(options.need_audio_props)
+}
 
-        if has_tag && has_cover {
-            return Ok(file);
+fn read_tagged_file(path: &Path, options: &AudioInfoOptions) -> Result<TaggedFile, String> {
+    // 优先使用按需配置解析，避免不需要封面或音频属性时白白读入整张大图与全量流属性
+    if let Ok(probe) = Probe::open(path) {
+        if let Ok(file) = probe
+            .options(build_parse_options(options, ParsingMode::BestAttempt))
+            .read()
+        {
+            let has_tag = file.primary_tag().is_some() || !file.tags().is_empty();
+            let has_cover = !options.need_cover
+                || file
+                    .primary_tag()
+                    .and_then(|t| t.pictures().first())
+                    .is_some();
+
+            if has_tag && has_cover {
+                return Ok(file);
+            }
         }
     }
 
     // Relaxed Probe
     Probe::open(path)
         .map_err(|e| e.to_string())?
-        .options(
-            ParseOptions::new()
-                .parsing_mode(ParsingMode::Relaxed) // 宽容，救命
-                .read_tags(true)
-                .read_cover_art(options.need_cover)
-                .read_properties(options.need_audio_props),
-        )
+        .options(build_parse_options(options, ParsingMode::Relaxed))
         .read()
         .map_err(|e| e.to_string())
 }

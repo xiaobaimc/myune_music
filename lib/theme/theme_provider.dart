@@ -43,9 +43,13 @@ class ThemeProvider with ChangeNotifier {
   static const String _fontFamilyKey = 'user_font_family';
   String _currentFontFamily = 'Misans'; // 默认字体
 
-  ThemeProvider() {
-    initialize();
-  }
+  Future<void>? _initFuture;
+  ThemeData? _cachedLightTheme;
+  ThemeData? _cachedDarkTheme;
+  Color? _cachedThemeSeedColor;
+  String? _cachedThemeFontFamily;
+
+  ThemeProvider();
 
   Color get currentSeedColor => _currentSeedColor;
 
@@ -53,29 +57,46 @@ class ThemeProvider with ChangeNotifier {
 
   String get currentFontFamily => _currentFontFamily;
 
-  ColorScheme get currentColorScheme {
-    return ColorScheme.fromSeed(seedColor: _currentSeedColor);
+  void _ensureThemeCache() {
+    if (_cachedThemeSeedColor == _currentSeedColor &&
+        _cachedThemeFontFamily == _currentFontFamily &&
+        _cachedLightTheme != null &&
+        _cachedDarkTheme != null) {
+      return;
+    }
+    _cachedThemeSeedColor = _currentSeedColor;
+    _cachedThemeFontFamily = _currentFontFamily;
+    _cachedLightTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: _currentSeedColor,
+        brightness: Brightness.light,
+      ),
+      fontFamily: _currentFontFamily,
+      textTheme: misansTextTheme,
+    ).makeMouseClickable();
+    _cachedDarkTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: _currentSeedColor,
+        brightness: Brightness.dark,
+      ),
+      fontFamily: _currentFontFamily,
+      textTheme: misansTextTheme,
+    ).makeMouseClickable();
   }
 
-  ThemeData get lightThemeData => ThemeData(
-    useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: _currentSeedColor,
-      brightness: Brightness.light,
-    ),
-    fontFamily: _currentFontFamily,
-    textTheme: misansTextTheme,
-  ).makeMouseClickable();
+  ColorScheme get currentColorScheme => lightThemeData.colorScheme;
 
-  ThemeData get darkThemeData => ThemeData(
-    useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: _currentSeedColor,
-      brightness: Brightness.dark,
-    ),
-    fontFamily: _currentFontFamily,
-    textTheme: misansTextTheme,
-  ).makeMouseClickable();
+  ThemeData get lightThemeData {
+    _ensureThemeCache();
+    return _cachedLightTheme!;
+  }
+
+  ThemeData get darkThemeData {
+    _ensureThemeCache();
+    return _cachedDarkTheme!;
+  }
 
   Future<void> setSeedColor(Color newColor, {bool isManual = false}) async {
     if (_currentSeedColor != newColor) {
@@ -137,21 +158,13 @@ class ThemeProvider with ChangeNotifier {
     }
   }
 
-  void toggleDarkMode() async {
-    switch (_themeMode) {
-      case ThemeMode.light:
-        _themeMode = ThemeMode.dark;
-        break;
-      case ThemeMode.dark:
-        _themeMode = ThemeMode.system;
-        break;
-      case ThemeMode.system:
-        _themeMode = ThemeMode.light;
-        break;
-    }
-    notifyListeners();
-
-    setThemeMode(_themeMode);
+  void toggleDarkMode() {
+    final ThemeMode nextMode = switch (_themeMode) {
+      ThemeMode.light => ThemeMode.dark,
+      ThemeMode.dark => ThemeMode.system,
+      ThemeMode.system => ThemeMode.light,
+    };
+    setThemeMode(nextMode);
   }
 
   void setThemeMode(ThemeMode mode) async {
@@ -215,7 +228,11 @@ class ThemeProvider with ChangeNotifier {
     await prefs.remove(_fontFamilyKey);
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    return _initFuture ??= _doInitialize();
+  }
+
+  Future<void> _doInitialize() async {
     await Future.wait([_loadSeedColor(), _loadDarkMode(), _loadFontFamily()]);
     await _migrateManualColorKey();
     await _loadLastManualSeedColor();

@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../page/setting/settings_provider.dart';
 import '../utils/pixel_snap.dart';
 import '../window/app_window.dart';
-import 'custom_background_layer.dart';
 
 class AppWindowTitleBar extends StatelessWidget {
   const AppWindowTitleBar({super.key});
@@ -13,12 +12,12 @@ class AppWindowTitleBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
-    final settings = context.watch<SettingsProvider>();
-    final Color titleBarBackgroundColor =
-        CustomBackgroundSurfaces.transparentWhenEnabled(
-          settings,
-          colorScheme.surface,
-        );
+    final hasCustomBackground = context.select<SettingsProvider, bool>(
+      (s) => s.hasCustomBackgroundImage,
+    );
+    final Color titleBarBackgroundColor = hasCustomBackground
+        ? Colors.transparent
+        : colorScheme.surface;
     final double titleBarHeight = snapToDevicePixel(context, 31.0);
     return Container(
       height: titleBarHeight,
@@ -29,18 +28,16 @@ class AppWindowTitleBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
-                ColorFiltered(
-                  colorFilter: ColorFilter.mode(
-                    Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                    BlendMode.srcIn,
-                  ),
-                  child: Image.asset(
-                    'assets/images/icon/icon.png',
-                    width: 21,
-                    height: 21,
-                  ),
+                Image.asset(
+                  'assets/images/icon/icon.png',
+                  width: 21,
+                  height: 21,
+                  cacheWidth: 48,
+                  cacheHeight: 48,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                  colorBlendMode: BlendMode.srcIn,
                 ),
                 const SizedBox(width: 8),
                 const Text(

@@ -23,6 +23,12 @@ class _CustomBackgroundSettingsState extends State<CustomBackgroundSettings> {
   bool _picking = false;
   bool _applyingThemeColor = false;
 
+  @override
+  void initState() {
+    super.initState();
+    context.read<SettingsProvider>().refreshCustomBackgroundFileExists();
+  }
+
   Future<void> _applyBackgroundThemeColor() async {
     if (_applyingThemeColor) return;
 
@@ -36,7 +42,10 @@ class _CustomBackgroundSettingsState extends State<CustomBackgroundSettings> {
 
     setState(() => _applyingThemeColor = true);
     try {
-      final colors = await extractColor(FileImage(File(path)), 1);
+      final colors = await extractColor(
+        ResizeImage(FileImage(File(path)), width: 64),
+        1,
+      );
       if (!mounted) return;
 
       if (colors.isEmpty) {
@@ -91,10 +100,11 @@ class _CustomBackgroundSettingsState extends State<CustomBackgroundSettings> {
       if (path == null || !mounted) return;
 
       final notification = context.read<NotificationService>();
-      if (!File(path).existsSync()) {
+      if (!await File(path).exists()) {
         notification.error('选择的图片文件不存在');
         return;
       }
+      if (!mounted) return;
 
       context.read<SettingsProvider>().setCustomBackgroundPath(path);
     } catch (e) {
@@ -115,7 +125,7 @@ class _CustomBackgroundSettingsState extends State<CustomBackgroundSettings> {
     final path = settings.customBackgroundPath;
     final hasImage = path != null && path.isNotEmpty;
     // 图片可能被删除或移动，此时界面会自动回退为默认外观
-    final fileMissing = hasImage && !File(path).existsSync();
+    final fileMissing = hasImage && !settings.customBackgroundFileExists;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
