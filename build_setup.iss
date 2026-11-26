@@ -1,10 +1,10 @@
 [Setup]
 AppName=MyuneMusic
-AppVersion=0.9.5
+AppVersion=0.9.6
 AppPublisher=Myune
 DefaultDirName={autopf}\MyuneMusic
 DefaultGroupName=MyuneMusic
-OutputBaseFilename=MyuneMusic_v0.9.5_setup_windows-x64
+OutputBaseFilename=MyuneMusic_v0.9.6_setup_windows-x64
 Compression=lzma
 SolidCompression=yes
 OutputDir=output_setup
