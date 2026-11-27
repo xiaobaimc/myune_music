@@ -13,7 +13,6 @@ import '../../widgets/sort_dialog.dart';
 import '../setting/settings_provider.dart';
 import '../../layout/navigation_notifier.dart';
 import '../../services/notification_service.dart';
-import '../../window/app_freeze.dart';
 import '../../widgets/custom_background_layer.dart';
 import '../../widgets/locate_playing_song_button.dart';
 import '../../widgets/song_cover.dart';
@@ -364,12 +363,12 @@ class _FolderManagementWidgetState extends State<_FolderManagementWidget> {
               onPressed: () async {
                 String? folder;
                 try {
-                  final directory = await AppFreeze.during(
-                    () => FilePicker.pickDirectory(
-                      dialogTitle: '请选择文件夹',
-                      windowsOptions: kWindowsPickerOptions,
-                      linuxOptions: const LinuxOptions(lockParentWindow: true),
+                  final directory = await FilePicker.pickDirectory(
+                    dialogTitle: '请选择文件夹',
+                    windowsOptions: const WindowsOptions(
+                      lockParentWindow: true,
                     ),
+                    linuxOptions: const LinuxOptions(lockParentWindow: true),
                   );
                   folder = directory == null
                       ? null

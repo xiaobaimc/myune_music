@@ -48,7 +48,6 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'page/statistics_page/statistics_manager.dart';
 import 'layout/navigation_notifier.dart';
 import 'services/license_service.dart';
-import 'window/app_freeze.dart';
 import 'window/app_window.dart';
 import 'window/single_instance.dart';
 
@@ -157,9 +156,7 @@ void main() async {
             context.read<NotificationService>(),
           ),
         ),
-        ChangeNotifierProvider<StatisticsManager>.value(
-          value: statsManager,
-        ),
+        ChangeNotifierProvider<StatisticsManager>.value(value: statsManager),
         ChangeNotifierProvider(create: (_) => NavigationNotifier()),
       ],
       child: const MyApp(),
@@ -196,6 +193,11 @@ class _MyAppState extends State<MyApp> {
   Menu? _trayMenu;
   final List<MenuItem> _trayMenuItems = <MenuItem>[];
   bool _traySetup = false;
+
+  // Linux/Wayland 托盘恢复黑屏临时绕过（Flutter 3.50 #197519 / #196863）
+  Timer? _linuxShowNudgeTimer;
+  Timer? _linuxShowRestoreTimer;
+  Timer? _linuxShowSettleTimer;
 
   @override
   void initState() {
@@ -507,6 +509,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    _cancelLinuxShowNudge();
     _trayIcon?.dispose();
     _trayIcon = null;
     _trayMenu?.dispose();
@@ -524,14 +527,80 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
+  void _cancelLinuxShowNudge() {
+    _linuxShowNudgeTimer?.cancel();
+    _linuxShowNudgeTimer = null;
+    _linuxShowRestoreTimer?.cancel();
+    _linuxShowRestoreTimer = null;
+    _linuxShowSettleTimer?.cancel();
+    _linuxShowSettleTimer = null;
+    _windowState?.setViewSizePersistenceSuppressed(false);
+  }
+
   void _showWindow() {
     final window = AppWindow.instance;
     if (window == null) return;
+    final wasHiddenOnLinux = Platform.isLinux && !window.isVisible;
     if (window.isMinimized) {
       window.restore();
     }
     window.show();
     window.focus();
+    if (wasHiddenOnLinux) {
+      _scheduleLinuxSurfaceRefresh(window);
+    }
+  }
+
+  // TODO: 待 Flutter 3.50.x 合入 https://github.com/flutter/flutter/pull/196862 后移除
+  // Flutter 3.50 在 Linux Wayland 下隐藏窗口会销毁顶层 wl_surface，同尺寸重新show() 时
+  // FlViewRendererSubsurface 在 map 阶段拿不到新 surface 且不会触发
+  // size-allocate，导致黑屏；这里延迟将内容区尺寸临时 +1px 再还原以触发重建
+  void _scheduleLinuxSurfaceRefresh(Window window) {
+    _cancelLinuxShowNudge();
+    _windowState?.setViewSizePersistenceSuppressed(true);
+
+    _linuxShowNudgeTimer = Timer(const Duration(milliseconds: 60), () {
+      _linuxShowNudgeTimer = null;
+      if (!mounted || !window.isVisible) {
+        _cancelLinuxShowNudge();
+        return;
+      }
+      if (window.isMaximized || window.isFullScreen) {
+        _cancelLinuxShowNudge();
+        return;
+      }
+
+      final recorded = _windowState?.viewSize;
+      final rawSize =
+          (recorded != null && recorded.width > 0 && recorded.height > 0)
+          ? recorded
+          : window.contentSize.toSize();
+      if (rawSize.width <= 0 || rawSize.height <= 0) {
+        _cancelLinuxShowNudge();
+        return;
+      }
+      final baseSize = Size(
+        rawSize.width.roundToDouble(),
+        rawSize.height.roundToDouble(),
+      );
+
+      window.contentSize = Size(baseSize.width + 1, baseSize.height).toNative();
+
+      _linuxShowRestoreTimer = Timer(const Duration(milliseconds: 60), () {
+        _linuxShowRestoreTimer = null;
+        if (!mounted || !window.isVisible) {
+          _cancelLinuxShowNudge();
+          return;
+        }
+        window.contentSize = baseSize.toNative();
+
+        // 等窗口尺寸稳定后再恢复持久化写盘，避免把临时 +1px 写入 prefs
+        _linuxShowSettleTimer = Timer(const Duration(milliseconds: 250), () {
+          _linuxShowSettleTimer = null;
+          _windowState?.setViewSizePersistenceSuppressed(false);
+        });
+      });
+    });
   }
 
   @override
@@ -570,11 +639,9 @@ class _MyAppState extends State<MyApp> {
                     },
                   )
                 : content;
-            return AppFreezeGate(
-              child: DragToResizeArea(
-                window: AppWindow.instance,
-                child: measured,
-              ),
+            return DragToResizeArea(
+              window: AppWindow.instance,
+              child: measured,
             );
           },
 
@@ -643,13 +710,22 @@ class WindowStateManager {
 
   /// Flutter 视图的最新布局尺寸
   Size? _viewSize;
+  Size? get viewSize => _viewSize;
   Timer? _viewSizeSaveTimer;
 
   bool _viewSizePersistenceEnabled = false;
+  bool _viewSizePersistenceSuppressed = false;
 
   void enableViewSizePersistence() {
     // 只启用写盘，不立即写入
     _viewSizePersistenceEnabled = true;
+  }
+
+  void setViewSizePersistenceSuppressed(bool suppressed) {
+    _viewSizePersistenceSuppressed = suppressed;
+    if (suppressed) {
+      _viewSizeSaveTimer?.cancel();
+    }
   }
 
   void noteViewSize(Size size) {
@@ -661,6 +737,7 @@ class WindowStateManager {
         (previous.height - size.height).abs() < 0.5) {
       return;
     }
+    if (_viewSizePersistenceSuppressed) return;
     _viewSize = size;
     if (!_viewSizePersistenceEnabled) return;
     _viewSizeSaveTimer?.cancel();

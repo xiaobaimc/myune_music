@@ -31,7 +31,6 @@ import '../../services/search_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../utils/search_debouncer.dart';
 import '../../lyrics/lyrics_handler.dart';
-import '../../window/app_freeze.dart';
 
 enum SortCriterion { title, artist, dateModified, file, random, trackNumber }
 
@@ -1717,6 +1716,7 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     final bool allowAnyFormat = _settingsProvider.allowAnyFormat;
 
+    const windowsOptions = WindowsOptions(lockParentWindow: true);
     const linuxOptions = LinuxOptions(lockParentWindow: true);
     const allowedExtensions = [
       'wav',
@@ -1737,20 +1737,18 @@ class PlaylistContentNotifier extends ChangeNotifier {
 
     List<PlatformFile> files;
     try {
-      files = await AppFreeze.during(
-        () => allowAnyFormat
-            ? FilePicker.pickFiles(
-                type: FileType.any,
-                windowsOptions: kWindowsPickerOptions,
-                linuxOptions: linuxOptions,
-              )
-            : FilePicker.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: allowedExtensions,
-                windowsOptions: kWindowsPickerOptions,
-                linuxOptions: linuxOptions,
-              ),
-      );
+      files = await (allowAnyFormat
+          ? FilePicker.pickFiles(
+              type: FileType.any,
+              windowsOptions: windowsOptions,
+              linuxOptions: linuxOptions,
+            )
+          : FilePicker.pickFiles(
+              type: FileType.custom,
+              allowedExtensions: allowedExtensions,
+              windowsOptions: windowsOptions,
+              linuxOptions: linuxOptions,
+            ));
     } catch (e) {
       _notificationService.error('打开文件选择窗口失败：$e');
       return false;

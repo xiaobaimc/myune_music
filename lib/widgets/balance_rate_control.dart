@@ -6,7 +6,6 @@ import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 import 'package:provider/provider.dart';
 
 import '../page/playlist/playlist_content_notifier.dart';
-import '../window/app_freeze.dart';
 
 class BalanceRateControl extends StatelessWidget {
   final Player player;
@@ -511,15 +510,15 @@ class BalanceRateControl extends StatelessWidget {
                       if (needsPicker) {
                         String? modelPath;
                         try {
-                          final file = await AppFreeze.during(
-                            () => FilePicker.pickFile(
-                              type: FileType.custom,
-                              allowedExtensions: const ['rnnn'],
-                              dialogTitle: '选择 RNN 降噪模型文件',
-                              windowsOptions: kWindowsPickerOptions,
-                              linuxOptions: const LinuxOptions(
-                                lockParentWindow: true,
-                              ),
+                          final file = await FilePicker.pickFile(
+                            type: FileType.custom,
+                            allowedExtensions: const ['rnnn'],
+                            dialogTitle: '选择 RNN 降噪模型文件',
+                            windowsOptions: const WindowsOptions(
+                              lockParentWindow: true,
+                            ),
+                            linuxOptions: const LinuxOptions(
+                              lockParentWindow: true,
                             ),
                           );
                           modelPath = file?.path;
