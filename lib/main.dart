@@ -111,20 +111,11 @@ void main() async {
     window.addListener(windowState.onWindowEvent);
 
     if (Platform.isLinux) {
-      // nativeapi 在 Linux/Wayland 上不保证 resize 立即生效，也不保证 resize 事件会送达
-      final confirmed = await _waitForLinuxViewSize(window, initialSize);
-      if (!confirmed) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Timer(const Duration(milliseconds: 300), () {
-            window.contentSize = initialSize.toNative();
-          });
-        });
-      }
+      // cnativeapi 0.6.2 在 Linux CSD 隐藏标题栏后会延迟触发 shadow gutter 决策，
+      // Wayland 下可能在首帧之后再次改写窗口内容区尺寸，因此首帧后持续确认并重设，
+      // 直到视图尺寸与窗口内容区尺寸稳定后再开启持久化写盘。
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Timer(
-          const Duration(milliseconds: 1200),
-          windowState.enableViewSizePersistence,
-        );
+        windowState.startLinuxStartupRestore(initialSize);
       });
     }
   }
@@ -258,7 +249,8 @@ class _MyAppState extends State<MyApp> {
         menu.addSeparator();
         _addTrayMenuItem(menu, '显示窗口', _showWindow);
         menu.addSeparator();
-        _addTrayMenuItem(menu, '退出', () {
+        _addTrayMenuItem(menu, '退出', () async {
+          await _windowState?.flushPendingWindowSize();
           AppWindow.instance?.close();
           // exit 是为了确保即使有后台任务，进程也能立即结束
           exit(0);
@@ -510,6 +502,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     _cancelLinuxShowNudge();
+    _windowState?.dispose();
     _trayIcon?.dispose();
     _trayIcon = null;
     _trayMenu?.dispose();
@@ -661,41 +654,26 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-Future<bool> _waitForLinuxViewSize(Window window, Size target) async {
-  bool matches() {
-    final views = WidgetsBinding.instance.platformDispatcher.views;
-    if (views.isEmpty) {
-      // 拿不到视图信息时不阻塞启动
-      return true;
-    }
-    final view = views.first;
-    final ratio = view.devicePixelRatio;
-    if (ratio <= 0) return true;
-    final size = view.physicalSize / ratio;
-    return (size.width - target.width).abs() <= 1 &&
-        (size.height - target.height).abs() <= 1;
-  }
-
-  for (var i = 0; i < 13; i++) {
-    if (matches()) return true;
-    if (i > 0 && i % 3 == 0) {
-      window.contentSize = target.toNative();
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-  }
-  return matches();
-}
-
 // 管理窗口大小的加载与保存
 class WindowStateManager {
   WindowStateManager(this.window);
+
+  static const double _minWindowWidth = 480;
+  static const double _minWindowHeight = 600;
+  static const Duration _linuxRestorePollInterval = Duration(milliseconds: 120);
+  static const Duration _linuxRestoreMinWindow = Duration(milliseconds: 700);
+  static const Duration _linuxRestoreStableHold = Duration(milliseconds: 450);
+  static const Duration _linuxRestoreMaxDuration = Duration(milliseconds: 2200);
+  static const int _linuxRestoreMaxAttempts = 8;
 
   Window? window;
 
   Future<Size> loadWindowSize() async {
     final prefs = await SharedPreferences.getInstance();
-    final width = prefs.getDouble('window_width') ?? 1150;
-    final height = prefs.getDouble('window_height') ?? 620;
+    final rawWidth = prefs.getDouble('window_width') ?? 1150;
+    final rawHeight = prefs.getDouble('window_height') ?? 620;
+    final width = rawWidth < _minWindowWidth ? _minWindowWidth : rawWidth;
+    final height = rawHeight < _minWindowHeight ? _minWindowHeight : rawHeight;
     return Size(width, height);
   }
 
@@ -711,10 +689,122 @@ class WindowStateManager {
   /// Flutter 视图的最新布局尺寸
   Size? _viewSize;
   Size? get viewSize => _viewSize;
+  Size? _pendingPersistViewSize;
   Timer? _viewSizeSaveTimer;
 
   bool _viewSizePersistenceEnabled = false;
   bool _viewSizePersistenceSuppressed = false;
+
+  // Linux 启动期恢复守护状态
+  Size? _linuxRestoreTarget;
+  bool _linuxStartupRestoreActive = false;
+  DateTime? _linuxRestoreStartedAt;
+  DateTime? _linuxRestoreMatchedSince;
+  int _linuxRestoreApplyCount = 0;
+  Timer? _linuxRestorePollTimer;
+  Timer? _linuxRestoreReapplyTimer;
+  Timer? _linuxRestoreFinishTimer;
+
+  void startLinuxStartupRestore(Size target) {
+    if (!Platform.isLinux) return;
+    _cancelLinuxStartupRestoreTimers();
+    _linuxRestoreTarget = target;
+    _linuxStartupRestoreActive = true;
+    _viewSizePersistenceEnabled = false;
+    _linuxRestoreStartedAt = DateTime.now();
+    _linuxRestoreMatchedSince = null;
+    _linuxRestoreApplyCount = 0;
+
+    _linuxRestorePollTimer = Timer.periodic(
+      _linuxRestorePollInterval,
+      (_) => _checkLinuxStartupRestore(),
+    );
+    _linuxRestoreFinishTimer = Timer(
+      _linuxRestoreMaxDuration,
+      _finishLinuxStartupRestore,
+    );
+    _checkLinuxStartupRestore();
+  }
+
+  void _cancelLinuxStartupRestoreTimers() {
+    _linuxRestorePollTimer?.cancel();
+    _linuxRestorePollTimer = null;
+    _linuxRestoreReapplyTimer?.cancel();
+    _linuxRestoreReapplyTimer = null;
+    _linuxRestoreFinishTimer?.cancel();
+    _linuxRestoreFinishTimer = null;
+  }
+
+  void _finishLinuxStartupRestore() {
+    _cancelLinuxStartupRestoreTimers();
+    _linuxStartupRestoreActive = false;
+    _linuxRestoreTarget = null;
+    _linuxRestoreStartedAt = null;
+    _linuxRestoreMatchedSince = null;
+    enableViewSizePersistence();
+  }
+
+  static bool _sizeMatches(Size? actual, Size target) {
+    if (actual == null) return false;
+    return (actual.width - target.width).abs() <= 1.0 &&
+        (actual.height - target.height).abs() <= 1.0;
+  }
+
+  static Size? _currentPlatformViewSize() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return null;
+    final view = views.first;
+    final ratio = view.devicePixelRatio;
+    if (ratio <= 0) return null;
+    final size = view.physicalSize / ratio;
+    if (size.width <= 0 || size.height <= 0) return null;
+    return size;
+  }
+
+  void _reapplyLinuxRestoreTarget() {
+    final win = window;
+    final target = _linuxRestoreTarget;
+    if (!_linuxStartupRestoreActive || win == null || target == null) return;
+    if (win.isMaximized || win.isFullScreen) {
+      _finishLinuxStartupRestore();
+      return;
+    }
+    if (_linuxRestoreApplyCount >= _linuxRestoreMaxAttempts) return;
+    _linuxRestoreApplyCount++;
+    win.contentSize = target.toNative();
+  }
+
+  void _checkLinuxStartupRestore() {
+    final win = window;
+    final target = _linuxRestoreTarget;
+    if (!_linuxStartupRestoreActive || win == null || target == null) {
+      _finishLinuxStartupRestore();
+      return;
+    }
+    if (win.isMaximized || win.isFullScreen) {
+      _finishLinuxStartupRestore();
+      return;
+    }
+
+    final viewSize = _currentPlatformViewSize() ?? _viewSize;
+    final contentSize = win.contentSize.toSize();
+    final bothMatch =
+        _sizeMatches(viewSize, target) && _sizeMatches(contentSize, target);
+
+    if (!bothMatch) {
+      _linuxRestoreMatchedSince = null;
+      _reapplyLinuxRestoreTarget();
+      return;
+    }
+
+    final now = DateTime.now();
+    _linuxRestoreMatchedSince ??= now;
+    final startedAt = _linuxRestoreStartedAt ?? now;
+    if (now.difference(startedAt) >= _linuxRestoreMinWindow &&
+        now.difference(_linuxRestoreMatchedSince!) >= _linuxRestoreStableHold) {
+      _finishLinuxStartupRestore();
+    }
+  }
 
   void enableViewSizePersistence() {
     // 只启用写盘，不立即写入
@@ -725,26 +815,87 @@ class WindowStateManager {
     _viewSizePersistenceSuppressed = suppressed;
     if (suppressed) {
       _viewSizeSaveTimer?.cancel();
+      _pendingPersistViewSize = null;
     }
   }
 
   void noteViewSize(Size size) {
     if (!Platform.isLinux) return;
     if (size.width <= 0 || size.height <= 0) return;
+
+    if (_linuxStartupRestoreActive) {
+      _viewSize = size;
+      final target = _linuxRestoreTarget;
+      if (target != null && !_sizeMatches(size, target)) {
+        _linuxRestoreMatchedSince = null;
+        if (_linuxRestoreReapplyTimer == null &&
+            _linuxRestoreApplyCount < _linuxRestoreMaxAttempts) {
+          _linuxRestoreReapplyTimer = Timer(
+            const Duration(milliseconds: 80),
+            () {
+              _linuxRestoreReapplyTimer = null;
+              _reapplyLinuxRestoreTarget();
+            },
+          );
+        }
+      }
+      return;
+    }
+
+    if (_viewSizePersistenceSuppressed) return;
+    final win = window;
+    if (win != null && (win.isMaximized || win.isFullScreen)) return;
+
     final previous = _viewSize;
     if (previous != null &&
         (previous.width - size.width).abs() < 0.5 &&
         (previous.height - size.height).abs() < 0.5) {
       return;
     }
-    if (_viewSizePersistenceSuppressed) return;
     _viewSize = size;
     if (!_viewSizePersistenceEnabled) return;
+    _pendingPersistViewSize = size;
     _viewSizeSaveTimer?.cancel();
     _viewSizeSaveTimer = Timer(
-      const Duration(milliseconds: 500),
-      () => _persistViewSize(size),
+      const Duration(milliseconds: 300),
+      () => unawaited(_flushPendingViewSize()),
     );
+  }
+
+  Future<void> _flushPendingViewSize() async {
+    _viewSizeSaveTimer?.cancel();
+    _viewSizeSaveTimer = null;
+    final pending = _pendingPersistViewSize;
+    if (pending == null) return;
+    _pendingPersistViewSize = null;
+    await _persistViewSize(pending);
+  }
+
+  Future<void> flushPendingWindowSize() async {
+    try {
+      if (Platform.isLinux) {
+        await _flushPendingViewSize();
+      } else {
+        if (_resizeTimer?.isActive ?? false) {
+          _resizeTimer?.cancel();
+          await _saveWindowSize();
+        }
+        if (_moveTimer?.isActive ?? false) {
+          _moveTimer?.cancel();
+          await _saveWindowPosition();
+        }
+      }
+    } catch (_) {}
+  }
+
+  void dispose() {
+    _cancelLinuxStartupRestoreTimers();
+    _resizeTimer?.cancel();
+    _resizeTimer = null;
+    _moveTimer?.cancel();
+    _moveTimer = null;
+    _viewSizeSaveTimer?.cancel();
+    _viewSizeSaveTimer = null;
   }
 
   Future<void> _persistViewSize(Size size) async {
@@ -767,6 +918,8 @@ class WindowStateManager {
           const Duration(milliseconds: 300),
           _saveWindowPosition,
         );
+      case WindowCloseRequestedEvent():
+        await flushPendingWindowSize();
       default:
         break;
     }
@@ -775,8 +928,11 @@ class WindowStateManager {
   Future<void> _saveWindowSize() async {
     // Linux 走 noteViewSize 的视图尺寸，不使用 nativeapi 的 Window.size
     if (Platform.isLinux) return;
-    final size = window?.size.toSize();
-    if (size == null) return;
+    final win = window;
+    if (win == null || win.isMaximized || win.isFullScreen || win.isMinimized) {
+      return;
+    }
+    final size = win.size.toSize();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('window_width', size.width);
     await prefs.setDouble('window_height', size.height);
